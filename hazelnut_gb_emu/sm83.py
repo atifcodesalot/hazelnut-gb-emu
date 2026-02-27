@@ -1,4 +1,7 @@
 
+import sys
+import time
+
 from .loader import *
 from . import logger
 from .memory import *
@@ -29,7 +32,8 @@ class PairRegister:
 
 
 class CPU:
-    def __init__(self, peripherals, general_registers: list[Register], flags, PC, SP=None):
+    def __init__(self, memory, peripherals, general_registers: list[Register], flags, PC, SP=None):
+        self.memory = memory
         self.peripherals = peripherals
         self.register_names = list(general_registers.keys()) + ["PC", "SP"]
         self.flag_names = flags.keys()
@@ -38,6 +42,8 @@ class CPU:
         self.PC = PC
         self.SP = SP
         self.machine_cycles = 0
+
+        self.pending_interrupt_enable = False
 
     def add_cycles(self, cycles):
         self.machine_cycles += cycles
@@ -48,10 +54,18 @@ class CPU:
         if register_name not in self.register_names:
             raise ValueError(f"Invalid register name: {register_name}")
 
-    def fetch_ins(self, memory):
-        ins = memory[self.PC.value]
-        self.inc_register('PC')
-        return ins
+    def fetch_ins(self):
+        prefixed = False
+        opcode = self.memory[self.PC.value]
+
+        if opcode == 0xCB:
+            # the instruction is prefixed
+            self.inc_register("PC")
+            opcode = self.memory[self.PC.value]
+            prefixed = True
+
+        self.inc_register("PC")
+        return opcode, prefixed
 
     def dump_state(self):
         return f"PC: {hex(self.PC)}, SP: {hex(self.SP)}, general_registers: {self.__dict__}"
@@ -87,19 +101,20 @@ class CPU:
 
     def jump_to(self, address):
         self.set_register("PC", address)
-        
-    def call(self, memory, address):
+
+    def call(self, address):
         current_PC = self.get_register('PC')
-        PC_high, PC_low = current_PC << 8, current_PC & 0xFF
+        PC_high, PC_low = current_PC >> 8, current_PC & 0xFF
         self.set_register("SP", self.SP.value - 2)
-        memory.write_to(self.SP.value, PC_high)
-        memory.write_to(self.SP.value + 1, PC_low)
+        # little endian
+        self.memory.write_to(self.SP.value + 1, PC_high)
+        self.memory.write_to(self.SP.value, PC_low)
         self.jump_to(address)
-        
-    def __return(self, memory):
+
+    def return__(self):
         self.set_register("SP", self.SP.value + 2)
-        stack_top = BO.concat_bytes(high=memory.read_at(
-            self.SP.value + 2), low=memory.read_at(self.SP.value + 1))
+        stack_top = BO.concat_bytes(high=self.memory.read_at(
+            self.SP.value - 1), low=self.memory.read_at(self.SP.value - 2))
         self.jump_to(stack_top)
 
 
@@ -130,12 +145,75 @@ class ByteOperator:
     def add_full_carry(cls, addend, summand) -> bool:
         return (addend + summand) > 0xFF
 
+    @classmethod
+    def sub_half_carry(cls, minuend, subtrahend) -> bool:
+        return (minuend & 0x0F) < (subtrahend & 0x0F)
+
+    @classmethod
+    def sub_full_carry(cls, minuend, subtrahend) -> bool:
+        return minuend < subtrahend
+
+    @classmethod
+    def rotate_byte_left(cls, byte):
+        nbit = cls.get_nth_bit(byte, 7)
+        shifted = (byte << 1) | nbit
+        return nbit, shifted & 0xFF
+
+    @classmethod
+    def rotate_byte_left_through(cls, byte, bit):
+        nbit = cls.get_nth_bit(byte, 7)
+        shifted = (byte << 1) | bit
+        return nbit, shifted & 0xFF
+
+    @classmethod
+    def rotate_byte_right(cls, byte):
+        nbit = cls.get_nth_bit(byte, 0)
+        shifted = (byte >> 1) | nbit * 128
+        return nbit, shifted
+
+    @classmethod
+    def rotate_byte_right_through(cls, byte, bit):
+        nbit = cls.get_nth_bit(byte, 0)
+        shifted = (byte >> 1) | bit * 128
+        return nbit, shifted
+
+    @classmethod
+    def shift_byte_left(cls, byte):
+        nbit = cls.get_nth_bit(byte, 7)
+        shifted = (byte << 1) & 0xFF
+        return nbit, shifted
+
+    @classmethod
+    def shift_byte_right(cls, byte):
+        nbit = cls.get_nth_bit(byte, 0)
+        shifted = byte >> 1
+        return nbit, shifted
+
+    @classmethod
+    def shift_byte_right_arithmetic(cls, byte):
+        nbit = cls.get_nth_bit(byte, 0)
+        shifted = (byte >> 1) | (byte & 0b10000000)
+        return nbit, shifted
+
+    @staticmethod
+    def set_nth_bit(byte, n):
+        return byte | pow(2, n)
+
+    @staticmethod
+    def res_nth_bit(byte, n):
+        return byte & (0xFF-pow(2, n))
+
+    @classmethod
+    def swap_nibbles(cls, byte):
+        n1, n2 = cls.nibblesfrom_bytes(byte)
+        return (n2 << 4) | n1
+
 
 BO = ByteOperator()
 
 
 class SM83(CPU):
-    def __init__(self, peripherals):
+    def __init__(self, ROMloader: GBRomLoader, memory, peripherals: list):
         general_registers = {
             'A': Register(name='A', value=0, max_value=0xFF, bit_length=8),
             'B': Register(name='B', value=0, max_value=0xFF, bit_length=8),
@@ -155,17 +233,25 @@ class SM83(CPU):
             'HL', general_registers['H'], general_registers['L'])
 
         flags = {'Z': False, 'N': False, 'H': False, 'C': False, 'IME': False}
-        super().__init__(peripherals,
+        super().__init__(memory, peripherals,
                          general_registers, flags,
                          PC=Register(name='PC', value=0,
                                      max_value=0xFFFF, bit_length=16),
                          SP=Register(name='SP', value=0,
                                      max_value=0xFFFF, bit_length=16))
-        self.mem_ctl = GBMemoryController()
-        
+        self.ROMloader = ROMloader
+
     def flags_register(self):
         return (self.flags['Z'] << 7) | (self.flags['N'] << 6) |\
             (self.flags['H'] << 5) | (self.flags['C'] << 4)
+
+    def get_operands(self, byte_count, ins_index):
+        return self.memory.rom.\
+            get_block_at(ins_index+1, byte_count)
+
+    # Load, copy related instructions start here
+    ###
+    # LD; LDH
 
     def handle_operand_inc(self, operand):
         if operand.increment or operand.decrement:
@@ -173,10 +259,6 @@ class SM83(CPU):
                 self.inc_register(operand.name)
             else:
                 self.dec_register(operand.name)
-
-    # Load, copy related instructions start here
-    ###
-    # LD; LDH
 
     def exe_INS_LD(self, ins: GameboyInstruction):
         # at max 3 operands at a LD instruction
@@ -189,30 +271,33 @@ class SM83(CPU):
 
         # o1 is the load destionation, ALWAYS
         # o2 is ALWAYS the data to load
-        if o2.name in ["n8", "a16"]:
+        if o2.name in ["n8", "n16", "a16"]:
             if o2.name == "n8":
                 data = ins.operands_raw[0]
             else:
-                data = BO.concat_bytes(*ins.operands_raw[:2])
-            w = data if o2.immediate else self.mem_ctl.read_at(data)
+                data = BO.concat_bytes(
+                    *ins.operands_raw[:2][::-1])  # little endian
+            w = data if o2.immediate else self.memory.read_at(data)
         else:
             w = self.get_register(o2.name)
 
         # when operand 1 is an address, operand 2 is always a register, hence we use the whole raw operands
         # in fact it is either SP or A
         if o1.name == "a16":
-            data = BO.concat_bytes(*ins.operands_raw[:2])
+            data = BO.concat_bytes(*ins.operands_raw[:2][::-1])
             if o2.name == "SP":
-                self.mem_ctl.write_to(data, self.SP.value & 0xFF)
-                self.mem_ctl.write_to(data + 1, self.SP.value >> 8)
+                high, low = self.SP.value >> 8, self.SP.value & 0xFF
+                self.memory.write_to(data + 1, high)  # little endian
+                self.memory.write_to(data, low)
+
             elif o2.name == "A":
-                self.mem_ctl.write_to(data, self.get_register("A"))
+                self.memory.write_to(data, self.get_register("A"))
 
         else:
             if o1.immediate:
                 self.set_register(o1.name, w)
             else:
-                self.mem_ctl.write_to(self.get_register(o1.name), w)
+                self.memory.write_to(self.get_register(o1.name), w)
         if oo:
             self.set_flags(Z=0, N=0, H=BO.add_half_carry(
                 self.SP, signed), C=BO.add_full_carry(self.SP, signed))
@@ -222,16 +307,16 @@ class SM83(CPU):
     def exe_INS_LDH(self, ins: GameboyInstruction):
         o1, o2 = ins.operands
         if o1.name == "n16":
-            self.mem_ctl.write_to(
+            self.memory.write_to(
                 0xFF00 + ins.operands_raw[0], self.get_register('A'))
         elif o1.name == 'C':
-            self.mem_ctl.write_to(0xFF00 + self.get_register('C'),
-                              self.get_register('A'))
+            self.memory.write_to(0xFF00 + self.get_register('C'),
+                                 self.get_register('A'))
         elif o2.name == "n16":
-            self.set_register('A', self.mem_ctl.read_at(
+            self.set_register('A', self.memory.read_at(
                 0xFF00 + ins.operands_raw[0]))
         elif o2.name == 'C':
-            self.set_register('A', self.mem_ctl.read_at(
+            self.set_register('A', self.memory.read_at(
                 0xFF00 + self.get_register('C')))
 
     # Load, copy related instructions END here
@@ -241,15 +326,42 @@ class SM83(CPU):
     ###
     # ADD; ADC; SUB; DEC; INC
     def exe_INS_ADD(self, ins: GameboyInstruction):
-        pass
-        # o1, o2 = ins.operands
-        # if o1.name == "SP":
-        #     signed = BO.byte_twos_complement(ins.operands_raw[0])
-        #     self.set_register("SP", self.get_register("SP") + signed)
-        #     return
+        o1, o2 = ins.operands
+        if o1.name == "SP":
+            signed = BO.byte_twos_complement(ins.operands_raw[0])
+            self.set_flags(Z=False, N=False, H=BO.add_half_carry(
+                self.SP, signed), C=BO.add_full_carry(self.SP, signed))
+            self.set_register("SP", self.SP + signed)
+        elif o1.name == 'A':
+            current_A = self.get_register("A")
+            if o2.name == 'n8':
+                summand = ins.operands_raw[0]
+            else:
+                r = self.get_register(o2.name)
+                summand = r if o2.immediate else self.memory.read_at(r)
+            self.set_flags(Z=(current_A + summand) == 0, N=False, H=BO.add_half_carry(
+                current_A, summand), C=BO.add_full_carry(current_A, summand))
+            self.set_register("A", current_A + summand)
+        # ADD HL,ss is the only instruction that has a 16 bit operand, and the operand is always a register pair,
+        # so we can just check if o1 is HL to determine whether it is that instruction or not
+        elif o1.name == "HL":
+            summand = self.get_register(o2.name)
+            self.set_register("HL", self.get_register("HL") + summand)
+            self.set_flags(N=False, H=BO.add_half_carry(self.get_register(
+                "HL"), summand), C=BO.add_full_carry(self.get_register("HL"), summand))
 
     def exe_INS_SUB(self, ins: GameboyInstruction):
-        pass
+        o1, o2 = ins.operands
+        if o1.name == 'A':
+            current_A = self.get_register("A")
+            if o2.name == 'n8':
+                subtrahend = ins.operands_raw[0]
+            else:
+                r = self.get_register(o2.name)
+                subtrahend = r if o2.immediate else self.memory.read_at(r)
+            self.set_flags(Z=(current_A - subtrahend) == 0, N=True, H=BO.sub_half_carry(
+                current_A, subtrahend), C=BO.sub_full_carry(current_A, subtrahend))
+            self.set_register("A", current_A - subtrahend)
 
     def exe_INS_INC(self, ins: GameboyInstruction):
         o = ins.operands[0]
@@ -279,7 +391,48 @@ class SM83(CPU):
     # arithmetic related instructions END here
     ###
 
-    # few enough to hardcode
+    # BIT OPERATION related instructions START here
+    ###
+    # AND; OR; XOR; CPL;
+    def exe_INS_AND(self, ins: GameboyInstruction):
+        _, o2 = ins.operands
+
+        if o2.name == "n8":
+            value = ins.operands_raw[0]
+        else:
+            r = self.get_register(o2.name)
+            value = r if o2.immediate else self.memory.read_at(r)
+        result = self.get_register('A') & value
+        self.set_register('A', result)
+        self.set_flags(Z=result == 0, N=False, H=True, C=False)
+
+    def exe_INS_OR(self, ins: GameboyInstruction):
+        _, o2 = ins.operands
+
+        if o2.name == "n8":
+            value = ins.operands_raw[0]
+        else:
+            r = self.get_register(o2.name)
+            value = r if o2.immediate else self.memory.read_at(r)
+        result = self.get_register('A') | value
+        self.set_register('A', result)
+        self.set_flags(Z=result == 0, N=False, H=False, C=False)
+
+    def exe_INS_XOR(self, ins: GameboyInstruction):
+        _, o2 = ins.operands
+
+        if o2.name == "n8":
+            value = ins.operands_raw[0]
+        else:
+            r = self.get_register(o2.name)
+            value = r if o2.immediate else self.memory.read_at(r)
+        result = self.get_register('A') ^ value
+        self.set_register('A', result)
+        self.set_flags(Z=result == 0, N=False, H=False, C=False)
+
+    def exe_INS_CPL(self, _: GameboyInstruction):
+        result = 0xFF ^ self.get_register("A")
+        self.set_register("A", result)
 
     # Stack related instructions start here
     ###
@@ -288,12 +441,12 @@ class SM83(CPU):
     def exe_INS_POP(self, ins: GameboyInstruction):
         def pop(highreg, lowreg, flag=False):
             self.set_register("SP", self.SP.value + 2)
-            self.set_register(highreg, self.mem_ctl.read_at(self.SP.value - 2))
+            self.set_register(highreg, self.memory.read_at(self.SP.value - 1))
             if not flag:
                 self.set_register(
-                    lowreg, self.mem_ctl.read_at(self.SP.value - 1))
+                    lowreg, self.memory.read_at(self.SP.value - 2))
             else:
-                b = self.mem_ctl.read_at(self.SP.value - 1)
+                b = self.memory.read_at(self.SP.value - 2)
                 self.set_flags(Z=bool(BO.get_nth_bit(b, 7)), N=bool(BO.get_nth_bit(
                     b, 6)), H=bool(BO.get_nth_bit(b, 5)), C=bool(BO.get_nth_bit(b, 4)))
         if ins.raw == 0xC1:
@@ -308,12 +461,14 @@ class SM83(CPU):
     def exe_INS_PUSH(self, ins: GameboyInstruction):
         def push(highreg, lowreg, flag=False):
             self.set_register("SP", self.SP.value - 2)
-            self.mem_ctl.write_to(self.SP.value, self.get_register(highreg))
+            self.memory.write_to(
+                self.SP.value + 1, self.get_register(highreg))  # little endian
             if not flag:
-                self.mem_ctl.write_to(self.SP.value + 1, self.get_register(lowreg))
+                self.memory.write_to(
+                    self.SP.value, self.get_register(lowreg))
             else:
                 flags_reg = self.flags_register()
-                self.mem_ctl.write_to(self.SP.value + 1, flags_reg)
+                self.memory.write_to(self.SP.value, flags_reg)
         if ins.raw == 0xC5:
             push("B", "C")
         elif ins.raw == 0xD5:
@@ -331,7 +486,8 @@ class SM83(CPU):
 
     def exe_INS_JP(self, ins: GameboyInstruction):
         if ins.byte_count > 1:
-            address = BO.concat_bytes(*ins.operands_raw[:2])
+            address = BO.concat_bytes(
+                *ins.operands_raw[:2][::-1])  # little endian
         # JP NZ, a16
         if ins.raw == 0xC2:
             if not self.flags["Z"]:
@@ -381,42 +537,42 @@ class SM83(CPU):
 
     def exe_INS_RET(self, ins: GameboyInstruction):
         if ins.raw == 0xC9:
-            self.__return(self.mem_ctl)
+            self.return__()
         elif ins.raw == 0xC0:
             if not self.flags['Z']:
-                self.__return(self.mem_ctl)
+                self.return__()
         elif ins.raw == 0xD0:
             if not self.flags['C']:
-                self.__return(self.mem_ctl)
+                self.return__()
         elif ins.raw == 0xC8:
             if self.flags['Z']:
-                self.__return(self.mem_ctl)
+                self.return__()
         elif ins.raw == 0xD8:
             if self.flags['C']:
-                self.__return(self.mem_ctl)
+                self.return__()
 
     def exe_INS_CALL(self, ins: GameboyInstruction):
-        address = BO.concat_bytes(*ins.operands_raw[:2])
+        address = BO.concat_bytes(*ins.operands_raw[:2][::-1])  # little endian
 
         # unconditional call
         if ins.raw == 0xCD:
-            self.call(self.mem_ctl, address)
+            self.call(address)
         # CALL NZ, a16
         elif ins.raw == 0xC4:
             if not self.flags['Z']:
-                self.call(self.mem_ctl, address)
+                self.call(address)
         # JP NC, a16
         elif ins.raw == 0xD4:
             if not self.flags['C']:
-                self.call(self.mem_ctl, address)
+                self.call(address)
         # CALL Z, a16
         elif ins.raw == 0xCC:
             if self.flags['Z']:
-                self.call(self.mem_ctl, address)
+                self.call(address)
         # CALL C, a16
         elif ins.raw == 0xDC:
             if self.flags['C']:
-                self.call(self.mem_ctl, address)
+                self.call(address)
 
     # RST: implicit call
     def exe_INS_RST(self, ins):
@@ -424,12 +580,13 @@ class SM83(CPU):
         PC_high, PC_low = self.get_register(
             'PC') >> 8, self.get_register('PC') & 0xFF
         self.set_register("SP", self.SP.value - 2)
-        self.mem_ctl.write_to(self.SP.value, PC_high)
-        self.mem_ctl.write_to(self.SP.value + 1, PC_low)
+        self.memory.write_to(self.SP.value + 1, PC_high)  # little endian
+        self.memory.write_to(self.SP.value, PC_low)
         self.jump_to(address)
-        
-    def exe_INS_RETI(self, ins):
-        self.exe_INS_RET(ins)
+
+    def exe_INS_RETI(self, ins: GameboyInstruction):
+        self.return__()
+        self.pending_interrupt_enable = True
 
     # control, subroutine related instructions END here
     ###
@@ -440,78 +597,257 @@ class SM83(CPU):
         self.add_cycles(4)
     ###
 
+    # interrupt related instructions start here
+    ###
+    # EI; DI
+
+    def exe_INS_DI(self, _):
+        self.set_register("IME", 0)
+
+    def exe_INS_EI(self, _):
+        self.pending_interrupt_enable = True
+
+    # interrupt related instructions end here
+    ###
+
+    # carry flag related instructions start here
+    ###
+    # CCF; SCF
+
+    def exe_INS_CCF(self, _):
+        cf = self.flags['C']
+        self.set_flags(C=not cf, N=False, H=False)
+
+    def exe_INS_SCF(self, _):
+        self.set_flags(C=True, N=False, H=False)
+
+    # carry flag related instructions END here
+    ###
+
+    # prefixed instructions START here
+    ###
+    # RLC; RL; RRC; RR; SLA; SRA; SWAP; SRL; BIT; RES; SET
+
+    def exe_INS_BIT(self, ins: GameboyInstruction):
+        o1, o2 = ins.operands
+        byte = self.get_register(o2.name) if o2.immediate else self.memory.read_at(
+            self.get_register(o2.name))
+        bit = bool(BO.get_nth_bit(byte, int(o1.name)))
+        self.set_flags(Z=not bit, N=False, H=True)
+
+    def exe_INS_RES(self, ins: GameboyInstruction):
+        o1, o2 = ins.operands
+        byte = self.get_register(o2.name) if o2.immediate else self.memory.read_at(
+            self.get_register(o2.name))
+        result = BO.res_nth_bit(byte, int(o1.name))
+        if o2.immediate:
+            self.set_register(o2.name, result)
+        else:
+            self.memory.write_to(self.get_register(o2.name), result)
+
+    def exe_INS_SET(self, ins: GameboyInstruction):
+        o1, o2 = ins.operands
+        byte = self.get_register(o2.name) if o2.immediate else self.memory.read_at(
+            self.get_register(o2.name))
+        result = BO.set_nth_bit(byte, int(o1.name))
+        if o2.immediate:
+            self.set_register(o2.name, result)
+        else:
+            self.memory.write_to(self.get_register(o2.name), result)
+
+    def shift_rotate_to_carry(self, ins, bin_op):
+        op = ins.operands[0]
+        byte = self.get_register(op.name) if op.immediate else self.memory.read_at(
+            self.get_register(op.name))
+        bit, result = bin_op(byte, self.flags['C'])
+        if op.immediate:
+            self.set_register(op.name, result)
+        else:
+            self.memory.write_to(self.get_register(op.name), result)
+        self.set_flags(Z=result == 0, N=False, H=False, C=bit)
+
+    def exe_INS_RL(self, ins: GameboyInstruction):
+        self.shift_rotate_to_carry(ins, BO.rotate_byte_left_through)
+
+    def exe_INS_RLA(self, ins: GameboyInstruction):
+        A = self.get_register("A")
+        bit, result = BO.rotate_byte_left_through(A, self.flags['C'])
+        self.set_register("A", result)
+        self.set_flags(Z=result == 0, N=False, H=False, C=bit)
+
+    def exe_INS_RLC(self, ins: GameboyInstruction):
+        self.shift_rotate_to_carry(ins, BO.rotate_byte_left)
+
+    def exe_INS_RLCA(self, ins: GameboyInstruction):
+        A = self.get_register("A")
+        bit, result = BO.rotate_byte_left(A)
+        self.set_register("A", result)
+        self.set_flags(Z=result == 0, N=False, H=False, C=bit)
+
+    def exe_INS_RR(self, ins: GameboyInstruction):
+        self.shift_rotate_to_carry(ins, BO.rotate_byte_right_through)
+
+    def exe_INS_RRA(self, ins: GameboyInstruction):
+        A = self.get_register("A")
+        bit, result = BO.rotate_byte_right_through(A, self.flags['C'])
+        self.set_register("A", result)
+        self.set_flags(Z=result == 0, N=False, H=False, C=bit)
+
+    def exe_INS_RRC(self, ins: GameboyInstruction):
+        self.shift_rotate_to_carry(ins, BO.rotate_byte_right)
+
+    def exe_INS_RRCA(self, ins: GameboyInstruction):
+        A = self.get_register("A")
+        bit, result = BO.rotate_byte_right(A)
+        self.set_register("A", result)
+        self.set_flags(Z=result == 0, N=False, H=False, C=bit)
+
+    def exe_INS_SLA(self, ins: GameboyInstruction):
+        self.shift_rotate_to_carry(ins, BO.shift_byte_left)
+
+    def exe_INS_SRL(self, ins: GameboyInstruction):
+        self.shift_rotate_to_carry(ins, BO.shift_byte_right)
+
+    def exe_INS_SRA(self, ins: GameboyInstruction):
+        self.shift_rotate_to_carry(ins, BO.shift_byte_right_arithmetic)
+
+    def exe_INS_SWAP(self, ins: GameboyInstruction):
+        op = ins.operands[0]
+        byte = self.get_register(op.name) if op.immediate else self.memory.read_at(
+            self.get_register(op.name))
+        result = BO.swap_nibbles(byte)
+        if op.immediate:
+            self.set_register(op.name, result)
+        else:
+            self.memory.write_to(self.get_register(op.name), result)
+        self.set_flags(Z=result == 0, N=False, H=False, C=False)
+
+    # prefixed instructions END here
+    ###
+
     def __getattr__(self, name):
-        print(f"Trying to access {name}")
         raise NotImplementedError(
             f"Instruction {name} not implemented yet, if it exists.")
 
-    def decode(self, ins):
-        print(f"decoding instruction: {ins.mnemonic}")
-        return getattr(self, f"exe_INS_{ins.mnemonic}")
+    def decode(self, opcode, prefixed: bool):
+        ins = self.ROMloader.identify_instruction(
+            opcode=opcode, prefixed=prefixed)
+        # fetch instruction incremented PC by 1, so we need to -1 to get the correct operands
+        operands = self.get_operands(
+            # if the instruction is prefixed, fetch ins already incremented the PC
+            ins.byte_count - (1 + prefixed.real), self.PC.value - 1)
+        # skip the operands
+        self.set_register("PC", self.PC.value +
+                          ins.byte_count - (1 + prefixed.real))
+        ins.operands_raw = operands
+        #print(f"decoding instruction: {hex(ins.raw)}")
+        return ins
 
-    def instruction_cycle(self, ROM):
+    def instruction_cycle(self):
         try:
-            ins = self.fetch_ins(ROM)
-            func = self.decode(ins)
+            opcode, prefixed = self.fetch_ins()
+            ins = self.decode(opcode, prefixed=prefixed)
+            func = getattr(self, f"exe_INS_{ins.mnemonic}")
+            if self.pending_interrupt_enable and not self.IME.value:
+                self.IME = True
+                self.pending_interrupt_enable = False
             func(ins)
             return ins
         except NotImplementedError:
             logger.warning(f"Instruction {ins} not implemented yet, skipping.")
             return None
-        
+
     def handle_interrupts(self):
         # interrupts are not enabled
         if not self.IME.value:
             return
-        IF = self.mem_ctl.read_at(0xFFFF)
-        IE = self.mem_ctl.read_at(0xFF0F)
+        IF = self.memory.read_at(0xFFFF)
+        IE = self.memory.read_at(0xFF0F)
         res = IF & IE
         # handle priorities
         if BO.get_nth_bit(res, 0):
-            self.exe_INS_RETI(GameboyInstruction(raw=0x40, mnemonic="RETI", operands=[]))
+            self.call(0x40)
             return
         elif BO.get_nth_bit(res, 1):
-            self.exe_INS_RETI(GameboyInstruction(raw=0x48, mnemonic="RETI", operands=[]))
+            self.call(0x48)
             return
         elif BO.get_nth_bit(res, 2):
-            self.exe_INS_RETI(GameboyInstruction(raw=0x50, mnemonic="RETI", operands=[]))
+            self.call(0x50)
             return
         elif BO.get_nth_bit(res, 3):
-            self.exe_INS_RETI(GameboyInstruction(raw=0x58, mnemonic="RETI", operands=[]))
+            self.call(0x58)
             return
         elif BO.get_nth_bit(res, 4):
-            self.exe_INS_RETI(GameboyInstruction(raw=0x60, mnemonic="RETI", operands=[]))
-            return
+            self.call(0x60)
 
-    def execute_prog(self, prog: list[GameboyInstruction]):
+    def start(self):
         while True:
-            ins = self.instruction_cycle(prog)
+            ins = self.instruction_cycle()
             self.add_cycles(ins.cycles[0])
 
-    def execute_prog_debug(self, prog: list[GameboyInstruction], delay=0.1):
+    def halt(self):
+        while True:
+            self.handle_interrupts()
+
+    def start_debug_mode(self, delay=0.1, breakpoints: list[int] = []):
         import colorama
         import time
+        import sys
         exed = 0
-       
+
+        logger.debug("Starting debug mode...")
+        logger.debug("Starting at PC: " + hex(self.PC.value))
+        
+        colorama.just_fix_windows_console()
+
+        N = 6  # how many lines your dump uses (set this)
+
+        # Reserve space once
+        sys.stdout.write("\n" * N)
+        sys.stdout.flush()
+
         while exed != 500000:
-            logger.debug(self.dump_state_colorama(colorama))
-            time.sleep(delay)
-            
-            ins = self.instruction_cycle(prog)
+            if self.PC.value in breakpoints:
+                logger.info(f"Hit breakpoint at {hex(self.PC.value)}")
+                delay = 2
+            ins = self.instruction_cycle()
             exed += 1
-            # print(exed)
             if ins is None:
                 logger.warning("Instruction was not implemented.")
                 continue
-            self.add_cycles(ins.cycles[0])
-            logger.debug(
-                f"Executed instruction: {colorama.Fore.YELLOW}{ins}{colorama.Style.RESET_ALL}")
-            print("--" * 20)
+            self.add_cycles(ins.cycles)
+            
+            block = self.dump_state_colorama(colorama) \
+                + f"\nExecuted instruction: {colorama.Fore.YELLOW}{ins}{colorama.Style.RESET_ALL}"\
+                + f"\nTotal instructions: {colorama.Fore.MAGENTA}{exed}{colorama.Style.RESET_ALL}"
+
+            # Normalize newlines, and force exactly N lines
+            lines = block.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+            lines = (lines + [""] * N)[:N]
+
+            # Move cursor up N lines to the start of the block
+            sys.stdout.write(f"\033[{N}A")
+
+            # Clear + rewrite each line
+            for i in range(N):
+                sys.stdout.write("\033[2K")          # clear entire line
+                sys.stdout.write(lines[i] + "\n")    # print the line + newline
+
+            sys.stdout.flush()
+            time.sleep(delay)
+
+            # logger.debug(
+            #     
+            #print("--" * 20)
 
     def dump_state_colorama(self, colorama):
-        register_dict = {k: v for k, v in self.__dict__.items(
+        fg = colorama.Fore.GREEN
+        fr = colorama.Fore.RED
+        fb = colorama.Fore.BLUE
+        Ra = colorama.Style.RESET_ALL
+        register_dict = {k: hex(r.value) for k, r in self.__dict__.items(
         ) if k in self.register_names}
-        return f"PC: {colorama.Fore.GREEN}{hex(self.PC.value)}{colorama.Style.RESET_ALL},\
-            SP: {colorama.Fore.RED}{hex(self.SP.value)}{colorama.Style.RESET_ALL},\
-            general_registers: {colorama.Fore.BLUE}{register_dict}{colorama.Style.RESET_ALL},\
-                flags: {colorama.Fore.MAGENTA}{self.flags}{colorama.Style.RESET_ALL}"
+        return f"PC: {fg}{hex(self.PC.value)}{Ra}\
+            SP: {colorama.Fore.CYAN}{hex(self.SP.value)}{Ra}\
+            general_registers: {fb}{register_dict}{Ra}"
+            #     flags: {fr}{self.flags}{Ra}"
