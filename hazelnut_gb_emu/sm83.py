@@ -1,6 +1,4 @@
 
-import sys
-import time
 
 from .loader import *
 from . import logger
@@ -146,11 +144,11 @@ class ByteOperator:
         return (addend + summand) > 0xFF
 
     @classmethod
-    def sub_half_carry(cls, minuend, subtrahend) -> bool:
+    def sub_half_borrow(cls, minuend, subtrahend) -> bool:
         return (minuend & 0x0F) < (subtrahend & 0x0F)
 
     @classmethod
-    def sub_full_carry(cls, minuend, subtrahend) -> bool:
+    def sub_full_borrow(cls, minuend, subtrahend) -> bool:
         return minuend < subtrahend
 
     @classmethod
@@ -208,21 +206,31 @@ class ByteOperator:
         n1, n2 = cls.nibblesfrom_bytes(byte)
         return (n2 << 4) | n1
 
+    @staticmethod
+    def get_pixel_2bpp(lo: int, hi: int, pixel_i: int) -> int:
+        bit = 7 - pixel_i
+        return (((hi >> bit) & 1) << 1) | ((lo >> bit) & 1)
+
 
 BO = ByteOperator()
 
 
 class SM83(CPU):
     def __init__(self, ROMloader: GBRomLoader, memory, peripherals: list):
+        def r8bit(name): return Register(
+            name=name, value=0, max_value=0xFF, bit_length=8)
+        def r16bit(name): return Register(
+            name=name, value=0, max_value=0xFFFF, bit_length=16)
+
         general_registers = {
-            'A': Register(name='A', value=0, max_value=0xFF, bit_length=8),
-            'B': Register(name='B', value=0, max_value=0xFF, bit_length=8),
-            'C': Register(name='C', value=0, max_value=0xFF, bit_length=8),
-            'D': Register(name='D', value=0, max_value=0xFF, bit_length=8),
-            'E': Register(name='E', value=0, max_value=0xFF, bit_length=8),
-            'H': Register(name='H', value=0, max_value=0xFF, bit_length=8),
-            'L': Register(name='L', value=0, max_value=0xFF, bit_length=8),
-            'IME': Register(name='IME', value=0, max_value=1, bit_length=1)
+            'A': r8bit('A'),
+            'B': r8bit('B'),
+            'C': r8bit('C'),
+            'D': r8bit('D'),
+            'E': r8bit('E'),
+            'H': r8bit('H'),
+            'L': r8bit('L'),
+            'IME': r8bit('IME')
         }
 
         general_registers['BC'] = PairRegister(
@@ -235,19 +243,24 @@ class SM83(CPU):
         flags = {'Z': False, 'N': False, 'H': False, 'C': False, 'IME': False}
         super().__init__(memory, peripherals,
                          general_registers, flags,
-                         PC=Register(name='PC', value=0,
-                                     max_value=0xFFFF, bit_length=16),
-                         SP=Register(name='SP', value=0,
-                                     max_value=0xFFFF, bit_length=16))
+                         PC=r16bit('PC'),
+                         SP=r16bit('SP'))
         self.ROMloader = ROMloader
+        self.read_from_boot = False
+
+    def enable_boot_rom(self):
+        self.read_from_boot = True
+
+    def disable_boot_rom(self):
+        self.read_from_boot = False
 
     def flags_register(self):
         return (self.flags['Z'] << 7) | (self.flags['N'] << 6) |\
             (self.flags['H'] << 5) | (self.flags['C'] << 4)
 
     def get_operands(self, byte_count, ins_index):
-        return self.memory.rom.\
-            get_block_at(ins_index+1, byte_count)
+        rom = self.memory.rom if not self.read_from_boot else self.memory.boot_rom
+        return rom.get_block_at(ins_index+1, byte_count)
 
     # Load, copy related instructions start here
     ###
@@ -267,7 +280,7 @@ class SM83(CPU):
         if oo:
             e8 = ins.operands_raw[0]
             signed = BO.byte_twos_complement(e8)
-            self.set_register("SP", self.SP.value + signed)
+            self.set_register("HL", self.SP.value + signed)
 
         # o1 is the load destionation, ALWAYS
         # o2 is ALWAYS the data to load
@@ -279,7 +292,8 @@ class SM83(CPU):
                     *ins.operands_raw[:2][::-1])  # little endian
             w = data if o2.immediate else self.memory.read_at(data)
         else:
-            w = self.get_register(o2.name)
+            w = self.get_register(o2.name) if o2.immediate else self.memory.read_at(
+                self.get_register(o2.name))
 
         # when operand 1 is an address, operand 2 is always a register, hence we use the whole raw operands
         # in fact it is either SP or A
@@ -306,13 +320,13 @@ class SM83(CPU):
 
     def exe_INS_LDH(self, ins: GameboyInstruction):
         o1, o2 = ins.operands
-        if o1.name == "n16":
+        if o1.name == "a8":
             self.memory.write_to(
                 0xFF00 + ins.operands_raw[0], self.get_register('A'))
         elif o1.name == 'C':
             self.memory.write_to(0xFF00 + self.get_register('C'),
                                  self.get_register('A'))
-        elif o2.name == "n16":
+        elif o2.name == "a8":
             self.set_register('A', self.memory.read_at(
                 0xFF00 + ins.operands_raw[0]))
         elif o2.name == 'C':
@@ -359,17 +373,19 @@ class SM83(CPU):
             else:
                 r = self.get_register(o2.name)
                 subtrahend = r if o2.immediate else self.memory.read_at(r)
-            self.set_flags(Z=(current_A - subtrahend) == 0, N=True, H=BO.sub_half_carry(
-                current_A, subtrahend), C=BO.sub_full_carry(current_A, subtrahend))
+            self.set_flags(Z=(current_A - subtrahend) == 0, N=True, H=BO.sub_half_borrow(
+                current_A, subtrahend), C=BO.sub_full_borrow(current_A, subtrahend))
             self.set_register("A", current_A - subtrahend)
 
     def exe_INS_INC(self, ins: GameboyInstruction):
         o = ins.operands[0]
         rname = o.name
         register = self.get_register_obj(rname)
-        update_flags = o.immediate or register.bit_length == 8
+        update_flags = not o.immediate or register.bit_length == 8
         if update_flags:
-            self.set_flags(H=BO.add_half_carry(self.get_register(rname), 1))
+            pr_value = self.get_register(
+                rname) if o.immediate else self.memory.read_at(self.get_register(rname))
+            self.set_flags(H=BO.add_half_carry(pr_value, 1))
         self.inc_register(rname) if o.immediate else self.ram.inc_byte_at(
             self.get_register(rname))
         if update_flags:
@@ -379,14 +395,29 @@ class SM83(CPU):
         o = ins.operands[0]
         rname = o.name
         register = self.get_register_obj(rname)
-        update_flags = o.immediate or register.bit_length == 8
+        update_flags = not o.immediate or register.bit_length == 8
         if update_flags:
+            pr_value = self.get_register(
+                rname) if o.immediate else self.memory.read_at(self.get_register(rname))
             self.set_flags(
-                H=BO.add_half_carry(self.get_register(rname), -1))
+                H=BO.sub_half_borrow(pr_value, 1))
         self.dec_register(rname) if o.immediate else self.ram.dec_byte_at(
             self.get_register(rname))
         if update_flags:
             self.set_flags(Z=self.get_register(rname) == 0, N=True)
+
+    def exe_INS_CP(self, ins: GameboyInstruction):
+        # o1 is always A.
+        _, o2 = ins.operands
+        # o2 is the data to compare with A, which can be either a register or an immediate value
+        if o2.name == "n8":
+            byte = ins.operands_raw[0]
+        else:
+            r = self.get_register(o2.name)
+            byte = r if o2.immediate else self.memory.read_at(r)
+        A = self.get_register("A")
+        self.set_flags(Z=(A - byte) == 0, N=True,
+                       H=BO.sub_half_borrow(A, byte), C=BO.sub_full_borrow(A, byte))
 
     # arithmetic related instructions END here
     ###
@@ -394,6 +425,7 @@ class SM83(CPU):
     # BIT OPERATION related instructions START here
     ###
     # AND; OR; XOR; CPL;
+
     def exe_INS_AND(self, ins: GameboyInstruction):
         _, o2 = ins.operands
 
@@ -664,7 +696,7 @@ class SM83(CPU):
             self.set_register(op.name, result)
         else:
             self.memory.write_to(self.get_register(op.name), result)
-        self.set_flags(Z=result == 0, N=False, H=False, C=bit)
+        self.set_flags(Z=result == 0, N=False, H=False, C=bool(bit))
 
     def exe_INS_RL(self, ins: GameboyInstruction):
         self.shift_rotate_to_carry(ins, BO.rotate_byte_left_through)
@@ -673,7 +705,7 @@ class SM83(CPU):
         A = self.get_register("A")
         bit, result = BO.rotate_byte_left_through(A, self.flags['C'])
         self.set_register("A", result)
-        self.set_flags(Z=result == 0, N=False, H=False, C=bit)
+        self.set_flags(Z=False, N=False, H=False, C=bool(bit))
 
     def exe_INS_RLC(self, ins: GameboyInstruction):
         self.shift_rotate_to_carry(ins, BO.rotate_byte_left)
@@ -682,7 +714,7 @@ class SM83(CPU):
         A = self.get_register("A")
         bit, result = BO.rotate_byte_left(A)
         self.set_register("A", result)
-        self.set_flags(Z=result == 0, N=False, H=False, C=bit)
+        self.set_flags(Z=False, N=False, H=False, C=bool(bit))
 
     def exe_INS_RR(self, ins: GameboyInstruction):
         self.shift_rotate_to_carry(ins, BO.rotate_byte_right_through)
@@ -691,7 +723,7 @@ class SM83(CPU):
         A = self.get_register("A")
         bit, result = BO.rotate_byte_right_through(A, self.flags['C'])
         self.set_register("A", result)
-        self.set_flags(Z=result == 0, N=False, H=False, C=bit)
+        self.set_flags(Z=result == 0, N=False, H=False, C=bool(bit))
 
     def exe_INS_RRC(self, ins: GameboyInstruction):
         self.shift_rotate_to_carry(ins, BO.rotate_byte_right)
@@ -740,7 +772,7 @@ class SM83(CPU):
         self.set_register("PC", self.PC.value +
                           ins.byte_count - (1 + prefixed.real))
         ins.operands_raw = operands
-        #print(f"decoding instruction: {hex(ins.raw)}")
+        # print(f"decoding instruction: {hex(ins.raw)}")
         return ins
 
     def instruction_cycle(self):
@@ -780,65 +812,15 @@ class SM83(CPU):
         elif BO.get_nth_bit(res, 4):
             self.call(0x60)
 
-    def start(self):
-        while True:
-            ins = self.instruction_cycle()
-            self.add_cycles(ins.cycles[0])
+    def tick_one_ins(self):
+        ins = self.instruction_cycle()
+        cycles = ins.cycles if ins else 0
+        self.add_cycles(cycles)
+        return ins, cycles
 
     def halt(self):
         while True:
             self.handle_interrupts()
-
-    def start_debug_mode(self, delay=0.1, breakpoints: list[int] = []):
-        import colorama
-        import time
-        import sys
-        exed = 0
-
-        logger.debug("Starting debug mode...")
-        logger.debug("Starting at PC: " + hex(self.PC.value))
-        
-        colorama.just_fix_windows_console()
-
-        N = 6  # how many lines your dump uses (set this)
-
-        # Reserve space once
-        sys.stdout.write("\n" * N)
-        sys.stdout.flush()
-
-        while exed != 500000:
-            if self.PC.value in breakpoints:
-                logger.info(f"Hit breakpoint at {hex(self.PC.value)}")
-                delay = 2
-            ins = self.instruction_cycle()
-            exed += 1
-            if ins is None:
-                logger.warning("Instruction was not implemented.")
-                continue
-            self.add_cycles(ins.cycles)
-            
-            block = self.dump_state_colorama(colorama) \
-                + f"\nExecuted instruction: {colorama.Fore.YELLOW}{ins}{colorama.Style.RESET_ALL}"\
-                + f"\nTotal instructions: {colorama.Fore.MAGENTA}{exed}{colorama.Style.RESET_ALL}"
-
-            # Normalize newlines, and force exactly N lines
-            lines = block.replace("\r\n", "\n").replace("\r", "\n").split("\n")
-            lines = (lines + [""] * N)[:N]
-
-            # Move cursor up N lines to the start of the block
-            sys.stdout.write(f"\033[{N}A")
-
-            # Clear + rewrite each line
-            for i in range(N):
-                sys.stdout.write("\033[2K")          # clear entire line
-                sys.stdout.write(lines[i] + "\n")    # print the line + newline
-
-            sys.stdout.flush()
-            time.sleep(delay)
-
-            # logger.debug(
-            #     
-            #print("--" * 20)
 
     def dump_state_colorama(self, colorama):
         fg = colorama.Fore.GREEN
@@ -848,6 +830,6 @@ class SM83(CPU):
         register_dict = {k: hex(r.value) for k, r in self.__dict__.items(
         ) if k in self.register_names}
         return f"PC: {fg}{hex(self.PC.value)}{Ra}\
-            SP: {colorama.Fore.CYAN}{hex(self.SP.value)}{Ra}\
-            general_registers: {fb}{register_dict}{Ra}"
-            #     flags: {fr}{self.flags}{Ra}"
+    SP: {colorama.Fore.CYAN}{hex(self.SP.value)}{Ra}\
+    general_registers: {fb}{register_dict}{Ra}\
+    flags: {fr}{self.flags}{Ra}"
