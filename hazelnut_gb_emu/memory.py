@@ -40,8 +40,7 @@ class ROM(RAM):
         super().__init__(addressable_bits=addressable_bits)
 
     def burn_from(self, rom_loader):
-        for i, byte in enumerate(rom_loader.prog):
-            self.write_to(i, byte, burning=True)
+        self.array[:len(rom_loader.prog)] = rom_loader.prog
 
     def write_to(self, i, byte, burning=False):
         if not burning:
@@ -127,12 +126,10 @@ class GBMemoryController:
 
         self.memory_map = {
             range(0x0000,	0x00FF+1): self.boot_rom,
-            range(0x0000,	0x3FFF+1): self.rom,
-            range(0x4000,	0x7FFF+1): self.rom,
+            range(0x0000,	0x7FFF+1): self.rom,
             range(0x8000,	0x9FFF+1): self.vram,
             range(0xA000,	0xBFFF+1): self.ext_ram,
-            range(0xC000,	0xCFFF+1): self.ram,
-            range(0xD000,	0xDFFF+1): self.ram,
+            range(0xC000,	0xDFFF+1): self.ram,
             # unusable echo ram
             range(0xE000,	0xFDFF+1): None,
             #
@@ -199,6 +196,8 @@ class GBMemoryController:
         return mem_device, offset
 
     def read_at(self, loc):
+        if loc == 0xFF44:
+            return 0x90
         mem_device, offset = self.get_mem_device(loc)
         if mem_device == "unimplemented":
             return 0xFF
@@ -224,6 +223,35 @@ class GBMemoryController:
         else:
             raise Exception(
                 f"Invalid memory device {type(mem_device)} at address {hex(offset)}.")
+            
+    def get_block_at(self, loc, byte_count):
+        mem_device, offset = self.get_mem_device(loc)
+        return mem_device.get_block_at(offset, byte_count)
+    
+    def dec_byte_at(self, loc):
+        mem_device, offset = self.get_mem_device(loc)
+        t = type(mem_device)
+        if t in [RAM, VRAM]:
+            mem_device.dec_byte_at(offset)
+        elif t is Register:
+            self.set_register(mem_device.name, self.get_register(mem_device.name) - 1)
+        else:
+            raise Exception(
+                f"Invalid memory device {t} at address {hex(offset)} for dec operation.")
+    
+    def inc_byte_at(self, loc):
+        mem_device, offset = self.get_mem_device(loc)
+        t = type(mem_device)
+        if t in [RAM, VRAM]:
+            mem_device.inc_byte_at(offset)
+        elif t is Register:
+            self.set_register(mem_device.name, self.get_register(mem_device.name) + 1)
+        else:
+            raise Exception(
+                f"Invalid memory device {t} at address {hex(offset)} for inc operation.")
+
+    def disable_boot_rom(self):
+        self.memory_map[range(0x0000,	0x00FF+1)] = self.rom
 
     def __getitem__(self, key):
         return self.read_at(key)
