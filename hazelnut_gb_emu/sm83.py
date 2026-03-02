@@ -136,12 +136,15 @@ class ByteOperator:
         return (high << 8) | low
 
     @classmethod
-    def add_half_carry(cls, addend, summand) -> bool:
+    def add_half_carry(cls, addend, summand, high_half=False) -> bool:
+        if high_half:
+            return (addend & 0xFFF) + (summand & 0xFFF) > 0xFFF
+        
         return (addend & 0x0F) + (summand & 0x0F) > 0x0F
 
     @classmethod
-    def add_full_carry(cls, addend, summand) -> bool:
-        return (addend + summand) > 0xFF
+    def add_full_carry(cls, addend, summand, bit_width=8) -> bool:
+        return (addend + summand) > (pow(2, bit_width) - 1)
 
     @classmethod
     def sub_half_borrow(cls, minuend, subtrahend) -> bool:
@@ -258,9 +261,8 @@ class SM83(CPU):
         return (self.flags['Z'] << 7) | (self.flags['N'] << 6) |\
             (self.flags['H'] << 5) | (self.flags['C'] << 4)
 
-    def get_operands(self, byte_count, ins_index):
-        rom = self.memory.rom if not self.read_from_boot else self.memory.boot_rom
-        return rom.get_block_at(ins_index+1, byte_count)
+    def get_operands(self, byte_count, ins_address):
+        return self.memory.get_block_at(ins_address+1, byte_count)
 
     # Load, copy related instructions start here
     ###
@@ -292,8 +294,8 @@ class SM83(CPU):
                     *ins.operands_raw[:2][::-1])  # little endian
             w = data if o2.immediate else self.memory.read_at(data)
         else:
-            w = self.get_register(o2.name) if o2.immediate else self.memory.read_at(
-                self.get_register(o2.name))
+            r = self.get_register(o2.name)
+            w = r if o2.immediate else self.memory.read_at(r)
 
         # when operand 1 is an address, operand 2 is always a register, hence we use the whole raw operands
         # in fact it is either SP or A
@@ -339,43 +341,56 @@ class SM83(CPU):
     # arithmetic related instructions start here
     ###
     # ADD; ADC; SUB; DEC; INC
+
+    def accumulate_A(self, ins: GameboyInstruction, include_carry=False, sub=False):
+        # operand 1 is always A
+        _, o2 = ins.operands
+
+        current_A = self.get_register("A")
+
+        func_half = BO.sub_half_borrow if sub else BO.add_half_carry
+        func_full = BO.sub_full_borrow if sub else BO.add_full_carry
+
+        if o2.name == 'n8':
+            operand = ins.operands_raw[0]
+        else:
+            r = self.get_register(o2.name)
+            operand = r if o2.immediate else self.memory.read_at(r)
+        
+        final = operand + (self.flags['C'] if include_carry else 0) 
+        result = current_A - final if sub else current_A + final  
+       
+        self.set_register("A", result)
+        self.set_flags(Z=(self.get_register('A') == 0), N=sub, H=func_half(
+            current_A, final), C=func_full(current_A, final))
+
     def exe_INS_ADD(self, ins: GameboyInstruction):
         o1, o2 = ins.operands
+        # the first edge case when we add the signed byte to SP and not A
         if o1.name == "SP":
             signed = BO.byte_twos_complement(ins.operands_raw[0])
             self.set_flags(Z=False, N=False, H=BO.add_half_carry(
-                self.SP, signed), C=BO.add_full_carry(self.SP, signed))
+                self.SP, signed), C=BO.add_full_carry(self.SP, signed, bit_width=16))
             self.set_register("SP", self.SP + signed)
         elif o1.name == 'A':
-            current_A = self.get_register("A")
-            if o2.name == 'n8':
-                summand = ins.operands_raw[0]
-            else:
-                r = self.get_register(o2.name)
-                summand = r if o2.immediate else self.memory.read_at(r)
-            self.set_flags(Z=(current_A + summand) == 0, N=False, H=BO.add_half_carry(
-                current_A, summand), C=BO.add_full_carry(current_A, summand))
-            self.set_register("A", current_A + summand)
+            self.accumulate_A(ins)
         # ADD HL,ss is the only instruction that has a 16 bit operand, and the operand is always a register pair,
         # so we can just check if o1 is HL to determine whether it is that instruction or not
         elif o1.name == "HL":
+            addend = self.get_register("HL")
             summand = self.get_register(o2.name)
             self.set_register("HL", self.get_register("HL") + summand)
-            self.set_flags(N=False, H=BO.add_half_carry(self.get_register(
-                "HL"), summand), C=BO.add_full_carry(self.get_register("HL"), summand))
+            self.set_flags(N=False, H=BO.add_half_carry(addend, summand, high_half=True),
+                           C=BO.add_full_carry(addend, summand, bit_width=16))
 
     def exe_INS_SUB(self, ins: GameboyInstruction):
-        o1, o2 = ins.operands
-        if o1.name == 'A':
-            current_A = self.get_register("A")
-            if o2.name == 'n8':
-                subtrahend = ins.operands_raw[0]
-            else:
-                r = self.get_register(o2.name)
-                subtrahend = r if o2.immediate else self.memory.read_at(r)
-            self.set_flags(Z=(current_A - subtrahend) == 0, N=True, H=BO.sub_half_borrow(
-                current_A, subtrahend), C=BO.sub_full_borrow(current_A, subtrahend))
-            self.set_register("A", current_A - subtrahend)
+        self.accumulate_A(ins, sub=True)
+
+    def exe_INS_ADC(self, ins: GameboyInstruction):
+        self.accumulate_A(ins, include_carry=True)
+
+    def exe_INS_SBC(self, ins: GameboyInstruction):
+        self.accumulate_A(ins, include_carry=True, sub=True)
 
     def exe_INS_INC(self, ins: GameboyInstruction):
         o = ins.operands[0]
@@ -386,7 +401,7 @@ class SM83(CPU):
             pr_value = self.get_register(
                 rname) if o.immediate else self.memory.read_at(self.get_register(rname))
             self.set_flags(H=BO.add_half_carry(pr_value, 1))
-        self.inc_register(rname) if o.immediate else self.ram.inc_byte_at(
+        self.inc_register(rname) if o.immediate else self.memory.inc_byte_at(
             self.get_register(rname))
         if update_flags:
             self.set_flags(Z=self.get_register(rname) == 0, N=False)
@@ -401,7 +416,7 @@ class SM83(CPU):
                 rname) if o.immediate else self.memory.read_at(self.get_register(rname))
             self.set_flags(
                 H=BO.sub_half_borrow(pr_value, 1))
-        self.dec_register(rname) if o.immediate else self.ram.dec_byte_at(
+        self.dec_register(rname) if o.immediate else self.memory.dec_byte_at(
             self.get_register(rname))
         if update_flags:
             self.set_flags(Z=self.get_register(rname) == 0, N=True)
@@ -687,11 +702,14 @@ class SM83(CPU):
         else:
             self.memory.write_to(self.get_register(o2.name), result)
 
-    def shift_rotate_to_carry(self, ins, bin_op):
+    def shift_rotate_to_carry(self, ins, bin_op, rotate=False):
         op = ins.operands[0]
         byte = self.get_register(op.name) if op.immediate else self.memory.read_at(
             self.get_register(op.name))
-        bit, result = bin_op(byte, self.flags['C'])
+        if rotate:
+            bit, result = bin_op(byte, self.flags['C'])
+        else:
+            bit, result = bin_op(byte)
         if op.immediate:
             self.set_register(op.name, result)
         else:
@@ -699,7 +717,7 @@ class SM83(CPU):
         self.set_flags(Z=result == 0, N=False, H=False, C=bool(bit))
 
     def exe_INS_RL(self, ins: GameboyInstruction):
-        self.shift_rotate_to_carry(ins, BO.rotate_byte_left_through)
+        self.shift_rotate_to_carry(ins, BO.rotate_byte_left_through, rotate=True)
 
     def exe_INS_RLA(self, ins: GameboyInstruction):
         A = self.get_register("A")
@@ -708,7 +726,7 @@ class SM83(CPU):
         self.set_flags(Z=False, N=False, H=False, C=bool(bit))
 
     def exe_INS_RLC(self, ins: GameboyInstruction):
-        self.shift_rotate_to_carry(ins, BO.rotate_byte_left)
+        self.shift_rotate_to_carry(ins, BO.rotate_byte_left, rotate=True)
 
     def exe_INS_RLCA(self, ins: GameboyInstruction):
         A = self.get_register("A")
@@ -717,22 +735,22 @@ class SM83(CPU):
         self.set_flags(Z=False, N=False, H=False, C=bool(bit))
 
     def exe_INS_RR(self, ins: GameboyInstruction):
-        self.shift_rotate_to_carry(ins, BO.rotate_byte_right_through)
+        self.shift_rotate_to_carry(ins, BO.rotate_byte_right_through, rotate=True)
 
     def exe_INS_RRA(self, ins: GameboyInstruction):
         A = self.get_register("A")
         bit, result = BO.rotate_byte_right_through(A, self.flags['C'])
         self.set_register("A", result)
-        self.set_flags(Z=result == 0, N=False, H=False, C=bool(bit))
+        self.set_flags(Z=False, N=False, H=False, C=bool(bit))
 
     def exe_INS_RRC(self, ins: GameboyInstruction):
-        self.shift_rotate_to_carry(ins, BO.rotate_byte_right)
+        self.shift_rotate_to_carry(ins, BO.rotate_byte_right, rotate=True)
 
     def exe_INS_RRCA(self, ins: GameboyInstruction):
         A = self.get_register("A")
         bit, result = BO.rotate_byte_right(A)
         self.set_register("A", result)
-        self.set_flags(Z=result == 0, N=False, H=False, C=bit)
+        self.set_flags(Z=False, N=False, H=False, C=bit)
 
     def exe_INS_SLA(self, ins: GameboyInstruction):
         self.shift_rotate_to_carry(ins, BO.shift_byte_left)
@@ -758,8 +776,12 @@ class SM83(CPU):
     ###
 
     def __getattr__(self, name):
-        raise NotImplementedError(
+        if name.startswith("exe_INS_"):
+            raise NotImplementedError(
             f"Instruction {name} not implemented yet, if it exists.")
+        else:
+            raise AttributeError(f"{name} is not a valid attribute of CPU.")
+        
 
     def decode(self, opcode, prefixed: bool):
         ins = self.ROMloader.identify_instruction(
@@ -781,7 +803,7 @@ class SM83(CPU):
             ins = self.decode(opcode, prefixed=prefixed)
             func = getattr(self, f"exe_INS_{ins.mnemonic}")
             if self.pending_interrupt_enable and not self.IME.value:
-                self.IME = True
+                self.set_register("IME", 1)
                 self.pending_interrupt_enable = False
             func(ins)
             return ins
