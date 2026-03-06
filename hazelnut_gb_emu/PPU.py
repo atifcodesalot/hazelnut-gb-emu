@@ -18,11 +18,10 @@ class GbPPU:
         self.palette = GB_LCD_PALETTE
         self.dots = 0
         
+        self.mode = None
         self.vblank = False
 
     def get_shade(self, palette_reg, shade_bits):
-        if shade_bits != 0:
-            print(shade_bits, "shade bits" + "-"*50)
         ti = shade_bits * 2
         mask = pow(2, ti) * 3
         return self.palette[(palette_reg & mask) >> ti]
@@ -42,10 +41,10 @@ class GbPPU:
         pass
 
     def get_context(self):
-        palette_reg = self.mem_ctl.read_at(0xff47)  # palette register
-        scx, scy = self.mem_ctl.read_at(0xFF43), self.mem_ctl.read_at(0xFF42)
-        ly, lcy = self.mem_ctl.read_at(0xFF44), self.mem_ctl.read_at(0xFF45)
-        lcd_control = self.mem_ctl.read_at(0xFF40)
+        palette_reg = self.mem_ctl.io_registers[0xff47].value  # palette register
+        scx, scy = self.mem_ctl.io_registers[0xFF43].value, self.mem_ctl.io_registers[0xFF42].value
+        ly, lcy = self.mem_ctl.io_registers[0xFF44].value, self.mem_ctl.io_registers[0xFF45].value
+        lcd_control = self.mem_ctl.io_registers[0xFF40].value
         return palette_reg, (scx, scy), (ly, lcy), lcd_control
 
     def scanline_BG(self, preg, lcdc, ly, scy, scx):
@@ -56,23 +55,25 @@ class GbPPU:
             tile_row =  self.get_tile_row_BG(lcdc, global_x, global_y)
             shade_i = BO.get_pixel_2bpp(tile_row[0], tile_row[1], pixel_i)
             pixel = self.get_shade(preg, shade_i)
-            if pixel != self.palette[0]:    
-                print(pixel, "pixel", x, ly)
             self.pgdisplay.set_at((x, ly), pixel)
     
     def scanline_WINDOW(self, preg, lcdc, ly, scy, scx):
         pass
 
-    def OAM_scan(self):
-        pass
+    def OAM_scan(self, lcdc):
+        lcdc_1 = BO.get_nth_bit(lcdc, 1)
+        if not lcdc_1:
+            return
+        self.mode = 2
+        sprites = [self.mem_ctl.OAM[i: i + 4] for i in range(40)]
+            
 
     def scanline(self):
         # update per scanline
         palette_reg, (scx, scy), (ly, lcy), lcdc = self.get_context()
         
         lcdc_7 = BO.get_nth_bit(lcdc, 7)
-        if not lcdc_7:  # if LCD is off, skip to next scanline
-            self.mem_ctl.write_to(0xFF44, ly + 1)
+        if not lcdc_7:  # if LCD is off, skip
             return
         
         if self.vblank:
@@ -83,21 +84,24 @@ class GbPPU:
                 self.vblank = False
                 self.mem_ctl.write_to(0xFF44, 0)
                 return
+            
+        self.mode = 3
         
         # scanline background
         self.scanline_BG(palette_reg, lcdc, ly, scy, scx)
         # scanline window
         #self.scanline_WINDOW(palette_reg, lcdc, ly, scy, scx)
         # scanline object attr memory
-        self.OAM_scan()
+        #self.OAM_scan(lcdc)
         self.mem_ctl.write_to(0xFF44, ly + 1)  # update LY register
 
-        if ly + 1 == GB_LCD_RES[1]:  # if we just finished the last visible scanline
-            # request VBlank interrupt
+        if ly + 1 >= GB_LCD_RES[1]:  # if we just finished the last visible scanline
+            self.mode = 0
             self.vblank = True
-            ie = self.mem_ctl.read_at(0xFF0F)
-            ie |= 1
-            self.mem_ctl.write_to(0xFF0F, ie)
+            # request VBlank interrupt
+            if_ = self.mem_ctl.read_at(0xFF0F)
+            if_ |= 1
+            self.mem_ctl.write_to(0xFF0F, if_)
             self.mem_ctl.write_to(0xFF44, ly + 1)
             
         
