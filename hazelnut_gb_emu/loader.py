@@ -36,7 +36,7 @@ class GameboyInstruction:
     prefixed: bool
     mnemonic: str
     raw: bytes
-    operands_raw: bytearray
+    operands_raw: list
     operands: list[Operand]
     cycles: list
     byte_count: int  # variable instruction size

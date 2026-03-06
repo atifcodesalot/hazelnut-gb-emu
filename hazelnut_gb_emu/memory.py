@@ -15,23 +15,23 @@ class RAM:
             raise IndexError(f"Address out of bounds: {hex(i)} for {self}.")
 
     def get_byte_at(self, i) -> int:
-        self.address_range_guard(i)
+        #self.address_range_guard(i)
         return self.array[i]
 
     def get_block_at(self, i, block_size) -> bytearray:
-        self.address_range_guard(i)
+        #self.address_range_guard(i)
         return self.array[i: i+block_size]
 
     def write_to(self, i, byte):
-        self.address_range_guard(i)
+        #self.address_range_guard(i)
         self.array[i] = byte
 
     def inc_byte_at(self, i):
-        self.address_range_guard(i)
+        #self.address_range_guard(i)
         self.array[i] = (self.array[i] + 1) % 256
 
     def dec_byte_at(self, i):
-        self.address_range_guard(i)
+        #self.address_range_guard(i)
         self.array[i] = (self.array[i] - 1) % 256
 
 
@@ -78,8 +78,8 @@ class GBbootROM(ROM):
 
 
 class VRAM(RAM):
-    def __init__(self, addressable_bits):
-        super().__init__(addressable_bits)
+    pass
+    
 
 
 @dataclass
@@ -102,156 +102,189 @@ class GBMemoryController:
         self.vram = VRAM(addressable_bits=13)  # 8KB
         self.ext_ram = RAM(addressable_bits=13) if ext_ram else None
         self.hram = RAM(addressable_bits=7)  # 127B
+        self.OAM = bytearray(160)
         def r8bit(name): return Register(
             name=name, value=0, max_value=0xFF, bit_length=8)
         # Note: Audio, serial transfer registers are not implemented.
         self.io_registers = {
-            'JOYP': r8bit('JOYP'),
-            'IF': r8bit('IF'),
-            'IE': r8bit('IE'),
-            'SB': r8bit('SB'),
-            'SC': r8bit('SC'),
-            'SCX': r8bit('SCX'),
-            'SCY': r8bit('SCY'),
-            'LY': r8bit('LY'),
-            'LYC': r8bit('LYC'),
-            'LCDC': r8bit('LCDC'),
-            'WY': r8bit('WY'),
-            'WX': r8bit('WX'),
-            'STAT': r8bit('STAT'),
-            'BGP': r8bit('BGP'),
-            'OBP0': r8bit('OBP0'),
-            'OBP1': r8bit('OBP1'),
-        }
+            # --- Joypad / Serial ---
+            0xFF00: r8bit('JOYP'),
+            0xFF01: r8bit('SB'),
+            0xFF02: r8bit('SC'),
 
-        self.memory_map = {
-            range(0x0000,	0x00FF+1): self.boot_rom,
-            range(0x0000,	0x7FFF+1): self.rom,
-            range(0x8000,	0x9FFF+1): self.vram,
-            range(0xA000,	0xBFFF+1): self.ext_ram,
-            range(0xC000,	0xDFFF+1): self.ram,
-            # unusable echo ram
-            range(0xE000,	0xFDFF+1): None,
-            #
-            range(0xFE00,	0xFE9F+1): "unimplemented",  # OAM
-            # nintendo prohibits access to this region.
-            range(0xFEA0,	0xFEFF+1): None,
-            #
-            range(0xFF00,	0xFF01 + 1): self.io_registers['JOYP'],
-            range(0xFF02,	0xFF02 + 1): self.io_registers['SB'],
-            range(0xFF03,	0xFF03 + 1): self.io_registers['SC'],
-            range(0xFF04,	0xFF07 + 1): "unimplemented",  # timer registers
-            range(0xFF0F,	0xFF0F + 1): self.io_registers['IF'],
-            range(0xFF10,	0xFF3F + 1): "unimplemented",  # sound registers
-            # LCD control registers
-            range(0xFF40,	0xFF40 + 1): self.io_registers["LCDC"],
-            # LCD status register
-            range(0xFF41,	0xFF41 + 1): self.io_registers["STAT"],
-            # scroll registers
-            range(0xFF42,	0xFF42 + 1): self.io_registers["SCY"],
-            range(0xFF43,	0xFF43 + 1): self.io_registers["SCX"],
-            # LCD Y position register
-            range(0xFF44,	0xFF44 + 1): self.io_registers["LY"],
-            # LCD Y compare register
-            range(0xFF45,	0xFF45 + 1): self.io_registers["LYC"],
-            # Background palette register
-            range(0xFF46,	0xFF47 + 1): self.io_registers["BGP"],
-            # Object palette registers
-            range(0xFF48,	0xFF48 + 1): self.io_registers["OBP0"],
-            range(0xFF49,	0xFF49 + 1): self.io_registers["OBP1"],
-            # Window Y position register
-            range(0xFF4A,	0xFF4A + 1): self.io_registers["WY"],
-            # Window X position register
-            range(0xFF4B,	0xFF4B + 1): self.io_registers["WX"],
-            range(0xFF4C,	0xFF7F + 1): "unimplemented",  # unused
+            # --- Timer ---
+            0xFF04: r8bit('DIV'),
+            0xFF05: r8bit('TIMA'),
+            0xFF06: r8bit('TMA'),
+            0xFF07: r8bit('TAC'),
 
-            range(0xFF80,	0xFFFE+1): self.hram,
-            range(0xFFFF,	0xFFFF+1): self.io_registers['IE']
+            # --- Interrupt flag ---
+            0xFF0F: r8bit('IF'),
+
+            # --- Sound (stub for now) ---
+            # FF10–FF3F
+            **{addr: r8bit(f'SND_{hex(addr)}') for addr in range(0xFF10, 0xFF40)},
+
+            # --- LCD / PPU ---
+            0xFF40: r8bit('LCDC'),
+            0xFF41: r8bit('STAT'),
+            0xFF42: r8bit('SCY'),
+            0xFF43: r8bit('SCX'),
+            0xFF44: r8bit('LY'),
+            0xFF45: r8bit('LYC'),
+            0xFF46: r8bit('DMA'),   # IMPORTANT: separate from BGP
+            0xFF47: r8bit('BGP'),
+            0xFF48: r8bit('OBP0'),
+            0xFF49: r8bit('OBP1'),
+            0xFF4A: r8bit('WY'),
+            0xFF4B: r8bit('WX'),
+
+            # --- Unused area FF4C–FF7F ---
+            **{addr: r8bit(f'UNUSED_{hex(addr)}') for addr in range(0xFF4C, 0xFF80)},
+
+            # --- Interrupt Enable ---
+            0xFFFF: r8bit('IE'),
         }
 
     def hex_dump(self, start, end):
         for i in range(start, end + 1):
             print(f"{hex(i)}: {hex(self.read_at(i))}")
 
-    def get_register(self, register_name: str):
-        return self.io_registers[register_name].value
-
-    def unused_guard(self, r):
-        if self.memory_map[r] is None:
-            raise Exception(f"Address {r} is in an unusable memory region.")
-
-    def set_register(self, register_name: str, value):
-        r = self.io_registers[register_name]
+    def set_register(self, reg_loc: str, value):
+        r = self.io_registers[reg_loc]
         r.value = value % (r.max_value + 1)
 
-    def get_mem_device(self, loc):
-        for r in self.memory_map.keys():
-            if loc in r:
-                self.unused_guard(r)
-                mem_device = self.memory_map[r]
-                offset = loc - r.start
-                break
-        else:
-            raise IndexError(f"Address {loc} is out of bounds.")
-        return mem_device, offset
-
     def read_at(self, loc):
-        if loc == 0xFF44:
-            return 0x90
-        mem_device, offset = self.get_mem_device(loc)
-        if mem_device == "unimplemented":
-            return 0xFF
-        t = type(mem_device)
-        if t in [RAM, ROM, VRAM, GBbootROM]:
-            return mem_device.get_byte_at(offset)
-        elif t is Register:
-            return mem_device.value
-        else:
-            raise Exception(
-                f"Invalid memory device {type(mem_device)} at address {hex(offset)}.")
+        a = loc
+        # --- ROM / Boot ROM overlay (hottest path: instruction fetch) ---
+        if a < 0x8000:
+            # Boot ROM overlays 0x0000-0x00FF while enabled
+            if a <= 0x00FF and self.boot_enabled:
+                # or boot_rom[a] if bytearray
+                return self.boot_rom.get_byte_at(a)
+            return self.rom.get_byte_at(a)           # or rom[a]
 
-    def write_to(self, loc, byte):
-        mem_device, offset = self.get_mem_device(loc)
-        if mem_device == "unimplemented":
+        # --- VRAM ---
+        if a < 0xA000:
+            return self.vram.get_byte_at(a - 0x8000)
+
+        # --- External RAM ---
+        if a < 0xC000:
+            return self.ext_ram.get_byte_at(a - 0xA000)
+
+        # --- WRAM (C000-DFFF) ---
+        if a < 0xE000:
+            return self.ram.get_byte_at(a - 0xC000)
+
+        # --- Echo RAM unusable yet (E000-FDFF) ---
+        if a < 0xFE00:
+            return 0xFF
+
+        # --- OAM (FE00-FE9F) marked unimplemented in your map ---
+        if a < 0xFEA0:
+            return self.OAM[a - 0xFE00]
+
+        # --- Not usable (FEA0-FEFF) ---
+        if a < 0xFF00:
+            return 0xFF
+
+        # --- IO / HRAM / IE ---
+        if a < 0xFF80:
+            # if a == 0xFF44: # for doctor gameboy
+            #     return 0x90
+            return self.io_registers[a].value
+
+        # --- HRAM (FF80-FFFE) ---
+        if a < 0xFFFF:
+            return self.hram.get_byte_at(a - 0xFF80)
+
+        # --- IE (FFFF) ---
+        return self.io_registers[0xFFFF].value
+
+    def write_to(self, loc: int, byte: int) -> None:
+        a = loc
+        v = byte & 0xFF  # always clamp to 8-bit
+
+        # --- ROM / Boot ROM area ---
+        # Normally ROM isn't writable (except MBC registers live in 0000-7FFF).
+        if a < 0x8000:
             return
-        t = type(mem_device)
-        if t in [RAM, VRAM]:
-            # print(f"writing {hex(byte)} to {mem_device} at address {hex(offset)}")
-            mem_device.write_to(offset, byte)
-        elif t is Register:
-            self.set_register(mem_device.name, byte)
-        else:
-            raise Exception(
-                f"Invalid memory device {type(mem_device)} at address {hex(offset)}.")
-            
+            # raise IndexError("ROM is not writeable (MBC regs not implemented)")
+
+        # --- VRAM ---
+        if a < 0xA000:
+            self.vram.write_to(a - 0x8000, v)
+            return
+
+        # --- External RAM ---
+        if a < 0xC000:
+            self.ext_ram.write_to(a - 0xA000, v)
+            return
+
+        # --- WRAM (C000-DFFF) ---
+        if a < 0xE000:
+            self.ram.write_to(a - 0xC000, v)
+            return
+
+        # --- Echo RAM (E000-FDFF) ---
+        # SOme emulators mark this as None/unusable. Real HW mirrors C000-DDFF.
+        # Choose one behavior. For speed + later correctness, mirroring is nice:
+        if a < 0xFE00:
+            # mirror to C000-DDFF region
+            self.ram.write_to(a - 0xE000, v)
+            return
+
+        # --- OAM (FE00-FE9F) ---
+        # Unimplemented
+        if a < 0xFEA0:
+            self.OAM[a - 0xFE00] = v
+
+        # --- Not usable (FEA0-FEFF) ---
+        if a < 0xFF00:
+            return
+
+        # --- IO (FF00-FF7F) ---
+        if a < 0xFF80:
+            # Boot ROM disable register (FF50) 
+            if a == 0xFF50:
+                # Any nonzero write disables boot ROM on DMG
+                self.boot_rom_enabled = (v == 0)
+                return
+
+            reg = self.io_registers.get(a)
+            if reg is None:
+                # unimplemented/unused IO → ignore
+                return
+
+            # DMA (FF46) often triggers a transfer; for now just store the value
+            # later when implementing DMA, hook it here.
+            reg.value = (v) % 256
+            return
+
+        # --- HRAM (FF80-FFFE) ---
+        if a < 0xFFFF:
+            self.hram.write_to(a - 0xFF80, v)
+            return
+
+        # --- IE (FFFF) ---
+        reg_ie = self.io_registers.get(0xFFFF) or self.io_registers.get("IE")
+        if reg_ie is None:
+            raise KeyError("IE register not found in io_registers")
+        reg_ie.value = v
+
     def get_block_at(self, loc, byte_count):
-        mem_device, offset = self.get_mem_device(loc)
-        return mem_device.get_block_at(offset, byte_count)
-    
+        return [self.read_at(loc + i) for i in range(byte_count)]
+
     def dec_byte_at(self, loc):
-        mem_device, offset = self.get_mem_device(loc)
-        t = type(mem_device)
-        if t in [RAM, VRAM]:
-            mem_device.dec_byte_at(offset)
-        elif t is Register:
-            self.set_register(mem_device.name, self.get_register(mem_device.name) - 1)
-        else:
-            raise Exception(
-                f"Invalid memory device {t} at address {hex(offset)} for dec operation.")
-    
+        byte = self.read_at(loc)
+        self.write_to(loc, (byte - 1) & 0xFF)
+
     def inc_byte_at(self, loc):
-        mem_device, offset = self.get_mem_device(loc)
-        t = type(mem_device)
-        if t in [RAM, VRAM]:
-            mem_device.inc_byte_at(offset)
-        elif t is Register:
-            self.set_register(mem_device.name, self.get_register(mem_device.name) + 1)
-        else:
-            raise Exception(
-                f"Invalid memory device {t} at address {hex(offset)} for inc operation.")
+        byte = self.read_at(loc)
+        self.write_to(loc, (byte + 1) & 0xFF)
 
     def disable_boot_rom(self):
-        self.memory_map[range(0x0000,	0x00FF+1)] = self.rom
+        self.boot_enabled = False
 
     def __getitem__(self, key):
         return self.read_at(key)
