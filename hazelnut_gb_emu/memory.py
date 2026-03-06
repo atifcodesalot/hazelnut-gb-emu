@@ -190,8 +190,8 @@ class GBMemoryController:
 
         # --- IO / HRAM / IE ---
         if a < 0xFF80:
-            # if a == 0xFF44: # for doctor gameboy
-            #     return 0x90
+            if a == 0xFF44: # for doctor gameboy
+                return 0x90
             return self.io_registers[a].value
 
         # --- HRAM (FF80-FFFE) ---

@@ -89,6 +89,7 @@ class Gameboy:
     def run_test_ROM(self, path, debug=False, breakpoints=[], delay=0.01):
         if debug:
             import colorama
+        ins_exed = set()
         with open("hazelnutlog.txt", 'w') as f:
             f.write("")
         self.read_ROM(path)
@@ -117,8 +118,10 @@ class Gameboy:
                 #     delay = float(input(
                 #         f"breakpoint reached at {hex(pc)}! Input delay: "))
 
-                #self.log_pc_state("hazelnutlog.txt")
+                # self.log_pc_state("hazelnutlog.txt") # for dr gameboy
                 ins, cycles = self.SM83_processor.tick_one_ins()
+                ins_exed.add(ins.mnemonic)
+                # print("ins_exed:", ins_exed)
                 inner_cycles += cycles
                 self.cycles += cycles
                 self.inc_DIV()

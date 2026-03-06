@@ -295,7 +295,7 @@ class SM83(CPU):
             signed = BO.byte_twos_complement(e8)
             self.set_register("HL", self.SP.value + signed)
             self.set_flags_fast(Z=0, N=0, H=BO.add_half_carry(
-                self.SP.value, signed), C=BO.add_full_carry(self.SP.value, signed))
+                self.SP.value, signed), C=BO.add_full_carry(self.SP.value & 0xFF, e8))
             return
 
         # o1 is the load destionation, ALWAYS
@@ -393,10 +393,11 @@ class SM83(CPU):
         o1, o2 = ins.operands
         # the first edge case when we add the signed byte to SP and not A
         if o1.name == "SP":
-            signed = BO.byte_twos_complement(ins.operands_raw[0])
+            e8 = ins.operands_raw[0]
+            signed = BO.byte_twos_complement(e8)
             self.set_flags_fast(Z=False, N=False, H=BO.add_half_carry(
-                self.SP, signed), C=BO.add_full_carry(self.SP, signed, bit_width=16))
-            self.set_register("SP", self.SP + signed)
+                self.SP.value, signed), C=BO.add_full_carry(self.SP.value & 0xFF, e8))
+            self.set_register("SP", self.SP.value + signed)
         elif o1.name == 'A':
             self.accumulate_A(ins)
         # ADD HL,ss is the only instruction that has a 16 bit operand, and the operand is always a register pair,
@@ -511,6 +512,7 @@ class SM83(CPU):
     def exe_INS_CPL(self, _: GameboyInstruction):
         result = 0xFF ^ self.get_register("A")
         self.set_register("A", result)
+        self.set_flags_fast(N=1, H=1)
 
     # Stack related instructions start here
     ###
@@ -739,7 +741,10 @@ class SM83(CPU):
         byte = self.get_register(op.name) if op.immediate else self.memory.read_at(
             self.get_register(op.name))
         if rotate:
-            bit, result = bin_op(byte, self.flags['C'])
+            if bin_op == BO.rotate_byte_right or bin_op == BO.rotate_byte_left:
+                bit, result = bin_op(byte)
+            else:
+                bit, result = bin_op(byte, self.flags['C'])
         else:
             bit, result = bin_op(byte)
         if op.immediate:
