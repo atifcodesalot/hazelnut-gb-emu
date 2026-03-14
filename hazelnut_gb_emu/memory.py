@@ -1,5 +1,6 @@
 
 from dataclasses import dataclass
+import time
 
 
 class RAM:
@@ -15,23 +16,23 @@ class RAM:
             raise IndexError(f"Address out of bounds: {hex(i)} for {self}.")
 
     def get_byte_at(self, i) -> int:
-        #self.address_range_guard(i)
+        # self.address_range_guard(i)
         return self.array[i]
 
     def get_block_at(self, i, block_size) -> bytearray:
-        #self.address_range_guard(i)
+        # self.address_range_guard(i)
         return self.array[i: i+block_size]
 
     def write_to(self, i, byte):
-        #self.address_range_guard(i)
+        # self.address_range_guard(i)
         self.array[i] = byte
 
     def inc_byte_at(self, i):
-        #self.address_range_guard(i)
+        # self.address_range_guard(i)
         self.array[i] = (self.array[i] + 1) % 256
 
     def dec_byte_at(self, i):
-        #self.address_range_guard(i)
+        # self.address_range_guard(i)
         self.array[i] = (self.array[i] - 1) % 256
 
 
@@ -79,7 +80,6 @@ class GBbootROM(ROM):
 
 class VRAM(RAM):
     pass
-    
 
 
 @dataclass
@@ -190,8 +190,13 @@ class GBMemoryController:
 
         # --- IO / HRAM / IE ---
         if a < 0xFF80:
-            if a == 0xFF44: # for doctor gameboy
-                return 0x90
+            # if a == 0xFF44: # for doctor gameboy
+            #     return 0x90
+
+            if a == 0xFF00:
+                # joyp not implemented, return as if all buttons are released
+                return 0xFF
+
             return self.io_registers[a].value
 
         # --- HRAM (FF80-FFFE) ---
@@ -204,6 +209,10 @@ class GBMemoryController:
     def write_to(self, loc: int, byte: int) -> None:
         a = loc
         v = byte & 0xFF  # always clamp to 8-bit
+
+        if a == 0xFF40:
+            print("attempt to write to the LCDC register: ", byte)
+            time.sleep(3)
 
         # --- ROM / Boot ROM area ---
         # Normally ROM isn't writable (except MBC registers live in 0000-7FFF).
@@ -245,7 +254,7 @@ class GBMemoryController:
 
         # --- IO (FF00-FF7F) ---
         if a < 0xFF80:
-            # Boot ROM disable register (FF50) 
+            # Boot ROM disable register (FF50)
             if a == 0xFF50:
                 # Any nonzero write disables boot ROM on DMG
                 self.boot_rom_enabled = (v == 0)
