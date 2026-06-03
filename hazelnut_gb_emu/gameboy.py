@@ -6,33 +6,56 @@ from .memory import *
 import cProfile
 import time
 import colorama
+from .aux import BO
 
-# wowzers
+
 class Gameboy:
     CPU_DELAY = 0
-    
+
+    keys_inputs = {
+        pygame.K_RIGHT: 0,
+        pygame.K_LEFT: 1,
+        pygame.K_UP: 2,
+        pygame.K_DOWN: 3,
+
+        pygame.K_a: 4,       # A
+        pygame.K_b: 5,       # B
+        pygame.K_s: 6,       # Select
+        pygame.K_RETURN: 7,  # Start
+    }
+
     def __init__(self):
         self.loader = GBRomLoader("")
-        self.memory_controller = GBMemoryController(ext_ram=False)
+        self.input_state = 255
+        self.memory_controller = GBMemoryController(
+            self, ext_ram=False)
         self.SM83_processor = SM83(self.loader, self.memory_controller, [])
         self.PPU = GbPPU(self.memory_controller)
         self.cycles = 0
         self.TIMA_hertz = [256*4, 16, 64, 256]
-        
+        self.DMA = False
+
     @classmethod
     def set_delay(cls, delay):
         cls.CPU_DELAY = delay
 
     def set_display(self):
-        self.screen = pygame.display.set_mode(size=GB_LCD_RES)
+        gw, gh = GB_LCD_RES
+        self.screen = pygame.display.set_mode(size=(gw + 20, gh + 200))
 
     def CPU_burst(self, clock_cycles, breakpoints=[]):
         cycles_passed = 0
         while cycles_passed <= clock_cycles:
             if (pc := self.SM83_processor.get_register('PC')) in breakpoints:
-                self.set_delay(float(input(f"Breakpoint reached at {pc}! Input delay in seconds: ")))
+                self.set_delay(
+                    float(input(f"Breakpoint reached at {pc}! Input delay in seconds: ")))
             ins, cycles = self.SM83_processor.tick_one_ins()
-            
+            self.cycles += cycles
+            self.handle_TIMA()
+            self.inc_DIV()
+            # time.sleep(0.1)
+            # self.debug_state(ins, colorama=colorama)
+
             cycles_passed += cycles
 
     def inc_DIV(self):
@@ -57,6 +80,17 @@ class Gameboy:
             else:
                 self.memory_controller.inc_byte_at(0xFF05)
 
+    def start_DMA(self):
+        # logger.debug("starting DMA...")
+        m = self.memory_controller
+        self.DMA = True
+        source = (m.io_registers[0xFF46].value) * 0x100
+        # copy 160 bytes to OAM
+        for i in range(0xA0):
+            m.OAM[i] = m.read_at(source + i)
+        # logger.debug("ending DMA...")
+        # logger.debug(f"OAM:{self.memory_controller.OAM}")
+
     def tick_PPU_modes_basis(self):
         lcdc = self.memory_controller.io_registers[0xFF40].value
 
@@ -65,7 +99,7 @@ class Gameboy:
             self.PPU.disable()
             self.CPU_burst(456)
             return
-        
+
         ly = self.memory_controller.io_registers[0xFF44].value
 
         if self.PPU.is_VBLANK_scan(ly):
@@ -73,9 +107,10 @@ class Gameboy:
             self.CPU_burst(456)
             self.PPU.handle_VBLANK()
             return
-        
+
         self.PPU.OAM_scan(self.PPU.get_context())
         self.CPU_burst(80)
+        # recall because CPU burst may change the context
         self.PPU.drawing_mode(self.PPU.get_context())
         self.CPU_burst(172)
         self.PPU.HBLANK_mode()
@@ -83,10 +118,11 @@ class Gameboy:
 
         if ly == GB_LCD_RES[1] - 1:  # if just finished the last visible scanline
             self.PPU.enter_VBLANK()
-        
+
         self.PPU.inc_ly()
         self.PPU.handle_LY_compare()
-        
+        self.handle_inputs()
+
     def load_nintendo_logo(self):
         nintendo_logo = bytes.fromhex(
             "CE ED 66 66 CC 0D 00 0B 03 73 00 83 00 0C 00 0D "
@@ -98,14 +134,13 @@ class Gameboy:
         self.memory_controller.rom.array[0x0104:0x0134] = nintendo_logo
         #
 
-    def execute_boot_ROM_test(self, breakpoints=[], delay=0.01):
+    def execute_boot_ROM_test(self, breakpoints=[]):
         self.load_nintendo_logo()
         self.set_display()
         self.SM83_processor.enable_boot_rom()
         self.SM83_processor.set_register('PC', 0x0000)
         while True:
             self.tick_PPU_modes_basis()
-            #ime.sleep(delay)
             self.screen.blit(self.PPU.pgdisplay, (0, 0))
             pygame.display.flip()
 
@@ -113,6 +148,22 @@ class Gameboy:
         self.loader = GBRomLoader(path)
         self.loader.read()
         self.memory_controller.rom.burn_from(self.loader)
+
+    def handle_inputs(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                exit()
+            elif event.type in [pygame.KEYDOWN, pygame.KEYUP]:
+                is_pressed = event.type == pygame.KEYDOWN
+                if event.key not in self.keys_inputs:
+                    continue
+                if is_pressed:
+                    self.input_state = BO.res_nth_bit(
+                        self.input_state,  self.keys_inputs[event.key])
+                else:
+                    self.input_state = BO.set_nth_bit(
+                        self.input_state,  self.keys_inputs[event.key])
+        self.memory_controller.input_state = self.input_state
 
     def run_test_ROM(self, path, pc_start, debug=False, breakpoints=[]):
         with open("hazelnutlog.txt", 'w') as f:
@@ -135,7 +186,7 @@ class Gameboy:
 
         while True:
             self.tick_PPU_modes_basis()
-            self.screen.blit(self.PPU.pgdisplay, (0, 0))
+            self.screen.blit(self.PPU.pgdisplay, (10, 10))
             pygame.display.flip()
 
     def debug_state(self, ins, colorama):
@@ -161,7 +212,7 @@ def benchmark():
     import sys
     gb = Gameboy()
     try:
-        gb.set_delay(0.00001)
+        # gb.set_delay(0.00001)
         gb.run_test_ROM(sys.argv[1], pc_start=0x0)
     except KeyboardInterrupt:
         exit("Program terminated")

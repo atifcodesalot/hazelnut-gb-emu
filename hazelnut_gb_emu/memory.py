@@ -1,6 +1,6 @@
 
 from dataclasses import dataclass
-import time
+from .aux import BO
 
 
 class RAM:
@@ -94,7 +94,10 @@ class Register:
 
 
 class GBMemoryController:
-    def __init__(self, ext_ram=False):
+    def __init__(self, gameboy, ext_ram=False):
+        self.gameboy = gameboy
+        self.input_state = gameboy.input_state
+
         self.boot_enabled = True
         self.boot_rom = GBbootROM()
         self.rom = ROM(addressable_bits=16)  # 32KB
@@ -154,6 +157,25 @@ class GBMemoryController:
         r = self.io_registers[reg_loc]
         r.value = value % (r.max_value + 1)
 
+    def handle_joypad_read(self):
+        current_joyp = self.io_registers[0xFF00].value
+
+        # These must be active-low lower-nibble masks:
+        # 1 = released, 0 = pressed
+        buttons, dpad = BO.nibblesfrom_bytes(self.input_state)
+
+        result = 0xC0 | (current_joyp & 0x30) | 0x0F
+
+        # bit 4 == 0 means dpad selected
+        if (current_joyp & 0x10) == 0:
+            result = (result & 0xF0) | ((result & 0x0F) & dpad)
+
+        # bit 5 == 0 means buttons selected
+        if (current_joyp & 0x20) == 0:
+            result = (result & 0xF0) | ((result & 0x0F) & buttons)
+
+        return result
+
     def read_at(self, loc):
         a = loc
         # --- ROM / Boot ROM overlay (hottest path: instruction fetch) ---
@@ -194,8 +216,7 @@ class GBMemoryController:
             #     return 0x90
 
             if a == 0xFF00:
-                # joyp not implemented, return as if all buttons are released
-                return 0xFF
+                return self.handle_joypad_read()
 
             return self.io_registers[a].value
 
@@ -209,10 +230,6 @@ class GBMemoryController:
     def write_to(self, loc: int, byte: int) -> None:
         a = loc
         v = byte & 0xFF  # always clamp to 8-bit
-
-        if a == 0xFF40:
-            print("attempt to write to the LCDC register: ", byte)
-            time.sleep(3)
 
         # --- ROM / Boot ROM area ---
         # Normally ROM isn't writable (except MBC registers live in 0000-7FFF).
@@ -244,7 +261,7 @@ class GBMemoryController:
             return
 
         # --- OAM (FE00-FE9F) ---
-        # Unimplemented
+        # write to OAM (?)
         if a < 0xFEA0:
             self.OAM[a - 0xFE00] = v
 
@@ -258,6 +275,13 @@ class GBMemoryController:
             if a == 0xFF50:
                 # Any nonzero write disables boot ROM on DMG
                 self.boot_rom_enabled = (v == 0)
+                return
+
+            if a == 0xFF46:
+                self.gameboy.start_DMA()
+        
+            if a == 0xFF00:
+                self.io_registers[0xFF00].value = 0xC0 | (v & 0x30) | 0x0F
                 return
 
             reg = self.io_registers.get(a)
