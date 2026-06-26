@@ -1,6 +1,7 @@
 
 from dataclasses import dataclass
 from .aux import BO
+from .cartridge import Cartridge
 
 
 class RAM:
@@ -40,8 +41,8 @@ class ROM(RAM):
     def __init__(self, addressable_bits):
         super().__init__(addressable_bits=addressable_bits)
 
-    def burn_from(self, rom_loader):
-        self.array[:len(rom_loader.prog)] = rom_loader.prog
+    def burn_from(self, cartridge: Cartridge):
+        self.array[:len(cartridge.content)] = cartridge.content
 
     def write_to(self, i, byte, burning=False):
         if not burning:
@@ -93,17 +94,27 @@ class Register:
         return str(self.value)
 
 
+@dataclass
+class IOhole:
+    value: int
+
+
+hole = IOhole(0xFF)
+
+
 class GBMemoryController:
     def __init__(self, gameboy, ext_ram=False):
         self.gameboy = gameboy
         self.input_state = gameboy.input_state
+
+        self.ext_ram_enabled = ext_ram
 
         self.boot_enabled = True
         self.boot_rom = GBbootROM()
         self.rom = ROM(addressable_bits=16)  # 32KB
         self.ram = RAM(addressable_bits=13)  # 8KB
         self.vram = VRAM(addressable_bits=13)  # 8KB
-        self.ext_ram = RAM(addressable_bits=13) if ext_ram else None
+        self.ext_ram = RAM(addressable_bits=13)
         self.hram = RAM(addressable_bits=7)  # 127B
         self.OAM = bytearray(160)
         def r8bit(name): return Register(
@@ -141,6 +152,7 @@ class GBMemoryController:
             0xFF49: r8bit('OBP1'),
             0xFF4A: r8bit('WY'),
             0xFF4B: r8bit('WX'),
+            0xFF50: r8bit('BOOT'),
 
             # --- Unused area FF4C–FF7F ---
             **{addr: r8bit(f'UNUSED_{hex(addr)}') for addr in range(0xFF4C, 0xFF80)},
@@ -192,7 +204,10 @@ class GBMemoryController:
 
         # --- External RAM ---
         if a < 0xC000:
-            return self.ext_ram.get_byte_at(a - 0xA000)
+            if self.ext_ram_enabled:
+                return self.ext_ram.get_byte_at(a - 0xA000)
+            else:
+                return 0xFF
 
         # --- WRAM (C000-DFFF) ---
         if a < 0xE000:
@@ -218,7 +233,7 @@ class GBMemoryController:
             if a == 0xFF00:
                 return self.handle_joypad_read()
 
-            return self.io_registers[a].value
+            return self.io_registers.get(a, hole).value
 
         # --- HRAM (FF80-FFFE) ---
         if a < 0xFFFF:
@@ -244,7 +259,8 @@ class GBMemoryController:
 
         # --- External RAM ---
         if a < 0xC000:
-            self.ext_ram.write_to(a - 0xA000, v)
+            if self.ext_ram_enabled:
+                self.ext_ram.write_to(a - 0xA000, v)
             return
 
         # --- WRAM (C000-DFFF) ---
@@ -274,22 +290,24 @@ class GBMemoryController:
             # Boot ROM disable register (FF50)
             if a == 0xFF50:
                 # Any nonzero write disables boot ROM on DMG
-                self.boot_rom_enabled = (v == 0)
+                
+                self.disable_boot_rom()
                 return
 
             if a == 0xFF46:
                 self.gameboy.start_DMA()
-        
+
             if a == 0xFF00:
+                # joyp write
                 self.io_registers[0xFF00].value = 0xC0 | (v & 0x30) | 0x0F
                 return
 
             reg = self.io_registers.get(a)
             if reg is None:
-                # unimplemented/unused IO → ignore
+                # unimplemented/unused IO, ignore
                 return
 
-            # DMA (FF46) often triggers a transfer; for now just store the value
+            # DMA (FF46) often triggers a transfer;
             # later when implementing DMA, hook it here.
             reg.value = (v) % 256
             return

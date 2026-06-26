@@ -6,7 +6,11 @@ from .memory import *
 import cProfile
 import time
 import colorama
+from .cartridge import Cartridge, CartridgeReader
 from .aux import BO
+
+
+BOOT_SEQ = open("dmg_boot.bin")
 
 
 class Gameboy:
@@ -25,7 +29,7 @@ class Gameboy:
     }
 
     def __init__(self):
-        self.loader = GBRomLoader("")
+        self.loader = GBRomLoader
         self.input_state = 255
         self.memory_controller = GBMemoryController(
             self, ext_ram=False)
@@ -39,21 +43,21 @@ class Gameboy:
     def set_delay(cls, delay):
         cls.CPU_DELAY = delay
 
+    def turn_on_LCD(self):
+        self.memory_controller[0xFF40] = 0x91
+
     def set_display(self):
         gw, gh = GB_LCD_RES
         self.screen = pygame.display.set_mode(size=(gw + 20, gh + 200))
 
-    def CPU_burst(self, clock_cycles, breakpoints=[]):
+    def CPU_burst(self, clock_cycles):
         cycles_passed = 0
         while cycles_passed <= clock_cycles:
-            if (pc := self.SM83_processor.get_register('PC')) in breakpoints:
-                self.set_delay(
-                    float(input(f"Breakpoint reached at {pc}! Input delay in seconds: ")))
             ins, cycles = self.SM83_processor.tick_one_ins()
             self.cycles += cycles
             self.handle_TIMA()
             self.inc_DIV()
-            # time.sleep(0.1)
+            # time.sleep(0.0001)
             # self.debug_state(ins, colorama=colorama)
 
             cycles_passed += cycles
@@ -123,17 +127,6 @@ class Gameboy:
         self.PPU.handle_LY_compare()
         self.handle_inputs()
 
-    def load_nintendo_logo(self):
-        nintendo_logo = bytes.fromhex(
-            "CE ED 66 66 CC 0D 00 0B 03 73 00 83 00 0C 00 0D "
-            "00 08 11 1F 88 89 00 0E DC CC 6E E6 DD DD D9 99 "
-            "BB BB 67 63 6E 0E EC CC DD DC 99 9F BB B9 33 3E"
-        )
-
-        # The boot ROM test expects the Nintendo logo to be present in the boot ROM
-        self.memory_controller.rom.array[0x0104:0x0134] = nintendo_logo
-        #
-
     def execute_boot_ROM_test(self, breakpoints=[]):
         self.load_nintendo_logo()
         self.set_display()
@@ -143,11 +136,6 @@ class Gameboy:
             self.tick_PPU_modes_basis()
             self.screen.blit(self.PPU.pgdisplay, (0, 0))
             pygame.display.flip()
-
-    def read_ROM(self, path):
-        self.loader = GBRomLoader(path)
-        self.loader.read()
-        self.memory_controller.rom.burn_from(self.loader)
 
     def handle_inputs(self):
         for event in pygame.event.get():
@@ -183,11 +171,24 @@ class Gameboy:
         self.SM83_processor.set_register('E', 0xD8)
         self.SM83_processor.set_register('H', 0x01)
         self.SM83_processor.set_register('L', 0x4D)
+        self.turn_on_LCD()
 
         while True:
             self.tick_PPU_modes_basis()
             self.screen.blit(self.PPU.pgdisplay, (10, 10))
             pygame.display.flip()
+
+    def powerup(self):
+        self.set_display()
+        self.SM83_processor.set_register('PC', 0x0)
+        self.memory_controller.boot_enabled = True
+        while True:
+            self.tick_PPU_modes_basis()
+            self.screen.blit(self.PPU.pgdisplay, (10, 10))
+            pygame.display.flip()
+
+    def insert_cartridge(self, cartridge: Cartridge):
+        self.memory_controller.rom.burn_from(cartridge=cartridge)
 
     def debug_state(self, ins, colorama):
         print(
@@ -209,15 +210,24 @@ class Gameboy:
 
 
 def benchmark():
-    import sys
     gb = Gameboy()
     try:
         # gb.set_delay(0.00001)
-        gb.run_test_ROM(sys.argv[1], pc_start=0x0)
+        gb.run_test_ROM(sys.argv[1], pc_start=0x100)
     except KeyboardInterrupt:
         exit("Program terminated")
 
 
+def test():
+    gb = Gameboy()
+    reader = CartridgeReader(sys.argv[1])
+    cartridge = reader.get_cartridge()
+    gb.insert_cartridge(cartridge=cartridge)
+    gb.powerup()
+
+
 if __name__ == "__main__":
-    benchmark()
+    import sys
+    test()
+    # benchmark()
     # cProfile.run("benchmark()", "benchmark_profile.prof")
