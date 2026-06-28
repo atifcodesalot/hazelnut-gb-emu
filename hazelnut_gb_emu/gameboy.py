@@ -10,9 +10,6 @@ from .cartridge import Cartridge, CartridgeReader
 from .aux import BO
 
 
-BOOT_SEQ = open("dmg_boot.bin")
-
-
 class Gameboy:
     CPU_DELAY = 0
 
@@ -181,17 +178,4 @@ class Gameboy:
         with open(logfile, 'a') as f:
             f.write(f"A:{self.SM83_processor.get_register('A'):02X} F:{self.SM83_processor.flags_register():02X} B:{self.SM83_processor.get_register('B'):02X} C:{self.SM83_processor.get_register('C'):02X} D:{self.SM83_processor.get_register('D'):02X} E:{self.SM83_processor.get_register('E'):02X} H:{self.SM83_processor.get_register('H'):02X} L:{self.SM83_processor.get_register('L'):02X} SP:{self.SM83_processor.get_register('SP'):04X} PC:{self.SM83_processor.get_register('PC'):04X} PCMEM:{AA:02X},{BB:02X},{CC:02X},{DD:02X}\n")
 
-
-
-def test():
-    gb = Gameboy()
-    reader = CartridgeReader(sys.argv[1])
-    cartridge = reader.get_cartridge()
-    gb.insert_cartridge(cartridge=cartridge)
-    gb.powerup()
-
-
-if __name__ == "__main__":
-    import sys
-    # test()
-    cProfile.run("test()", "benchmark_profile.prof")
+    

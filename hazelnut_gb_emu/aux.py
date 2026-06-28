@@ -103,3 +103,14 @@ class ByteOperator:
     
     
 BO = ByteOperator
+
+
+
+def string_to_rgb(hexstr):
+    if hexstr.startswith("#"):
+        hexstr = hexstr[1:]
+
+    return tuple(int(hexstr[i*2:(i+1)*2], 16) for i in range(0, 3))
+
+    
+    

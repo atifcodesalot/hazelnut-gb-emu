@@ -1,7 +1,7 @@
 
 
 from .memory import GBMemoryController
-from .aux import ByteOperator as BO
+from .aux import ByteOperator as BO, string_to_rgb as s2rgb
 import pygame
 import time
 
@@ -9,8 +9,7 @@ import time
 GB_LCD_RES = (160, 144)
 
 GB_LCD_PALETTE = ("#EEB3D0", "#eb51e3",  "#971F69", "#220014")
-GB_LCD_PALETTE_rgb = ((0xEC, 0x8C, 0xBC), (0xFD, 0x52, 0xf5),
-                      (0x97, 0x1F, 0x69), (0x22, 0x00, 0x14))
+GB_LCD_PALETTE_rgb = [s2rgb(c) for c in GB_LCD_PALETTE]
 
 
 class GbPPU:
