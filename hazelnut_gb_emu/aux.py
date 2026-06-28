@@ -1,6 +1,7 @@
 
 
 class ByteOperator:
+    # dont call this in hot paths
     @classmethod
     def get_nth_bit(cls, b, n):
         return (b >> n) & 1

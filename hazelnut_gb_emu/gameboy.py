@@ -57,8 +57,6 @@ class Gameboy:
             self.cycles += cycles
             self.handle_TIMA()
             self.inc_DIV()
-            # time.sleep(0.0001)
-            # self.debug_state(ins, colorama=colorama)
 
             cycles_passed += cycles
 
@@ -121,6 +119,7 @@ class Gameboy:
         self.CPU_burst(204)
 
         if ly == GB_LCD_RES[1] - 1:  # if just finished the last visible scanline
+            pygame.display.flip() # update real display
             self.PPU.enter_VBLANK()
 
         self.PPU.inc_ly()
@@ -153,31 +152,6 @@ class Gameboy:
                         self.input_state,  self.keys_inputs[event.key])
         self.memory_controller.input_state = self.input_state
 
-    def run_test_ROM(self, path, pc_start, debug=False, breakpoints=[]):
-        with open("hazelnutlog.txt", 'w') as f:
-            f.write("")
-        self.read_ROM(path)
-        self.memory_controller.disable_boot_rom()
-        self.set_display()
-        self.SM83_processor.set_register('PC', pc_start)
-        self.load_nintendo_logo()
-        self.SM83_processor.set_register('SP', 0xFFFE)
-        self.SM83_processor.set_register('A', 0x01)
-        self.SM83_processor.set_flags(Z=1, N=0, H=1, C=1)
-        self.SM83_processor.set_register('B', 0x00)
-        self.SM83_processor.set_register('C', 0x13)
-        self.SM83_processor.set_register('D', 0x00)
-        self.SM83_processor.set_register('E', 0xD8)
-        self.SM83_processor.set_register('E', 0xD8)
-        self.SM83_processor.set_register('H', 0x01)
-        self.SM83_processor.set_register('L', 0x4D)
-        self.turn_on_LCD()
-
-        while True:
-            self.tick_PPU_modes_basis()
-            self.screen.blit(self.PPU.pgdisplay, (10, 10))
-            pygame.display.flip()
-
     def powerup(self):
         self.set_display()
         self.SM83_processor.set_register('PC', 0x0)
@@ -185,7 +159,6 @@ class Gameboy:
         while True:
             self.tick_PPU_modes_basis()
             self.screen.blit(self.PPU.pgdisplay, (10, 10))
-            pygame.display.flip()
 
     def insert_cartridge(self, cartridge: Cartridge):
         self.memory_controller.rom.burn_from(cartridge=cartridge)
@@ -209,14 +182,6 @@ class Gameboy:
             f.write(f"A:{self.SM83_processor.get_register('A'):02X} F:{self.SM83_processor.flags_register():02X} B:{self.SM83_processor.get_register('B'):02X} C:{self.SM83_processor.get_register('C'):02X} D:{self.SM83_processor.get_register('D'):02X} E:{self.SM83_processor.get_register('E'):02X} H:{self.SM83_processor.get_register('H'):02X} L:{self.SM83_processor.get_register('L'):02X} SP:{self.SM83_processor.get_register('SP'):04X} PC:{self.SM83_processor.get_register('PC'):04X} PCMEM:{AA:02X},{BB:02X},{CC:02X},{DD:02X}\n")
 
 
-def benchmark():
-    gb = Gameboy()
-    try:
-        # gb.set_delay(0.00001)
-        gb.run_test_ROM(sys.argv[1], pc_start=0x100)
-    except KeyboardInterrupt:
-        exit("Program terminated")
-
 
 def test():
     gb = Gameboy()
@@ -228,6 +193,5 @@ def test():
 
 if __name__ == "__main__":
     import sys
-    test()
-    # benchmark()
-    # cProfile.run("benchmark()", "benchmark_profile.prof")
+    # test()
+    cProfile.run("test()", "benchmark_profile.prof")
