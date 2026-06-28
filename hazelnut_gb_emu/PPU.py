@@ -8,15 +8,15 @@ import time
 
 GB_LCD_RES = (160, 144)
 
-GB_LCD_PALETTE = ("#9a9e3f", "#496b22",  "#0e450b", "#1b2a09")
+GB_LCD_PALETTE = ("#EEB3D0", "#eb51e3",  "#971F69", "#220014")
+GB_LCD_PALETTE_rgb = ((0xEC, 0x8C, 0xBC), (0xFD, 0x52, 0xf5),
+                      (0x97, 0x1F, 0x69), (0x22, 0x00, 0x14))
 
 
 class GbPPU:
     def __init__(self, mem_ctl: GBMemoryController):
         self.mem_ctl = mem_ctl
         self.vram = self.mem_ctl.vram
-        self.pgdisplay = pygame.Surface(size=GB_LCD_RES)
-        self.palette = GB_LCD_PALETTE
         self.dots = 0
 
         # sprites that are obtained from previous OAM scan
@@ -24,16 +24,22 @@ class GbPPU:
         #
 
         self.mode = None
+        self.buffer = bytearray([0, ] * GB_LCD_RES[0] * GB_LCD_RES[1])
+        self.pgdisplay = pygame.image.frombuffer(
+            self.buffer, GB_LCD_RES, "P")
+
+        for i in range(4):
+            self.pgdisplay.set_palette_at(i, GB_LCD_PALETTE_rgb[i])
 
     def get_shade(self, palette_reg, shade_bits):
         ti = shade_bits * 2
-        mask = pow(2, ti) * 3
-        return self.palette[(palette_reg & mask) >> ti]
+        mask = (1 << ti) * 3
+        return (palette_reg & mask) >> ti
 
     def get_static_tile(self, lcdc, px, py, map_control_bit):
-        lcdc_Q = BO.get_nth_bit(lcdc, map_control_bit)
+        lcdc_Q = lcdc >> map_control_bit & 1
         map_start = 0x1C00 if lcdc_Q else 0x1800
-        lcdc_4 = BO.get_nth_bit(lcdc, 4)
+        lcdc_4 = lcdc >> 4 & 1
         index = self.vram.get_byte_at(map_start + (py >> 3) * 32 + (px >> 3))
         offset = 0x0000 if lcdc_4 else 0x1000
         tile_offset = offset + index * 16 if lcdc_4 else offset + \
@@ -58,7 +64,7 @@ class GbPPU:
         winner_sprite = None
         best_x = 9999
 
-        lcdc_2 = BO.get_nth_bit(lcdc, 2)
+        lcdc_2 = lcdc >> 2 & 1
 
         sprite_h = 16 if lcdc_2 else 8
 
@@ -109,7 +115,7 @@ class GbPPU:
                 best_x = x
 
         if winner:
-            return winner, BO.get_nth_bit(winner_sprite[3], 7)
+            return winner, winner_sprite[3] >> 7 & 1
         else:
             return None, -1
 
@@ -130,7 +136,7 @@ class GbPPU:
         return pixel
 
     def scanline_WINDOW_pixel(self, lcdc, ly, X):
-        lcdc_5 = BO.get_nth_bit(lcdc, 5)
+        lcdc_5 = lcdc >> 5 & 1
         if not lcdc_5:
             # return None if window is disabled
             return
@@ -231,15 +237,14 @@ class GbPPU:
             final_pixel = self.pixel_mixer(palette_reg,
                                            static_pixel, sprite_pixel, pbit)
 
-            self.pgdisplay.set_at(
-                (x, ly), self.get_shade(palette_reg, final_pixel))
+            self.buffer[GB_LCD_RES[0] * ly + x] = self.get_shade(palette_reg, final_pixel)
         self.dots += 172
 
     def OAM_scan(self, ctx):
         palette_reg, (scx, scy), (ly, _), lcdc = ctx
-        lcdc_2 = BO.get_nth_bit(lcdc, 2)
+        lcdc_2 = lcdc >> 2 & 1
         self.enter_OAM()
-        lcdc_1 = BO.get_nth_bit(lcdc, 1)
+        lcdc_1 = lcdc >> 1 & 1
         if not lcdc_1:
             return
         self.mode = 2

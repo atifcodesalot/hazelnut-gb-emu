@@ -387,7 +387,6 @@ def test():
     # read Bomb jack and get type data
     reader = CartridgeReader("../test_ROMS/Bomb Jack (U).gb")
     c = reader.get_cartridge()
-    print(c)
 
 
 if __name__ == "__main__":

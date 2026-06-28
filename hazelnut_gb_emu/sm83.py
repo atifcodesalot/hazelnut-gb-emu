@@ -84,17 +84,17 @@ class CPU:
     def set_register(self, register_name: str, value):
         # self.register_guard(register_name)
         r = self.__dict__[register_name]
-        r.value = value % (r.max_value + 1)
+        r.value = value & r.max_value
 
     def inc_register(self, register_name: str):
         # self.register_guard(register_name)
         r = self.__dict__[register_name]
-        r.value = (r.value + 1) % (r.max_value + 1)
+        r.value = (r.value + 1) & r.max_value
 
     def dec_register(self, register_name: str):
         # self.register_guard(register_name)
         r = self.__dict__[register_name]
-        r.value = (r.value - 1) % (r.max_value + 1)
+        r.value = (r.value - 1) & r.max_value
 
     def jump_to(self, address):
         self.set_register("PC", address)
@@ -422,8 +422,7 @@ class SM83(CPU):
                     lowreg, self.memory.read_at(self.SP.value - 2))
             else:
                 b = self.memory.read_at(self.SP.value - 2)
-                self.set_flags_fast(Z=bool(BO.get_nth_bit(b, 7)), N=bool(BO.get_nth_bit(
-                    b, 6)), H=bool(BO.get_nth_bit(b, 5)), C=bool(BO.get_nth_bit(b, 4)))
+                self.set_flags_fast(Z=bool(b >> 7 & 1), N=bool(b >> 6 & 1), H=bool(b >> 5 & 1), C=bool(b >> 4 & 1))
         if ins.raw == 0xC1:
             pop("B", "C")
         elif ins.raw == 0xD1:
@@ -727,7 +726,6 @@ class SM83(CPU):
         self.set_register("PC", self.PC.value +
                           ins.byte_count - (1 + prefixed.real))
         ins.operands_raw = operands
-        # print(f"decoding instruction: {hex(ins.raw)}")
         return ins
 
     def instruction_cycle(self):
@@ -763,23 +761,23 @@ class SM83(CPU):
         IF = self.memory.read_at(0xFF0F)
         res = IF & IE
         # handle priorities
-        if BO.get_nth_bit(res, 0):
+        if res & 1:
             self.call(0x40)
             self.disable_IF_at(IF, 0)
             return
-        elif BO.get_nth_bit(res, 1):
+        elif res >> 1 & 1:
             self.call(0x48)
             self.disable_IF_at(IF, 1)
             return
-        elif BO.get_nth_bit(res, 2):
+        elif res >> 2 & 1:
             self.call(0x50)
             self.disable_IF_at(IF, 2)
             return
-        elif BO.get_nth_bit(res, 3):
+        elif res >> 3 & 1:
             self.call(0x58)
             self.disable_IF_at(IF, 3)
             return
-        elif BO.get_nth_bit(res, 4):
+        elif (res >> 4) & 1:
             self.call(0x60)
             self.disable_IF_at(IF, 4)
 
