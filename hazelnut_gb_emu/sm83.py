@@ -422,7 +422,8 @@ class SM83(CPU):
                     lowreg, self.memory.read_at(self.SP.value - 2))
             else:
                 b = self.memory.read_at(self.SP.value - 2)
-                self.set_flags_fast(Z=bool(b >> 7 & 1), N=bool(b >> 6 & 1), H=bool(b >> 5 & 1), C=bool(b >> 4 & 1))
+                self.set_flags_fast(Z=bool(b >> 7 & 1), N=bool(
+                    b >> 6 & 1), H=bool(b >> 5 & 1), C=bool(b >> 4 & 1))
         if ins.raw == 0xC1:
             pop("B", "C")
         elif ins.raw == 0xD1:
@@ -564,12 +565,54 @@ class SM83(CPU):
     # MISC instructions start here
 
     def exe_INS_NOP(self, _):
+        # do nothing
         self.add_cycles(4)
-        
-    # def exe_INS_DAA(self, ):
-    #     pass
-    
-    ### MISC instructions end here
+
+    def exe_INS_DAA(self, _):
+        adjustment = 0
+        old_A = self.get_register('A')
+        H = self.flags['H']
+        N = self.flags['N']
+        C = self.flags['C']
+
+        if N:
+            if H:
+                adjustment += 0x6
+            if C:
+                adjustment += 0x60
+            self.set_register('A', old_A - adjustment)
+            new_Z = old_A - adjustment == 0
+
+        else:
+            if H or old_A & 0xF > 0x9:
+                adjustment += 0x6
+            if C or old_A > 0x99:
+                adjustment += 0x60
+                self.set_flags_fast(C=True)
+            self.set_register('A', old_A + adjustment)
+            new_Z = old_A + adjustment == 0
+
+        self.set_flags_fast(H=False, Z=new_Z)
+
+    def exe_INS_HALT(self, _):
+        # pending = self.memory.io_registers[0xFFFF].value \
+        #     & self.memory.io_registers[0xFF0F].value != 0
+        # # if interrupts are already enabled
+        # if self.flags['IME']:
+        #     while True:
+        #         # sleep until an interrupt happens
+        #         self.handle_interrupts()
+        # # if interrupts are disabled and an interrupt is not pending:
+        # elif not pending:
+        #     while not self.memory.io_registers[0xFFFF].value \
+        #         & self.memory.io_registers[0xFF0F].value:
+        #         continue
+        # elif pending:
+        #     # skip the hardware bug for now
+        #     return
+        pass
+
+    # MISC instructions end here
 
     # interrupt related instructions start here
     ###
@@ -745,7 +788,8 @@ class SM83(CPU):
             return ins
         except NotImplementedError:
             if not ins.mnemonic == "HALT":
-                logger.warning(f"Instruction {ins} not implemented yet, skipping.")
+                logger.warning(
+                    f"Instruction {ins} not implemented yet, skipping.")
             return None
 
     def disable_IF_at(self, IF, n):
@@ -754,7 +798,7 @@ class SM83(CPU):
         self.set_flags_fast(IME=False)
 
     def handle_interrupts(self):
-        # interrupts are not enabled, exit
+        # interrupts are disabled, exit
         if not self.flags['IME']:
             return
         IE = self.memory.read_at(0xFFFF)
@@ -787,10 +831,6 @@ class SM83(CPU):
         cycles = ins.cycles if ins else 0
         self.add_cycles(cycles)
         return ins, cycles
-
-    def halt(self):
-        while True:
-            self.handle_interrupts()
 
     def dump_state_colorama(self, colorama):
         fg = colorama.Fore.GREEN

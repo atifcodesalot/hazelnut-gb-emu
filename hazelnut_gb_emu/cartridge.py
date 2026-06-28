@@ -39,6 +39,7 @@ NEW_LICENSEE_CODES = {
     0x2C: "Malibu Interactive",
     0x2E: "Angel",
     0x2F: "Bullet-Proof Software",
+    0x30: "Viacom",
     0x31: "Irem",
     0x32: "Absolute",
     0x33: "Acclaim Entertainment",
@@ -323,7 +324,12 @@ class CartridgeReader:
     def handle_licensee(self):
         olc = self.old_licensee_code[0]
         nlc = self.new_licensee_code[0]
-        return NEW_LICENSEE_CODES[nlc] if olc == 0x33 else OLD_LICENSEE_CODES[olc]
+        if olc == 0x33:
+            licensee = NEW_LICENSEE_CODES.get(nlc, "Unknown")
+        else:
+            licensee = OLD_LICENSEE_CODES.get(olc, "Unknown")
+        return licensee
+            
 
     def handle_destination(self):
         code = self.destination_code[0]
@@ -383,11 +389,24 @@ class CartridgeReader:
         return cartridge
 
 
-def test():
-    # read Bomb jack and get type data
-    reader = CartridgeReader("../test_ROMS/Bomb Jack (U).gb")
+def identify():
+    import sys
+    # read a cartridge and get type data
+    reader = CartridgeReader(sys.argv[1])
     c = reader.get_cartridge()
+    print(f"""
+    Cartridge type: {c.type_name} (0x{c.type:02X})
+    Title: {c.title}
+    By: {c.manufacturer_code}
+    Licensee: {c.licensee}
+    Version: {c.version}
+    ROM size: {c.rom_size} bytes ({c.rom_banks} banks)
+    RAM size: {c.ram_size} bytes
+    Destination: {c.destination} (0x{c.destination_code:02X})
+    Content length: {len(c.content)} bytes
+    Valid Nintendo logo and header checksum: {c.nintendo_logo and c.header_checksum}
+          """)
 
 
 if __name__ == "__main__":
-    test()
+    identify()

@@ -290,7 +290,7 @@ class GBMemoryController:
             # Boot ROM disable register (FF50)
             if a == 0xFF50:
                 # Any nonzero write disables boot ROM on DMG
-                
+
                 self.disable_boot_rom()
                 return
 
