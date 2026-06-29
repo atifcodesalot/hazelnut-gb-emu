@@ -329,7 +329,6 @@ class CartridgeReader:
         else:
             licensee = OLD_LICENSEE_CODES.get(olc, "Unknown")
         return licensee
-            
 
     def handle_destination(self):
         code = self.destination_code[0]

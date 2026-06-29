@@ -2,6 +2,8 @@
 from dataclasses import dataclass
 from .aux import BO
 from .cartridge import Cartridge
+from math import log
+from . import logger
 
 
 class RAM:
@@ -103,15 +105,16 @@ hole = IOhole(0xFF)
 
 
 class GBMemoryController:
-    def __init__(self, gameboy, ext_ram=False):
+    def __init__(self, gameboy, ext_ram=False, bank_switching=None):
         self.gameboy = gameboy
         self.input_state = gameboy.input_state
 
         self.ext_ram_enabled = ext_ram
+        self.bank_switching = bank_switching
 
         self.boot_enabled = True
         self.boot_rom = GBbootROM()
-        self.rom = ROM(addressable_bits=16)  # 32KB
+        self.rom = ROM(addressable_bits=15)  # 32KB
         self.ram = RAM(addressable_bits=13)  # 8KB
         self.vram = VRAM(addressable_bits=13)  # 8KB
         self.ext_ram = RAM(addressable_bits=13)
@@ -161,6 +164,69 @@ class GBMemoryController:
             0xFFFF: r8bit('IE'),
         }
 
+    def configure_bank_switching(self, cartridge: Cartridge):
+        # ROM only
+        if cartridge.type == 0:
+            self.bank_switching = None
+
+        # MBC1
+        if cartridge.type in [0x1, 0x2, 0x3]:
+            self.init_MBC1(cartridge=cartridge)
+            self.bank_switching_read = self.BS_MBC1_read
+            self.bank_switching_write = self.BS_MBC1_write
+
+    # init registers that are on the cartridge for bank switching
+    def init_MBC1(self, cartridge: Cartridge):
+        self.bank_switching = "MBC1"
+        # adjust rom and external ram size
+        self.rom = ROM(addressable_bits=int(log(cartridge.rom_size, 2)))
+        # self.ext_ram = RAM(addressable_bits=int(log(cartridge.ram_size, 2)))
+        self.cart_regs = {
+            0x2000: Register("RAM EN", 0, 0xFF, 8),
+            0x4000: Register("ROM BANK NUM", 1, 0x1F, 5),
+            0x6000: Register("RAM BANK/UPPER", 0, 0x03, 2),
+            0x8000: Register("BANK MODE", 0, 0x01, 1)
+        }
+        self.rom_banks = cartridge.rom_banks
+
+    def BS_MBC1_read(self, address):
+        mode = self.cart_regs[0x8000].value  # mode register
+        bank_i = (address >> 14) & 1
+
+        if mode == 0:
+            if bank_i == 0:
+                return self.rom.get_byte_at(address)
+            elif bank_i == 1:
+                # switched banking starts here
+                addr = address & 0x3fff  # get the lower 14 bits
+                bank_num = self.cart_regs[0x4000].value
+                r2 = self.cart_regs[0x6000].value
+                switched_addr = 0x4000 * bank_num + addr
+                return self.rom.get_byte_at(switched_addr)
+
+        else:
+            # MBC1 mode 1 starts here
+            logger.debug("MBC1 mode 1 read at address %s" % hex(address))
+            addr = address & 0x3fff  # get the lower 14 bits
+            r2 = self.cart_regs[0x6000].value
+            switched_addr = (r2 << 20) | addr
+            return self.rom.get_byte_at(switched_addr)
+            
+
+    def BS_MBC1_write(self, address, value):
+        if address < 0x2000:
+            self.ext_ram_enabled = (value & 0x0F) == 0x0A
+            return
+        if address < 0x4000:
+            self.cart_regs[0x4000].value = value & 0x1F
+            return
+        if address < 0x6000:
+            self.cart_regs[0x6000].value = value & 0x3
+            return
+        if address < 0x8000:
+            self.cart_regs[0x8000].value = value & 0x1
+            
+
     def hex_dump(self, start, end):
         for i in range(start, end + 1):
             print(f"{hex(i)}: {hex(self.read_at(i))}")
@@ -196,7 +262,13 @@ class GBMemoryController:
             if a <= 0x00FF and self.boot_enabled:
                 # or boot_rom[a] if bytearray
                 return self.boot_rom.get_byte_at(a)
-            return self.rom.get_byte_at(a)           # or rom[a]
+            if self.bank_switching is not None:
+                # logger.debug(f"Bank switching read at address {hex(a)}")
+                return self.bank_switching_read(a)
+            else:
+                # simply get the byte from ROM
+                # logger.debug(f"Reading from ROM at address {hex(a)}")
+                return self.rom.get_byte_at(a)
 
         # --- VRAM ---
         if a < 0xA000:
@@ -249,12 +321,20 @@ class GBMemoryController:
         # --- ROM / Boot ROM area ---
         # Normally ROM isn't writable (except MBC registers live in 0000-7FFF).
         if a < 0x8000:
-            return
-            # raise IndexError("ROM is not writeable (MBC regs not implemented)")
+            if self.bank_switching is None:
+                # can't write to ROM if no bank switching is implemented
+                return
+            else:
+                # write to MBC registers
+                self.bank_switching_write(a, v)
+                return 
 
         # --- VRAM ---
         if a < 0xA000:
-            self.vram.write_to(a - 0x8000, v)
+            try:
+                self.vram.write_to(a - 0x8000, v)
+            except IndexError:
+                exit(str(a))
             return
 
         # --- External RAM ---
