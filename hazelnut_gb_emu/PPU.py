@@ -126,29 +126,8 @@ class GbPPU:
         lcd_control = self.mem_ctl.io_registers[0xFF40].value
         return palette_reg, (scx, scy), (ly, lyc), lcd_control
 
-    def scanline_BG_pixel(self, lcdc, ly, scy, scx, X):
-        global_x = (X + scx) % (0xff + 1)
-        global_y = (ly + scy) % (0xff + 1)
-        pixel_i = global_x % 8
-        tile_row = self.get_tile_row_BG(lcdc, global_x, global_y)
-        pixel = BO.get_pixel_2bpp(tile_row[0], tile_row[1], pixel_i)
-        return pixel
-
-    def scanline_WINDOW_pixel(self, lcdc, ly, X):
-        lcdc_5 = lcdc >> 5 & 1
-        if not lcdc_5:
-            # return None if window is disabled
-            return
-        Wy, Wx = self.mem_ctl.io_registers[0xFF4A].value, self.mem_ctl.io_registers[0xFF4B].value
-        if X < Wx - 7 or ly < Wy:
-            return None
-        # no scroll...
-        window_x = X - Wx + 7
-        window_y = ly - Wy
-        #
-        pixel_i = window_x % 8
-        tile_row = self.get_tile_row_WINDOW(lcdc, window_x, window_y)
-        pixel = BO.get_pixel_2bpp(tile_row[0], tile_row[1], pixel_i)
+    def get_tile_pixel(self, row, offset):
+        pixel = BO.get_pixel_2bpp(row[0], row[1], offset)
         return pixel
 
     def enter_VBLANK(self):
@@ -221,22 +200,41 @@ class GbPPU:
         palette_reg, (scx, scy), (ly, _), lcdc = ctx
         wy, wx = self.mem_ctl.io_registers[0xFF4A].value, self.mem_ctl.io_registers[0xFF4B].value
         for x in range(GB_LCD_RES[0]):
-            # scanline background
-            BG_pixel = self.scanline_BG_pixel(lcdc, ly, scy, scx, X=x)
-            # window pixel: does not implement scroll
-            W_pixel = self.scanline_WINDOW_pixel(lcdc, ly, X=x)
+            # compute local background and window pixel coordinates
+            lwx = x - wx + 7
+            lwy = ly-wy
+            bgx = (scx + x) & 0xff
+            bgy = (ly+scy) & 0xff
+            bg_offset = bgx % 8
+            w_offset = lwx % 8
+            #
+            
+            # if new bg row needs to be fetched
+            if x == 0 or bg_offset == 0:
+                    BG_row = self.get_tile_row_BG(
+                        lcdc, bgx, bgy)
 
-            prefer_window = W_pixel is not None
+
+            # get background pixel from 
+            BG_pixel = self.get_tile_pixel(BG_row, bg_offset)
+            
+            window_active = ((lcdc >> 5 & 1) and lwy >= 0 and lwx >= 0)
+
+            if window_active:
+                # if new window row needs to be fetched
+                if w_offset == 0:
+                        W_row = self.get_tile_row_WINDOW(
+                            lcdc, lwx, lwy)
+                
+                W_pixel = self.get_tile_pixel(W_row, w_offset)
+
             # either BG or Window pixel
-            static_pixel = BG_pixel if not prefer_window else W_pixel
-
+            static_pixel = BG_pixel if not window_active else W_pixel
             sprite_pixel, pbit = self.get_winning_pixel_SPRITE(lcdc, x, ly)
-
-            # placeholder
             final_pixel = self.pixel_mixer(palette_reg,
                                            static_pixel, sprite_pixel, pbit)
-
-            self.buffer[GB_LCD_RES[0] * ly + x] = self.get_shade(palette_reg, final_pixel)
+            self.buffer[GB_LCD_RES[0] * ly +
+                        x] = self.get_shade(palette_reg, final_pixel)
         self.dots += 172
 
     def OAM_scan(self, ctx):
