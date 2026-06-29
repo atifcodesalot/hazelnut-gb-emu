@@ -5,7 +5,6 @@ from . import logger
 from .memory import *
 from .aux import BO
 
-# from loader import *
 
 
 class PairRegister:
@@ -116,7 +115,7 @@ class CPU:
 
 
 class SM83(CPU):
-    def __init__(self, ROMloader: GBRomLoader, memory, peripherals: list):
+    def __init__(self, loader: GBRomLoader, memory, peripherals: list):
         def r8bit(name): return Register(
             name=name, value=0, max_value=0xFF, bit_length=8)
         def r16bit(name): return Register(
@@ -144,7 +143,7 @@ class SM83(CPU):
                          general_registers, flags,
                          PC=r16bit('PC'),
                          SP=r16bit('SP'))
-        self.ROMloader = ROMloader
+        self.loader = loader
 
         self.pending_interrupt_enable = False
         self.enable_interrupts_now = False
@@ -759,7 +758,7 @@ class SM83(CPU):
             raise AttributeError(f"{name} is not a valid attribute of CPU.")
 
     def decode(self, opcode, prefixed: bool):
-        ins = self.ROMloader.identify_instruction(
+        ins = self.loader.identify_instruction(
             opcode=opcode, prefixed=prefixed)
         # fetch instruction incremented PC by 1, so we need to -1 to get the correct operands
         operands = self.get_operands(

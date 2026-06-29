@@ -151,6 +151,12 @@ class GbPPU:
         lyc = self.mem_ctl.io_registers[0xFF45].value
         STAT = self.mem_ctl.io_registers[0xFF41]
         if ly == lyc:
+            if BO.get_nth_bit(STAT.value, 6):
+                # request STAT int
+                IF = self.mem_ctl.io_registers[0xFF0F].value
+                new_IF = BO.set_nth_bit(IF, 1)
+                self.mem_ctl.io_registers[0xFF0F].value = new_IF
+                          
             new_STAT = BO.set_nth_bit(STAT.value, 2)
             STAT.value = new_STAT
         else:
@@ -202,30 +208,29 @@ class GbPPU:
         for x in range(GB_LCD_RES[0]):
             # compute local background and window pixel coordinates
             lwx = x - wx + 7
-            lwy = ly-wy
+            lwy = ly - wy
             bgx = (scx + x) & 0xff
-            bgy = (ly+scy) & 0xff
+            bgy = (ly + scy) & 0xff
             bg_offset = bgx % 8
             w_offset = lwx % 8
             #
-            
+
             # if new bg row needs to be fetched
             if x == 0 or bg_offset == 0:
-                    BG_row = self.get_tile_row_BG(
-                        lcdc, bgx, bgy)
+                BG_row = self.get_tile_row_BG(
+                    lcdc, bgx, bgy)
 
-
-            # get background pixel from 
+            # get background pixel from
             BG_pixel = self.get_tile_pixel(BG_row, bg_offset)
-            
+
             window_active = ((lcdc >> 5 & 1) and lwy >= 0 and lwx >= 0)
 
             if window_active:
                 # if new window row needs to be fetched
-                if w_offset == 0:
-                        W_row = self.get_tile_row_WINDOW(
-                            lcdc, lwx, lwy)
-                
+                if w_offset == 0 or 7 >= lwx:
+                    W_row = self.get_tile_row_WINDOW(
+                        lcdc, lwx, lwy)
+
                 W_pixel = self.get_tile_pixel(W_row, w_offset)
 
             # either BG or Window pixel
