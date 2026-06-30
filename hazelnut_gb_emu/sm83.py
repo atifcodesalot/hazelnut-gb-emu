@@ -52,15 +52,15 @@ class CPU:
 
     def fetch_ins(self):
         prefixed = False
-        opcode = self.memory[self.PC.value]
+        opcode = self.memory.read_at(self.PC.value)
 
         if opcode == 0xCB:
             # the instruction is prefixed
-            self.inc_register("PC")
-            opcode = self.memory[self.PC.value]
+            self.PC.value = (self.PC.value + 1) & 0xffff
+            opcode = self.memory.read_at(self.PC.value)
             prefixed = True
 
-        self.inc_register("PC")
+        self.PC.value = (self.PC.value + 1) & 0xffff
         return opcode, prefixed
 
     def dump_state(self):
@@ -166,11 +166,11 @@ class SM83(CPU):
 
     def get_operands(self, byte_count, ins_address):
         if byte_count == 0:
-            return []
+            return None
         if byte_count == 1:
             return [self.memory.read_at(ins_address + 1)]
         if byte_count == 2:
-            return [self.memory.read_at(ins_address + 1), 
+            return [self.memory.read_at(ins_address + 1),
                     self.memory.read_at(ins_address + 2)]
 
     # Load, copy related instructions start here
@@ -600,7 +600,7 @@ class SM83(CPU):
         self.set_flags_fast(H=False, Z=new_Z)
 
     def exe_INS_HALT(self, ins):
-        # logger.debug("HALT instruction executed.")
+        logger.debug("HALT instruction executed.")
         self.turing_said_HALT = True
 
     # MISC instructions end here
@@ -751,37 +751,31 @@ class SM83(CPU):
 
     def decode(self, opcode, prefixed: bool):
         ins = self.loader.identify_instruction(
-            opcode=opcode, prefixed=prefixed)
+            opcode, prefixed)
+        prefixl = 1 if prefixed else 0
         # fetch instruction incremented PC by 1, so we need to -1 to get the correct operands
         operands = self.get_operands(
             # if the instruction is prefixed, fetch ins already incremented the PC
-            ins.byte_count - (1 + prefixed.real), self.PC.value - 1)
+            ins.byte_count - 1 - prefixl, self.PC.value - 1)
         # skip the operands
-        self.set_register("PC", self.PC.value +
-                          ins.byte_count - (1 + prefixed.real))
+        self.PC.value = (self.PC.value + ins.byte_count - 1 - prefixl) & 0xffff
         ins.operands_raw = operands
         return ins
 
     def instruction_cycle(self):
-        try:
-            opcode, prefixed = self.fetch_ins()
-            ins = self.decode(opcode, prefixed=prefixed)
-            func = getattr(self, f"exe_INS_{ins.mnemonic}")
-            if self.pending_interrupt_enable and not self.flags['IME']:
-                if not self.enable_interrupts_now:
-                    self.enable_interrupts_now = True
-                else:
-                    self.set_flags_fast(IME=True)
-                    self.enable_interrupts_now = False
-                    self.pending_interrupt_enable = False
+        opcode, prefixed = self.fetch_ins()
+        ins = self.decode(opcode, prefixed=prefixed)
+        func = getattr(self, f"exe_INS_{ins.mnemonic}")
+        if self.pending_interrupt_enable and not self.flags['IME']:
+            if not self.enable_interrupts_now:
+                self.enable_interrupts_now = True
+            else:
+                self.set_flags_fast(IME=True)
+                self.enable_interrupts_now = False
+                self.pending_interrupt_enable = False
 
-            func(ins)
-            return ins
-        except NotImplementedError:
-            if not ins.mnemonic == "HALT":
-                logger.warning(
-                    f"Instruction {ins} not implemented yet, skipping.")
-            return None
+        func(ins)
+        return ins
 
     def disable_IF_at(self, IF, n):
         new_IF = BO.res_nth_bit(IF, n)
