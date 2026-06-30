@@ -1,21 +1,20 @@
 
 
 class ByteOperator:
-    # dont call this in hot paths
+    # WARNING dont call this in hot paths
     @classmethod
     def get_nth_bit(cls, b, n):
         return (b >> n) & 1
 
-    @classmethod
-    def byte_twos_complement(cls, b):
-        return (-128) * (cls.get_nth_bit(b, 7)) + (b & 127)
+    def byte_twos_complement(b):
+        return b - 256 if b & 0x80 else b
 
     @staticmethod
     def nibblesfrom_bytes(byte):
         n1 = byte >> 4
         n2 = byte & 15
         return n1, n2
-
+    
     @staticmethod
     def concat_bytes(high, low):
         return (high << 8) | low

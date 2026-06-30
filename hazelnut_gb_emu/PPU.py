@@ -8,14 +8,15 @@ import time
 
 GB_LCD_RES = (160, 144)
 
-GB_LCD_PALETTE = ("#EEB3D0", "#eb51e3",  "#971F69", "#220014")
+GB_LCD_PALETTE = ("#e0f8d0", "#88c070",  "#346856", "#081820")
+GB_LCD_OFF = "#1D0118"
 GB_LCD_PALETTE_rgb = [s2rgb(c) for c in GB_LCD_PALETTE]
 
 
 class GbPPU:
-    def __init__(self, mem_ctl: GBMemoryController):
-        self.mem_ctl = mem_ctl
-        self.vram = self.mem_ctl.vram
+    def __init__(self, memctl: GBMemoryController):
+        self.memctl = memctl
+        self.vram = self.memctl.vram
         self.dots = 0
 
         # sprites that are obtained from previous OAM scan
@@ -120,10 +121,12 @@ class GbPPU:
 
     def get_context(self):
         # palette register
-        palette_reg = self.mem_ctl.io_registers[0xff47].value
-        scx, scy = self.mem_ctl.io_registers[0xFF43].value, self.mem_ctl.io_registers[0xFF42].value
-        ly, lyc = self.mem_ctl.io_registers[0xFF44].value, self.mem_ctl.io_registers[0xFF45].value
-        lcd_control = self.mem_ctl.io_registers[0xFF40].value
+        palette_reg = self.memctl.io_registers[0xff47].value
+        scx = self.memctl.io_registers[0xFF43].value
+        scy = self.memctl.io_registers[0xFF42].value
+        ly = self.memctl.io_registers[0xFF44].value
+        lyc = self.memctl.io_registers[0xFF45].value
+        lcd_control = self.memctl.io_registers[0xFF40].value
         return palette_reg, (scx, scy), (ly, lyc), lcd_control
 
     def get_tile_pixel(self, row, offset):
@@ -133,29 +136,29 @@ class GbPPU:
     def enter_VBLANK(self):
         self.mode = 1
         # edit the STAT register's 2 bits to be mode 1
-        STAT = self.mem_ctl.io_registers[0xFF41]
+        STAT = self.memctl.io_registers[0xFF41]
         new_STAT = BO.set_nth_bit(STAT.value, 0)
         new_STAT = BO.res_nth_bit(new_STAT, 1)
         STAT.value = new_STAT
         # request VBlank interrupt
-        if_ = self.mem_ctl.read_at(0xFF0F)
+        if_ = self.memctl.read_at(0xFF0F)
         if_ |= 1
-        self.mem_ctl.write_to(0xFF0F, if_)
+        self.memctl.write_to(0xFF0F, if_)
         # # #
 
     def is_VBLANK_scan(self, ly):
         return 144 <= ly <= 153
 
     def handle_LY_compare(self):
-        ly = self.mem_ctl.io_registers[0xFF44].value
-        lyc = self.mem_ctl.io_registers[0xFF45].value
-        STAT = self.mem_ctl.io_registers[0xFF41]
+        ly = self.memctl.io_registers[0xFF44].value
+        lyc = self.memctl.io_registers[0xFF45].value
+        STAT = self.memctl.io_registers[0xFF41]
         if ly == lyc:
             if BO.get_nth_bit(STAT.value, 6):
                 # request STAT int
-                IF = self.mem_ctl.io_registers[0xFF0F].value
+                IF = self.memctl.io_registers[0xFF0F].value
                 new_IF = BO.set_nth_bit(IF, 1)
-                self.mem_ctl.io_registers[0xFF0F].value = new_IF
+                self.memctl.io_registers[0xFF0F].value = new_IF
                           
             new_STAT = BO.set_nth_bit(STAT.value, 2)
             STAT.value = new_STAT
@@ -167,7 +170,7 @@ class GbPPU:
     def enter_OAM(self):
         self.mode = 2
         # edit the STAT register's 2 bits to be mode 2
-        STAT = self.mem_ctl.io_registers[0xFF41]
+        STAT = self.memctl.io_registers[0xFF41]
         new_STAT = BO.res_nth_bit(STAT.value, 0)
         new_STAT = BO.set_nth_bit(new_STAT, 1)
         STAT.value = new_STAT
@@ -178,7 +181,7 @@ class GbPPU:
     def enter_HBLANK(self):
         self.mode = 0
         # edit the STAT register's 2 bits to be mode 0
-        STAT = self.mem_ctl.io_registers[0xFF41]
+        STAT = self.memctl.io_registers[0xFF41]
         new_STAT = BO.res_nth_bit(STAT.value, 0)
         new_STAT = BO.res_nth_bit(new_STAT, 1)
         STAT.value = new_STAT
@@ -186,7 +189,7 @@ class GbPPU:
     def enter_drawing_mode(self):
         self.mode = 3
         # edit the STAT register's 2 bits to be mode 3
-        STAT = self.mem_ctl.io_registers[0xFF41]
+        STAT = self.memctl.io_registers[0xFF41]
         new_STAT = BO.set_nth_bit(STAT.value, 0)
         new_STAT = BO.set_nth_bit(new_STAT, 1)
         STAT.value = new_STAT
@@ -204,7 +207,7 @@ class GbPPU:
     def drawing_mode(self, ctx):
         self.enter_drawing_mode()
         palette_reg, (scx, scy), (ly, _), lcdc = ctx
-        wy, wx = self.mem_ctl.io_registers[0xFF4A].value, self.mem_ctl.io_registers[0xFF4B].value
+        wy, wx = self.memctl.io_registers[0xFF4A].value, self.memctl.io_registers[0xFF4B].value
         for x in range(GB_LCD_RES[0]):
             # compute local background and window pixel coordinates
             lwx = x - wx + 7
@@ -251,7 +254,7 @@ class GbPPU:
             return
         self.mode = 2
         for i in range(0, 160, 4):
-            sr = self.mem_ctl.OAM[i: i + 4]
+            sr = self.memctl.OAM[i: i + 4]
             sprite_height = 16 if lcdc_2 else 8
             # this sprite's lines intersect with current scanline
             if sr[0]-16 < ly < sr[0] - 16 + sprite_height:
@@ -270,12 +273,13 @@ class GbPPU:
         self.inc_ly()
 
     def inc_ly(self):
-        ly = self.mem_ctl.io_registers[0xFF44]
+        ly = self.memctl.io_registers[0xFF44]
         ly.value = (ly.value + 1) % 154
 
     def disable(self):
+        self.pgdisplay.fill(GB_LCD_OFF)
         # reset ly
-        self.mem_ctl.io_registers[0xFF44].value = 0
+        self.memctl.io_registers[0xFF44].value = 0
         # set mode to 0
         self.enter_HBLANK()
         self.dots = 0

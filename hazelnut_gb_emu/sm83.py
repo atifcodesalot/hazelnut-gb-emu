@@ -6,7 +6,6 @@ from .memory import *
 from .aux import BO
 
 
-
 class PairRegister:
     def __init__(self, name, hi_reg, low_reg):
         self.name = name
@@ -40,6 +39,7 @@ class CPU:
         self.PC = PC
         self.SP = SP
         self.machine_cycles = 0
+        self.turing_said_HALT = False
 
     def add_cycles(self, cycles):
         self.machine_cycles += cycles
@@ -165,7 +165,13 @@ class SM83(CPU):
             (self.flags['H'] << 5) | (self.flags['C'] << 4)
 
     def get_operands(self, byte_count, ins_address):
-        return self.memory.get_block_at(ins_address+1, byte_count)
+        if byte_count == 0:
+            return []
+        if byte_count == 1:
+            return [self.memory.read_at(ins_address + 1)]
+        if byte_count == 2:
+            return [self.memory.read_at(ins_address + 1), 
+                    self.memory.read_at(ins_address + 2)]
 
     # Load, copy related instructions start here
     ###
@@ -593,23 +599,9 @@ class SM83(CPU):
 
         self.set_flags_fast(H=False, Z=new_Z)
 
-    def exe_INS_HALT(self, _):
-        # pending = self.memory.io_registers[0xFFFF].value \
-        #     & self.memory.io_registers[0xFF0F].value != 0
-        # # if interrupts are already enabled
-        # if self.flags['IME']:
-        #     while True:
-        #         # sleep until an interrupt happens
-        #         self.handle_interrupts()
-        # # if interrupts are disabled and an interrupt is not pending:
-        # elif not pending:
-        #     while not self.memory.io_registers[0xFFFF].value \
-        #         & self.memory.io_registers[0xFF0F].value:
-        #         continue
-        # elif pending:
-        #     # skip the hardware bug for now
-        #     return
-        pass
+    def exe_INS_HALT(self, ins):
+        # logger.debug("HALT instruction executed.")
+        self.turing_said_HALT = True
 
     # MISC instructions end here
 
