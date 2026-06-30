@@ -181,7 +181,8 @@ class GBMemoryController:
         # adjust rom and external ram size
         self.rom = ROM(addressable_bits=int(log(cartridge.rom_size, 2)))
         if cartridge.ram_size != 0:
-            self.ext_ram = RAM(addressable_bits=int(log(cartridge.ram_size, 2)))
+            self.ext_ram = RAM(addressable_bits=int(
+                log(cartridge.ram_size, 2)))
         self.cart_regs = {
             0x2000: Register("RAM EN", 0, 0xFF, 8),
             0x4000: Register("ROM BANK NUM", 1, 0x1F, 5),
@@ -191,23 +192,26 @@ class GBMemoryController:
         self.rom_banks = cartridge.rom_banks
 
     def BS_MBC1_read(self, address, rom=True):
+        mode = self.cart_regs[0x8000].value  # get mode
         if rom:
-            mode = self.cart_regs[0x8000].value  # get mode
+            offset = address & 0x3fff  # get the lower 14 bits
             bank_i = (address >> 14) & 1
+            r2 = self.cart_regs[0x6000].value
+            bank_num = (r2 << 5) | self.cart_regs[0x4000].value
+            switched_addr_b1 = 0x4000 * bank_num + offset
 
             if mode == 0:
                 if bank_i == 0:
                     return self.rom.get_byte_at(address)
-                elif bank_i == 1:
-                    # switched banking starts here
-                    addr = address & 0x3fff  # get the lower 14 bits
-                    bank_num = self.cart_regs[0x4000].value
-                    r2 = self.cart_regs[0x6000].value
-                    switched_addr = 0x4000 * bank_num + addr
-                    return self.rom.get_byte_at(switched_addr)
+                # bank 1
+                return self.rom.get_byte_at(switched_addr_b1)
 
-           
             # MBC1 mode 1 starts here
+            if bank_i == 0:
+                switched_addr_b0 = ((r2 << 5) * 0x4000) + offset
+                return self.rom.get_byte_at(switched_addr_b0)
+
+            # bank 1
             logger.debug("MBC1 mode 1 read at address %s" % hex(address))
             addr = address & 0x3fff  # get the lower 14 bits
             r2 = self.cart_regs[0x6000].value
@@ -215,10 +219,12 @@ class GBMemoryController:
             return self.rom.get_byte_at(switched_addr)
 
         # ram banked read starts here
-        bank_num = self.cart_regs[0x6000].value
-        addr = address & 0x1fff
-        switched_addr = 0x4000 * bank_num + addr
-        return self.ext_ram.get_byte_at(switched_addr)
+        offset = address & 0x1fff
+        if mode == 1:
+            bank_num = self.cart_regs[0x6000].value
+            switched_addr = 0x2000 * bank_num + offset
+            return self.ext_ram.get_byte_at(switched_addr)
+        return self.ext_ram.get_byte_at(offset)
 
     def BS_MBC1_write(self, address, value):
         if address < 0x2000:
@@ -237,12 +243,14 @@ class GBMemoryController:
         if address < 0xC000:
             # ram banked write starts here
             mode = self.cart_regs[0x8000].value
+            offset = address & 0x1fff
             if mode == 0:
-                self.ext_ram.write_to(address, value)
+                logger.debug(
+                    "MBC1 ext ram mode 0 write at address %s" % hex(address))
+                self.ext_ram.write_to(offset, value)
             else:
                 bank_num = self.cart_regs[0x6000].value
-                addr = address & 0x1fff
-                switched_addr = 0x4000 * bank_num + addr
+                switched_addr = 0x2000 * bank_num + offset
                 self.ext_ram.write_to(switched_addr, value)
 
     def hex_dump(self, start, end):
@@ -354,7 +362,7 @@ class GBMemoryController:
         # --- External RAM ---
         if a < 0xC000:
             if self.ext_ram_enabled:
-                self.ext_ram.write_to(a - 0xA000, v)
+                self.bank_switching_write(a, v)
             return
 
         # --- WRAM (C000-DFFF) ---

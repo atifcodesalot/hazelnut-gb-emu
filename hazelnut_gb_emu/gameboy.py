@@ -10,6 +10,9 @@ from .cartridge import Cartridge, CartridgeReader
 from .aux import BO
 
 
+pyclock = pygame.time.Clock()
+
+
 class Gameboy:
     keys_inputs = {
         pygame.K_RIGHT: 0,
@@ -138,6 +141,7 @@ class Gameboy:
 
         if ly == GB_LCD_RES[1] - 1:  # if just finished the last visible scanline
             pygame.display.flip()  # update real display at the end of scanline
+            pyclock.tick(60) # ensure framerate is
             self.PPU.enter_VBLANK()
 
         self.PPU.inc_ly()
