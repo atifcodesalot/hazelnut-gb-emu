@@ -197,8 +197,8 @@ class GBMemoryController:
             offset = address & 0x3fff  # get the lower 14 bits
             bank_i = (address >> 14) & 1
             r2 = self.cart_regs[0x6000].value
-            bank_num = (r2 << 5) | self.cart_regs[0x4000].value
-            switched_addr_b1 = 0x4000 * bank_num + offset
+            bank_num = ((r2 << 5) | self.cart_regs[0x4000].value) % self.rom_banks
+            switched_addr_b1 = bank_num * 0x4000 + offset
 
             if mode == 0:
                 if bank_i == 0:
@@ -208,15 +208,13 @@ class GBMemoryController:
 
             # MBC1 mode 1 starts here
             if bank_i == 0:
-                switched_addr_b0 = ((r2 << 5) * 0x4000) + offset
+                switched_addr_b0 = ((r2 << 5) % self.rom_banks * 0x4000) + offset
                 return self.rom.get_byte_at(switched_addr_b0)
 
             # bank 1
             logger.debug("MBC1 mode 1 read at address %s" % hex(address))
-            addr = address & 0x3fff  # get the lower 14 bits
-            r2 = self.cart_regs[0x6000].value
-            switched_addr = (r2 << 20) | addr
-            return self.rom.get_byte_at(switched_addr)
+            switched_addr_b1 = bank_num * 0x4000 + offset
+            return self.rom.get_byte_at(switched_addr_b1)
 
         # ram banked read starts here
         offset = address & 0x1fff
@@ -231,7 +229,11 @@ class GBMemoryController:
             self.ext_ram_enabled = (value & 0x0F) == 0x0A
             return
         if address < 0x4000:
-            self.cart_regs[0x4000].value = value & 0x1F
+            # cant be 0
+            low_5 = value & 0x1F
+            if low_5 == 0:
+                low_5 = 1
+            self.cart_regs[0x4000].value = low_5
             return
         if address < 0x6000:
             self.cart_regs[0x6000].value = value & 0x3
