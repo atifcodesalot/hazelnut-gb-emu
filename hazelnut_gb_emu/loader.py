@@ -48,7 +48,7 @@ class GameboyInstruction:
     def __repr__(self):
         return f"<GB_INS: {'prefixed ' if self.prefixed else ''}\
 {self.mnemonic}, opcode: {hex(self.raw)} with operands\
-{[hex(op) for op in self.operands_raw]} and cycles {self.cycles}>"
+{None if not self.operands_raw else [hex(op) for op in self.operands_raw]} and cycles {self.cycles}>"
 
     def __str__(self):
         return self.__repr__()

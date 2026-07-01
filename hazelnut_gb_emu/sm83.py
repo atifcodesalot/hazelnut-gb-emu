@@ -602,6 +602,9 @@ class SM83(CPU):
     def exe_INS_HALT(self, ins):
         logger.debug("HALT instruction executed.")
         self.turing_said_HALT = True
+    
+    def exe_INS_STOP(self, ins):
+        pass
 
     # MISC instructions end here
 
@@ -766,6 +769,7 @@ class SM83(CPU):
         opcode, prefixed = self.fetch_ins()
         ins = self.decode(opcode, prefixed=prefixed)
         func = getattr(self, f"exe_INS_{ins.mnemonic}")
+        func(ins)
         if self.pending_interrupt_enable and not self.flags['IME']:
             if not self.enable_interrupts_now:
                 self.enable_interrupts_now = True
@@ -774,7 +778,6 @@ class SM83(CPU):
                 self.enable_interrupts_now = False
                 self.pending_interrupt_enable = False
 
-        func(ins)
         return ins
 
     def disable_IF_at(self, IF, n):

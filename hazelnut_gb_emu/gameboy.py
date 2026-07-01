@@ -36,6 +36,8 @@ class Gameboy:
         self.cycles = 0
         self.TIMA_hertz = [256*4, 16, 64, 256]
         self.DMA = False
+        
+        self.debug = False
 
     def turn_on_LCD(self):
         self.memctl[0xFF40] = 0x91
@@ -71,9 +73,15 @@ class Gameboy:
             return
         while cycles_passed <= clock_cycles:
             ins, cycles = self.SM83_processor.tick_one_ins()
+            if self.debug:
+                self.debug_state(ins, colorama=colorama)
+                if self.memctl.io_registers[0xFF0F].value != 0:
+                    print(self.memctl.io_registers[0xFF0F])
+                print(self.memctl.io_registers[0xFF05].value)
+                    
             # TIMA increment disabled 
             TAC = self.memctl.io_registers[0xFF07].value  
-            if not (TAC >> 2) & 1:
+            if (TAC >> 2) & 1:
                 for _ in range(cycles):
                     self.cycles += 1
                     self.handle_TIMA()
@@ -89,7 +97,7 @@ class Gameboy:
     def handle_TIMA(self):
         TAC = self.memctl.io_registers[0xFF07].value
         mc = self.TIMA_hertz[TAC & 0b11]
-        if not (self.cycles // 4) % mc:
+        if not (self.cycles) % mc:
             TIMA = self.memctl.io_registers[0xFF05].value
             if BO.add_full_carry(TIMA, 1):
                 TMA = self.memctl.io_registers[0xFF06].value
@@ -144,8 +152,8 @@ class Gameboy:
             pyclock.tick(60) # ensure framerate is
             self.PPU.enter_VBLANK()
 
-        self.PPU.inc_ly()
         self.PPU.handle_LY_compare()
+        self.PPU.inc_ly()
         self.handle_inputs()
 
     def handle_inputs(self):
@@ -154,6 +162,8 @@ class Gameboy:
                 exit()
             elif event.type in [pygame.KEYDOWN, pygame.KEYUP]:
                 is_pressed = event.type == pygame.KEYDOWN
+                if event.key == pygame.K_q:
+                    self.debug = True
                 if event.key not in self.keys_inputs:
                     continue
                 if is_pressed:
