@@ -36,7 +36,7 @@ class Gameboy:
         self.cycles = 0
         self.TIMA_hertz = [256*4, 16, 64, 256]
         self.DMA = False
-        
+
         self.debug = False
 
     def turn_on_LCD(self):
@@ -46,49 +46,41 @@ class Gameboy:
         gw, gh = GB_LCD_RES
         self.screen = pygame.display.set_mode(size=(gw + 20, gh + 200))
 
-    def handle_cpu_halt(self):
-        IME = self.SM83_processor.flags['IME']
-        if IME:
-            if not self.interrupt_pending():
-                return
-            # continue
-            self.SM83_processor.turing_said_HALT = False
-        else:
-            if self.interrupt_pending():
-                # skip the hardware bug for now
-                self.SM83_processor.turing_said_HALT = False
+    def awake(self):
+        self.SM83_processor.HALT = False
 
-    def CPU_burst(self, clock_cycles):
-        cycles_passed = 0
-        if self.SM83_processor.turing_said_HALT:
-            self.handle_cpu_halt()
-            for _ in range(clock_cycles):
+    def handle_cpu_halt(self):
+        if self.interrupt_pending():
+            self.awake()
+            return True
+        
+    def cpu_tick_empty(self, cycles):
+        TAC = self.memctl.io_registers[0xFF07].value
+        if (TAC >> 2) & 1:
+            for _ in range(cycles):
                 self.cycles += 1
                 self.handle_TIMA()
-            # in case clock_cycles is not a multiple of 256, 
-            # we need to increment DIV for each 256 cycles passed
-            for _ in range(clock_cycles // 256):
-                self.inc_DIV()
-            #
-            return
-        while cycles_passed <= clock_cycles:
+        self.inc_DIV()
+        self.cycles += cycles
+
+    def CPU_burst(self, clock_cycles):
+        if self.SM83_processor.HALT:
+            if not self.handle_cpu_halt():
+                self.cpu_tick_empty(clock_cycles)
+                return
+        cycles_passed = 0
+        while cycles_passed < clock_cycles:
             ins, cycles = self.SM83_processor.tick_one_ins()
-            if self.debug:
-                self.debug_state(ins, colorama=colorama)
-                if self.memctl.io_registers[0xFF0F].value != 0:
-                    print(self.memctl.io_registers[0xFF0F])
-                print(self.memctl.io_registers[0xFF05].value)
-                    
-            # TIMA increment disabled 
-            TAC = self.memctl.io_registers[0xFF07].value  
-            if (TAC >> 2) & 1:
-                for _ in range(cycles):
-                    self.cycles += 1
-                    self.handle_TIMA()
-            self.inc_DIV()
+            # if self.debug:
+            #     self.debug_state(ins, colorama=colorama)
+            #     if self.memctl.io_registers[0xFF0F].value != 0:
+            #         print(self.memctl.io_registers[0xFF0F])
+            #     print(self.memctl.io_registers[0xFF05].value)
+            if self.SM83_processor.HALT:
+                self.cpu_tick_empty(clock_cycles - cycles_passed)
+                break
 
             cycles_passed += cycles
-        
 
     def inc_DIV(self):
         if not self.cycles % 256:
@@ -120,6 +112,15 @@ class Gameboy:
             m.OAM[i] = m.read_at(source + i)
         # logger.debug("ending DMA...")
         # logger.debug(f"OAM:{self.memctl.OAM}")
+        
+    def scanline_PPU_modes(self):
+        self.PPU.OAM_scan(self.PPU.get_context())
+        self.CPU_burst(80)
+        # recall because CPU burst may change the context
+        self.PPU.drawing_mode(self.PPU.get_context())
+        self.CPU_burst(172)
+        self.PPU.HBLANK_mode()
+        self.CPU_burst(204)
 
     def tick_PPU_modes_basis(self):
         lcdc = self.memctl.io_registers[0xFF40].value
@@ -134,26 +135,25 @@ class Gameboy:
         ly = self.memctl.io_registers[0xFF44].value
 
         if self.PPU.is_VBLANK_scan(ly):
-            # cpu burst then inc ly
+            # cpu burst then inc ly and handle lyc compare
             self.CPU_burst(456)
             self.PPU.handle_VBLANK()
             return
+        
+        self.PPU.handle_LY_compare()
+        
+        self.scanline_PPU_modes()
 
-        self.PPU.OAM_scan(self.PPU.get_context())
-        self.CPU_burst(80)
-        # recall because CPU burst may change the context
-        self.PPU.drawing_mode(self.PPU.get_context())
-        self.CPU_burst(172)
-        self.PPU.HBLANK_mode()
-        self.CPU_burst(204)
-
-        if ly == GB_LCD_RES[1] - 1:  # if just finished the last visible scanline
-            pygame.display.flip()  # update real display at the end of scanline
-            pyclock.tick(60) # ensure framerate is
+        # if just finished the last visible scanline
+        if ly == GB_LCD_RES[1] - 1:  
+            # update real display at the end of scanline
+            pygame.display.flip()  
+            # ensure framerate is 60 
+            pyclock.tick(60)  
             self.PPU.enter_VBLANK()
 
-        self.PPU.handle_LY_compare()
         self.PPU.inc_ly()
+        # handle keyboard inputs from the user
         self.handle_inputs()
 
     def handle_inputs(self):
