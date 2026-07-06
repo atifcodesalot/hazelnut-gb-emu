@@ -39,7 +39,7 @@ class CPU:
         self.PC = PC
         self.SP = SP
         self.machine_cycles = 0
-        self.turing_said_HALT = False
+        self.HALT = False
 
     def add_cycles(self, cycles):
         self.machine_cycles += cycles
@@ -601,7 +601,7 @@ class SM83(CPU):
 
     def exe_INS_HALT(self, ins):
         logger.debug("HALT instruction executed.")
-        self.turing_said_HALT = True
+        self.HALT = True
     
     def exe_INS_STOP(self, ins):
         pass
@@ -798,6 +798,7 @@ class SM83(CPU):
             self.disable_IF_at(IF, 0)
             return
         elif res >> 1 & 1:
+            logger.debug("calling LCD int")
             self.call(0x48)
             self.disable_IF_at(IF, 1)
             return

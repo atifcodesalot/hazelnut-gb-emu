@@ -3,7 +3,7 @@
 from .memory import GBMemoryController
 from .aux import ByteOperator as BO, string_to_rgb as s2rgb
 import pygame
-import time
+from . import logger
 
 
 GB_LCD_RES = (160, 144)
@@ -61,7 +61,7 @@ class GbPPU:
 
     def get_winning_pixel_SPRITE(self, lcdc, px, py):
         winner = None
-        winner_sprite = None
+        wsr = None
         best_x = 9999
 
         lcdc_2 = lcdc >> 2 & 1
@@ -72,7 +72,7 @@ class GbPPU:
             sy = sr[0] - 16
             sx = sr[1] - 8
             ti = sr[2]
-            attr = sr[3]
+            info = sr[3]
 
             rpx = px - sx
             rpy = py - sy
@@ -82,8 +82,8 @@ class GbPPU:
                 continue
 
             # Apply flips
-            xflip = (attr >> 5) & 1
-            yflip = (attr >> 6) & 1
+            xflip = (info >> 5) & 1
+            yflip = (info >> 6) & 1
 
             if xflip:
                 rpx = 7 - rpx
@@ -111,13 +111,10 @@ class GbPPU:
             # smaller X coordinate wins.
             if winner is None or x < best_x:
                 winner = pixel
-                winner_sprite = sr
+                wsr = sr
                 best_x = x
 
-        if winner:
-            return winner, winner_sprite[3] >> 7 & 1
-        else:
-            return None, -1
+        return winner, wsr
 
     def get_context(self):
         # palette register
@@ -156,10 +153,11 @@ class GbPPU:
         if ly == lyc:
             if BO.get_nth_bit(STAT.value, 6):
                 # request STAT int
+                logger.debug(f"requesting lyc int, ly: {hex(ly)}")
                 IF = self.memctl.io_registers[0xFF0F].value
                 new_IF = BO.set_nth_bit(IF, 1)
                 self.memctl.io_registers[0xFF0F].value = new_IF
-                          
+
             new_STAT = BO.set_nth_bit(STAT.value, 2)
             STAT.value = new_STAT
         else:
@@ -194,19 +192,29 @@ class GbPPU:
         new_STAT = BO.set_nth_bit(new_STAT, 1)
         STAT.value = new_STAT
 
-    def pixel_mixer(self, preg, BG_Window, sprite, priority):
+    def pixel_mixer(self, preg, BG_Window, sprite, sprite_obj):
         # if no winning pixel or sprite is transparent, return bg or window
         if sprite is None or sprite == 0:
-            return BG_Window
+            if BG_Window:
+                return self.get_shade(preg, BG_Window)
+            # if bg is also none, meaning bg and window is disabled (lcdc bit 0 is False)
+            return 0
         else:
+            priority = sprite_obj[3] >> 7 & 1
+            objpreg = self.memctl.io_registers[0xFF48 +
+                                               (sprite_obj[3] >> 4 & 1)].value
+            # if priority bit is 0, then obj has priority over bg or window pxels
             if not priority:
-                return sprite
+                return self.get_shade(objpreg, sprite)
             else:
-                return BG_Window if BG_Window else sprite
+                if BG_Window:
+                    return self.get_shade(preg, BG_Window)
+                return self.get_shade(
+                        objpreg, sprite)
 
     def drawing_mode(self, ctx):
         self.enter_drawing_mode()
-        palette_reg, (scx, scy), (ly, _), lcdc = ctx
+        st_palette_reg, (scx, scy), (ly, _), lcdc = ctx
         wy, wx = self.memctl.io_registers[0xFF4A].value, self.memctl.io_registers[0xFF4B].value
         for x in range(GB_LCD_RES[0]):
             # compute local background and window pixel coordinates
@@ -223,11 +231,10 @@ class GbPPU:
                 BG_row = self.get_tile_row_BG(
                     lcdc, bgx, bgy)
 
-            # get background pixel from
+            # get background pixel from offset
             BG_pixel = self.get_tile_pixel(BG_row, bg_offset)
 
             window_active = ((lcdc >> 5 & 1) and lwy >= 0 and lwx >= 0)
-
             if window_active:
                 # if new window row needs to be fetched
                 if w_offset == 0 or 7 >= lwx:
@@ -237,27 +244,31 @@ class GbPPU:
                 W_pixel = self.get_tile_pixel(W_row, w_offset)
 
             # either BG or Window pixel
-            static_pixel = BG_pixel if not window_active else W_pixel
-            sprite_pixel, pbit = self.get_winning_pixel_SPRITE(lcdc, x, ly)
-            final_pixel = self.pixel_mixer(palette_reg,
-                                           static_pixel, sprite_pixel, pbit)
+            if lcdc & 1:
+                static_pixel = BG_pixel if not window_active else W_pixel
+            else:
+                static_pixel = None
+            sprite_pixel, sprite = self.get_winning_pixel_SPRITE(lcdc, x, ly)
+
+            final_shade = self.pixel_mixer(st_palette_reg,
+                                           static_pixel, sprite_pixel, sprite)
             self.buffer[GB_LCD_RES[0] * ly +
-                        x] = self.get_shade(palette_reg, final_pixel)
+                        x] = final_shade
         self.dots += 172
 
     def OAM_scan(self, ctx):
-        palette_reg, (scx, scy), (ly, _), lcdc = ctx
-        lcdc_2 = lcdc >> 2 & 1
+        _, (_, _), (ly, _), lcdc = ctx
         self.enter_OAM()
         lcdc_1 = lcdc >> 1 & 1
         if not lcdc_1:
             return
+        lcdc_2 = lcdc >> 2 & 1
         self.mode = 2
         for i in range(0, 160, 4):
             sr = self.memctl.OAM[i: i + 4]
             sprite_height = 16 if lcdc_2 else 8
             # this sprite's lines intersect with current scanline
-            if sr[0]-16 < ly < sr[0] - 16 + sprite_height:
+            if sr[0] - 16 <= ly < sr[0] - 16 + sprite_height:
                 self.sprites.append(sr)
 
         # only 10 sprites max for each scanline
@@ -270,6 +281,8 @@ class GbPPU:
         self.dots += 204
 
     def handle_VBLANK(self):
+        # do other stuff ?
+        self.handle_LY_compare()
         self.inc_ly()
 
     def inc_ly(self):
