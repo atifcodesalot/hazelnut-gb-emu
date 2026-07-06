@@ -53,38 +53,42 @@ class Gameboy:
         if self.interrupt_pending():
             self.awake()
             return True
-        
-    def cpu_tick_empty(self, cycles):
+
+    def tick_timers(self, clock_cycles):
         TAC = self.memctl.io_registers[0xFF07].value
-        if (TAC >> 2) & 1:
-            for _ in range(cycles):
+        TIMA_en = (TAC >> 2) & 1
+        if TIMA_en:
+            for _ in range(clock_cycles):
                 self.cycles += 1
                 self.handle_TIMA()
-        self.inc_DIV()
-        self.cycles += cycles
+        else:
+            self.cycles += clock_cycles
+        self.add_DIV(clock_cycles)
 
     def CPU_burst(self, clock_cycles):
         if self.SM83_processor.HALT:
             if not self.handle_cpu_halt():
-                self.cpu_tick_empty(clock_cycles)
+                self.tick_timers(clock_cycles)
                 return
         cycles_passed = 0
         while cycles_passed < clock_cycles:
-            ins, cycles = self.SM83_processor.tick_one_ins()
+            ins, ins_cycles = self.SM83_processor.tick_one_ins()
+            self.tick_timers(ins_cycles)
             # if self.debug:
             #     self.debug_state(ins, colorama=colorama)
             #     if self.memctl.io_registers[0xFF0F].value != 0:
             #         print(self.memctl.io_registers[0xFF0F])
             #     print(self.memctl.io_registers[0xFF05].value)
             if self.SM83_processor.HALT:
-                self.cpu_tick_empty(clock_cycles - cycles_passed)
+                self.tick_timers(clock_cycles - cycles_passed)
                 break
 
-            cycles_passed += cycles
+            cycles_passed += ins_cycles
 
-    def inc_DIV(self):
-        if not self.cycles % 256:
-            self.memctl.inc_byte_at(0xFF04)  # div register location
+    def add_DIV(self, elapsed):
+        elapsed >>= 8
+        div = self.memctl.io_registers[0xFF04].value  # div register location
+        self.memctl.io_registers[0xFF04].value = (div + elapsed) & 0xff
 
     def handle_TIMA(self):
         TAC = self.memctl.io_registers[0xFF07].value
@@ -112,7 +116,7 @@ class Gameboy:
             m.OAM[i] = m.read_at(source + i)
         # logger.debug("ending DMA...")
         # logger.debug(f"OAM:{self.memctl.OAM}")
-        
+
     def scanline_PPU_modes(self):
         self.PPU.OAM_scan(self.PPU.get_context())
         self.CPU_burst(80)
@@ -139,17 +143,17 @@ class Gameboy:
             self.CPU_burst(456)
             self.PPU.handle_VBLANK()
             return
-        
+
         self.PPU.handle_LY_compare()
-        
+
         self.scanline_PPU_modes()
 
         # if just finished the last visible scanline
-        if ly == GB_LCD_RES[1] - 1:  
+        if ly == GB_LCD_RES[1] - 1:
             # update real display at the end of scanline
-            pygame.display.flip()  
-            # ensure framerate is 60 
-            pyclock.tick(60)  
+            pygame.display.flip()
+            # ensure framerate is 60
+            pyclock.tick(60)
             self.PPU.enter_VBLANK()
 
         self.PPU.inc_ly()

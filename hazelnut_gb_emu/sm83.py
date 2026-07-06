@@ -772,9 +772,12 @@ class SM83(CPU):
         func(ins)
         if self.pending_interrupt_enable and not self.flags['IME']:
             if not self.enable_interrupts_now:
+                # ensure interrupts are enabled next cycle
                 self.enable_interrupts_now = True
             else:
+                # this *is* the next cycle, enable interrupts
                 self.set_flags_fast(IME=True)
+                # clear flags
                 self.enable_interrupts_now = False
                 self.pending_interrupt_enable = False
 

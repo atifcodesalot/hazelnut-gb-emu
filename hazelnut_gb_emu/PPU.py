@@ -31,6 +31,8 @@ class GbPPU:
         for i in range(4):
             self.pgdisplay.set_palette_at(i, GB_LCD_PALETTE_rgb[i])
 
+        self.window_internal_counter = 0
+
     def get_shade(self, palette_reg, shade_bits):
         ti = shade_bits * 2
         mask = (1 << ti) * 3
@@ -131,6 +133,7 @@ class GbPPU:
         return pixel
 
     def enter_VBLANK(self):
+        self.window_internal_counter = 0
         self.mode = 1
         # edit the STAT register's 2 bits to be mode 1
         STAT = self.memctl.io_registers[0xFF41]
@@ -210,12 +213,13 @@ class GbPPU:
                 if BG_Window:
                     return self.get_shade(preg, BG_Window)
                 return self.get_shade(
-                        objpreg, sprite)
+                    objpreg, sprite)
 
     def drawing_mode(self, ctx):
         self.enter_drawing_mode()
         st_palette_reg, (scx, scy), (ly, _), lcdc = ctx
         wy, wx = self.memctl.io_registers[0xFF4A].value, self.memctl.io_registers[0xFF4B].value
+        window_was_visible = False
         for x in range(GB_LCD_RES[0]):
             # compute local background and window pixel coordinates
             lwx = x - wx + 7
@@ -236,11 +240,11 @@ class GbPPU:
 
             window_active = ((lcdc >> 5 & 1) and lwy >= 0 and lwx >= 0)
             if window_active:
+                window_was_visible = True
                 # if new window row needs to be fetched
                 if w_offset == 0 or 7 >= lwx:
                     W_row = self.get_tile_row_WINDOW(
-                        lcdc, lwx, lwy)
-
+                        lcdc, lwx, self.window_internal_counter)
                 W_pixel = self.get_tile_pixel(W_row, w_offset)
 
             # either BG or Window pixel
@@ -254,6 +258,9 @@ class GbPPU:
                                            static_pixel, sprite_pixel, sprite)
             self.buffer[GB_LCD_RES[0] * ly +
                         x] = final_shade
+
+        if window_was_visible:
+            self.window_internal_counter += 1
         self.dots += 172
 
     def OAM_scan(self, ctx):
