@@ -8,7 +8,6 @@ import time
 import colorama
 from .cartridge import Cartridge, CartridgeReader
 from .aux import BO
-import math
 
 
 pyclock = pygame.time.Clock()

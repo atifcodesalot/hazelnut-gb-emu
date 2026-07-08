@@ -294,7 +294,7 @@ class GBMemoryController:
         wbit = self.TIMA_hertz_bit_index[mc] # watch bit
         old_bit = (old_div >> wbit) & 1
         if old_bit:
-            self.inc_byte_at(0xFF04)
+            self.inc_byte_at(0xFF05)
             
     def handle_TAC_write(self, v):
         TAC = self.io_registers[0xFF07]
@@ -308,7 +308,7 @@ class GBMemoryController:
         new_bit = (self.gameboy.cycles >> neww) & 1
         # if the watched bit has fell
         if not new_bit and old_bit:
-            self.inc_byte_at(0xFF04)
+            self.inc_byte_at(0xFF05)
 
     def read_at(self, loc):
         a = loc
