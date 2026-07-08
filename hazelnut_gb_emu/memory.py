@@ -247,7 +247,7 @@ class GBMemoryController:
             self.cart_regs[0x8000].value = value & 0x1
             return
 
-        if address < 0xC000:
+        if 0xA000 < address < 0xC000:
             # ram banked write starts here
             mode = self.cart_regs[0x8000].value
             offset = address & 0x1fff
