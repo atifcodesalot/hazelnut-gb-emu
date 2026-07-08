@@ -193,6 +193,7 @@ class GBMemoryController:
             0x8000: Register("BANK MODE", 0, 0x01, 1)
         }
         self.rom_banks = cartridge.rom_banks
+        self.ram_banks = cartridge.ram_banks
 
     def BS_MBC1_read(self, address, rom=True):
         mode = self.cart_regs[0x8000].value  # get mode
@@ -223,9 +224,13 @@ class GBMemoryController:
 
         # ram banked read starts here
         offset = address & 0x1fff
-        if mode == 1:
-            bank_num = self.cart_regs[0x6000].value
+        
+        if mode == 1 and self.rom_banks > 1:
+            bank_num = self.cart_regs[0x6000].value % self.ram_banks
+        else:
+            bank_num = 0
             switched_addr = 0x2000 * bank_num + offset
+            print(switched_addr)
             return self.ext_ram.get_byte_at(switched_addr)
         return self.ext_ram.get_byte_at(offset)
 
