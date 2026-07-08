@@ -227,6 +227,7 @@ class GbPPU:
             bgy = (ly + scy) & 0xff
             bg_offset = bgx % 8
             w_offset = lwx % 8
+            static_enable = lcdc & 1
             #
 
             # if new bg row needs to be fetched
@@ -237,17 +238,19 @@ class GbPPU:
             # get background pixel from offset
             BG_pixel = self.get_tile_pixel(BG_row, bg_offset)
 
-            window_active = ((lcdc >> 5 & 1) and lwy >= 0 and lwx >= 0)
+            window_active = ((lcdc >> 5 & 1) and lwy >=
+                             0 and lwx >= 0 and static_enable)
             if window_active:
+                first_window_pixel = not window_was_visible
                 window_was_visible = True
                 # if new window row needs to be fetched
-                if w_offset == 0 or 7 >= lwx:
+                if w_offset == 0 or first_window_pixel:
                     W_row = self.get_tile_row_WINDOW(
                         lcdc, lwx, self.window_internal_counter)
                 W_pixel = self.get_tile_pixel(W_row, w_offset)
 
             # either BG or Window pixel
-            if lcdc & 1:
+            if static_enable:
                 static_pixel = BG_pixel if not window_active else W_pixel
             else:
                 static_pixel = None

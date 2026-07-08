@@ -3,10 +3,9 @@
 from .sm83 import *
 from .PPU import *
 from .memory import *
-import cProfile
 import time
 import colorama
-from .cartridge import Cartridge, CartridgeReader
+from .cartridge import Cartridge
 from .aux import BO
 
 

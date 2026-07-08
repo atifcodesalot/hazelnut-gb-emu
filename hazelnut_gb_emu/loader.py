@@ -1,13 +1,9 @@
 
 
 import json
-from dataclasses import dataclass
+from . import dataclass
 from typing import Optional
 import os
-from .memory import ROM
-from .cartridge import Cartridge
-
-from numpy import byte
 
 path = os.path.dirname(os.path.abspath(__file__))
 
