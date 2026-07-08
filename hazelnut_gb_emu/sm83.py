@@ -571,7 +571,7 @@ class SM83(CPU):
 
     def exe_INS_NOP(self, _):
         # do nothing
-        self.add_cycles(4)
+        return
 
     def exe_INS_DAA(self, _):
         adjustment = 0
@@ -603,8 +603,8 @@ class SM83(CPU):
         logger.debug("HALT instruction executed.")
         self.HALT = True
     
-    def exe_INS_STOP(self, ins):
-        pass
+    # def exe_INS_STOP(self, ins):
+    #     pass
 
     # MISC instructions end here
 
@@ -801,7 +801,6 @@ class SM83(CPU):
             self.disable_IF_at(IF, 0)
             return
         elif res >> 1 & 1:
-            logger.debug("calling LCD int")
             self.call(0x48)
             self.disable_IF_at(IF, 1)
             return
@@ -821,7 +820,6 @@ class SM83(CPU):
         self.handle_interrupts()
         ins = self.instruction_cycle()
         cycles = ins.cycles if ins else 0
-        self.add_cycles(cycles)
         return ins, cycles
 
     def dump_state_colorama(self, colorama):
