@@ -15,7 +15,7 @@ def main():
     cartridge = reader.get_cartridge()
     implemented = [0x00, 0x01, 0x02]
     if cartridge.type not in implemented:
-        print(
+        logger.info(
             f"\n\nThis game ({cartridge.title}) uses {cartridge.type_name}, which isn't implemented in the emulator yet.")
         print("It currently supports:", ' and '.join([CARTRIDGE_TYPES[impl] for impl in implemented]), "\n")
             

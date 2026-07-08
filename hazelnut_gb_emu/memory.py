@@ -4,6 +4,7 @@ from .aux import BO
 from .cartridge import Cartridge
 from math import log
 from . import logger
+import math
 
 
 class RAM:
@@ -107,6 +108,7 @@ hole = IOhole(0xFF)
 class GBMemoryController:
     def __init__(self, gameboy, ext_ram=False, bank_switching=None):
         self.gameboy = gameboy
+        self.TIMA_hertz_bit_index = [int(math.log(i)) for i in self.gameboy.TIMA_hertz]
         self.input_state = gameboy.input_state
 
         self.ext_ram_enabled = ext_ram
@@ -197,7 +199,8 @@ class GBMemoryController:
             offset = address & 0x3fff  # get the lower 14 bits
             bank_i = (address >> 14) & 1
             r2 = self.cart_regs[0x6000].value
-            bank_num = ((r2 << 5) | self.cart_regs[0x4000].value) % self.rom_banks
+            bank_num = (
+                (r2 << 5) | self.cart_regs[0x4000].value) % self.rom_banks
             switched_addr_b1 = bank_num * 0x4000 + offset
 
             if mode == 0:
@@ -208,7 +211,8 @@ class GBMemoryController:
 
             # MBC1 mode 1 starts here
             if bank_i == 0:
-                switched_addr_b0 = ((r2 << 5) % self.rom_banks * 0x4000) + offset
+                switched_addr_b0 = ((r2 << 5) %
+                                    self.rom_banks * 0x4000) + offset
                 return self.rom.get_byte_at(switched_addr_b0)
 
             # bank 1
@@ -281,6 +285,30 @@ class GBMemoryController:
             result = (result & 0xF0) | ((result & 0x0F) & buttons)
 
         return result
+    
+    def handle_DIV_write(self):
+        old_div = self.io_registers[0xFF04].value
+        self.io_registers[0xFF04].value = 0
+        self.gameboy.cycles = 0
+        mc = self.io_registers[0xFF07].value & 0b11
+        wbit = self.TIMA_hertz_bit_index[mc] # watch bit
+        old_bit = (old_div >> wbit) & 1
+        if old_bit:
+            self.inc_byte_at(0xFF04)
+            
+    def handle_TAC_write(self, v):
+        TAC = self.io_registers[0xFF07]
+        old_mc = TAC.value & 0b11
+        TAC.value = v
+        new_mc = v & 0b11
+        neww = self.TIMA_hertz_bit_index[new_mc] # new watch bit
+        oldw = self.TIMA_hertz_bit_index[old_mc] # old watch bit
+        
+        old_bit = (self.gameboy.cycles >> oldw) & 1
+        new_bit = (self.gameboy.cycles >> neww) & 1
+        # if the watched bit has fell
+        if not new_bit and old_bit:
+            self.inc_byte_at(0xFF04)
 
     def read_at(self, loc):
         a = loc
@@ -294,8 +322,8 @@ class GBMemoryController:
                 # logger.debug(f"Bank switching read at address {hex(a)}")
                 return self.bank_switching_read(a, rom=True)
             else:
-                # simply get the byte from ROM
                 # logger.debug(f"Reading from ROM at address {hex(a)}")
+                # simply get the byte from ROM
                 return self.rom.get_byte_at(a)
 
         # --- VRAM ---
@@ -394,7 +422,6 @@ class GBMemoryController:
             # Boot ROM disable register (FF50)
             if a == 0xFF50:
                 # Any nonzero write disables boot ROM on DMG
-
                 self.disable_boot_rom()
                 return
 
@@ -404,6 +431,15 @@ class GBMemoryController:
             if a == 0xFF00:
                 # joyp write
                 self.io_registers[0xFF00].value = 0xC0 | (v & 0x30) | 0x0F
+                return
+
+            if a == 0xFF04:
+                # div is reset always so no argument
+                self.handle_DIV_write()
+                return
+            
+            if a == 0xFF07:
+                self.handle_TAC_write(v)
                 return
 
             reg = self.io_registers.get(a)

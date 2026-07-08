@@ -156,7 +156,6 @@ class GbPPU:
         if ly == lyc:
             if BO.get_nth_bit(STAT.value, 6):
                 # request STAT int
-                logger.debug(f"requesting lyc int, ly: {hex(ly)}")
                 IF = self.memctl.io_registers[0xFF0F].value
                 new_IF = BO.set_nth_bit(IF, 1)
                 self.memctl.io_registers[0xFF0F].value = new_IF

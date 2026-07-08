@@ -8,6 +8,7 @@ import time
 import colorama
 from .cartridge import Cartridge, CartridgeReader
 from .aux import BO
+import math
 
 
 pyclock = pygame.time.Clock()
@@ -29,12 +30,12 @@ class Gameboy:
     def __init__(self):
         self.loader = GBRomLoader
         self.input_state = 255
+        self.TIMA_hertz = [256*4, 16, 64, 256]
         self.memctl = GBMemoryController(
             self, ext_ram=False)
         self.SM83_processor = SM83(self.loader, self.memctl, [])
         self.PPU = GbPPU(self.memctl)
         self.cycles = 0
-        self.TIMA_hertz = [256*4, 16, 64, 256]
         self.DMA = False
 
         self.debug = False
@@ -58,12 +59,9 @@ class Gameboy:
         TAC = self.memctl.io_registers[0xFF07].value
         TIMA_en = (TAC >> 2) & 1
         if TIMA_en:
-            for _ in range(clock_cycles):
-                self.cycles += 1
-                self.handle_TIMA()
-        else:
-            self.cycles += clock_cycles
-        self.add_DIV(clock_cycles)
+            self.handle_TIMA(old_cycles=self.cycles, elapsed=clock_cycles)
+        self.cycles = (self.cycles + clock_cycles) & 0xffff
+        self.handle_DIV()
 
     def CPU_burst(self, clock_cycles):
         if self.SM83_processor.HALT:
@@ -79,21 +77,22 @@ class Gameboy:
             #     if self.memctl.io_registers[0xFF0F].value != 0:
             #         print(self.memctl.io_registers[0xFF0F])
             #     print(self.memctl.io_registers[0xFF05].value)
+            cycles_passed += ins_cycles
+
             if self.SM83_processor.HALT:
                 self.tick_timers(clock_cycles - cycles_passed)
                 break
 
-            cycles_passed += ins_cycles
+    def handle_DIV(self):
+        self.memctl.io_registers[0xFF04].value = (self.cycles >> 8) & 0xff
 
-    def add_DIV(self, elapsed):
-        elapsed >>= 8
-        div = self.memctl.io_registers[0xFF04].value  # div register location
-        self.memctl.io_registers[0xFF04].value = (div + elapsed) & 0xff
-
-    def handle_TIMA(self):
+    def handle_TIMA(self, old_cycles, elapsed):
         TAC = self.memctl.io_registers[0xFF07].value
         mc = self.TIMA_hertz[TAC & 0b11]
-        if not (self.cycles) % mc:
+        old = old_cycles // mc
+        new = (old_cycles + elapsed) // mc
+        falls = new - old
+        for _ in range(falls):
             TIMA = self.memctl.io_registers[0xFF05].value
             if BO.add_full_carry(TIMA, 1):
                 TMA = self.memctl.io_registers[0xFF06].value
