@@ -108,7 +108,8 @@ hole = IOhole(0xFF)
 class GBMemoryController:
     def __init__(self, gameboy, ext_ram=False, bank_switching=None):
         self.gameboy = gameboy
-        self.TIMA_hertz_bit_index = [int(math.log(i)) for i in self.gameboy.TIMA_hertz]
+        self.TIMA_hertz_bit_index = [int(math.log(i))
+                                     for i in self.gameboy.TIMA_hertz]
         self.input_state = gameboy.input_state
 
         self.ext_ram_enabled = ext_ram
@@ -285,30 +286,45 @@ class GBMemoryController:
             result = (result & 0xF0) | ((result & 0x0F) & buttons)
 
         return result
-    
+
+    def inc_TIMA(self):
+        TIMA = self.io_registers[0xFF05].value
+        if BO.add_full_carry(TIMA, 1):
+            TMA = self.io_registers[0xFF06].value
+            # wrap to TMA
+            self.io_registers[0xFF05].value = TMA
+            IF = self.io_registers[0xFF0F].value
+            new_IF = BO.set_nth_bit(IF, 2)
+            # request a timer interupt
+            self.io_registers[0xFF0F].value = new_IF
+        else:
+            self.inc_byte_at(0xFF05)
+
     def handle_DIV_write(self):
+        TAC = self.io_registers[0xFF07].value
         old_cycles = self.gameboy.cycles
         self.io_registers[0xFF04].value = 0
         self.gameboy.cycles = 0
         mc = self.io_registers[0xFF07].value & 0b11
-        wbit = self.TIMA_hertz_bit_index[mc] # watch bit
+        wbit = self.TIMA_hertz_bit_index[mc]  # watch bit
         old_bit = (old_cycles >> wbit) & 1
-        if old_bit:
-            self.inc_byte_at(0xFF05)
-            
+        if old_bit and (TAC & 0b100):
+            self.inc_TIMA()
+
     def handle_TAC_write(self, v):
         TAC = self.io_registers[0xFF07]
+        old_TAC = TAC.value
         old_mc = TAC.value & 0b11
         TAC.value = v
         new_mc = v & 0b11
-        neww = self.TIMA_hertz_bit_index[new_mc] # new watch bit
-        oldw = self.TIMA_hertz_bit_index[old_mc] # old watch bit
-        
+        neww = self.TIMA_hertz_bit_index[new_mc]  # new watch bit
+        oldw = self.TIMA_hertz_bit_index[old_mc]  # old watch bit
+
         old_bit = (self.gameboy.cycles >> oldw) & 1
         new_bit = (self.gameboy.cycles >> neww) & 1
         # if the watched bit has fell
-        if not new_bit and old_bit:
-            self.inc_byte_at(0xFF05)
+        if not (new_bit and v & 0b100) and (old_bit and old_TAC & 0b100):
+            self.inc_TIMA()
 
     def read_at(self, loc):
         a = loc
@@ -437,7 +453,7 @@ class GBMemoryController:
                 # div is reset always so no argument
                 self.handle_DIV_write()
                 return
-            
+
             if a == 0xFF07:
                 self.handle_TAC_write(v)
                 return
