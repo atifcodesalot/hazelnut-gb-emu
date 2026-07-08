@@ -218,7 +218,7 @@ class GBMemoryController:
                 return self.rom.get_byte_at(switched_addr_b0)
 
             # bank 1
-            logger.debug("MBC1 mode 1 read at address %s" % hex(address))
+            # logger.debug("MBC1 mode 1 read at address %s" % hex(address))
             switched_addr_b1 = bank_num * 0x4000 + offset
             return self.rom.get_byte_at(switched_addr_b1)
 
@@ -230,7 +230,6 @@ class GBMemoryController:
         else:
             bank_num = 0
             switched_addr = 0x2000 * bank_num + offset
-            print(switched_addr)
             return self.ext_ram.get_byte_at(switched_addr)
         return self.ext_ram.get_byte_at(offset)
 
@@ -257,8 +256,8 @@ class GBMemoryController:
             mode = self.cart_regs[0x8000].value
             offset = address & 0x1fff
             if mode == 0:
-                logger.debug(
-                    "MBC1 ext ram mode 0 write at address %s" % hex(address))
+                # logger.debug(
+                #     "MBC1 ext ram mode 0 write at address %s" % hex(address))
                 self.ext_ram.write_to(offset, value)
             else:
                 bank_num = self.cart_regs[0x6000].value

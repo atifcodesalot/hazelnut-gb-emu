@@ -600,9 +600,9 @@ class SM83(CPU):
         self.set_flags_fast(H=False, Z=new_Z)
 
     def exe_INS_HALT(self, ins):
-        logger.debug("HALT instruction executed.")
+        # logger.debug("HALT instruction executed.")
         self.HALT = True
-    
+
     # def exe_INS_STOP(self, ins):
     #     pass
 

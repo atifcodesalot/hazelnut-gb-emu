@@ -17,8 +17,8 @@ def main():
     if cartridge.type not in implemented:
         logger.info(
             f"\n\nThis game ({cartridge.title}) uses {cartridge.type_name}, which isn't implemented in the emulator yet.")
-        print("It currently supports:", ' and '.join([CARTRIDGE_TYPES[impl] for impl in implemented]), "\n")
-            
+        print("It currently supports:", ' and '.join(
+            [CARTRIDGE_TYPES[impl] for impl in implemented]), "\n")
 
         input("IF you want to continue nevertheless, press any button.")
     gb.memctl.configure_bank_switching(cartridge)
@@ -26,7 +26,8 @@ def main():
     logger.debug("Extended ram size: %d bytes" % gb.memctl.ram.size)
     gb.insert_cartridge(cartridge=cartridge)
     gb.powerup()
-    
+
+
 def benchmark():
     cProfile.run('main()', sort='time', filename='profile_stats')
 
