@@ -287,12 +287,12 @@ class GBMemoryController:
         return result
     
     def handle_DIV_write(self):
-        old_div = self.io_registers[0xFF04].value
+        old_cycles = self.gameboy.cycles
         self.io_registers[0xFF04].value = 0
         self.gameboy.cycles = 0
         mc = self.io_registers[0xFF07].value & 0b11
         wbit = self.TIMA_hertz_bit_index[mc] # watch bit
-        old_bit = (old_div >> wbit) & 1
+        old_bit = (old_cycles >> wbit) & 1
         if old_bit:
             self.inc_byte_at(0xFF05)
             
