@@ -276,6 +276,7 @@ class Cartridge:
     rom_size: int
     rom_banks: int
     ram_size: int
+    ram_banks: int
     destination_code: int
     destination: str
     content: bytearray
@@ -367,6 +368,23 @@ class CartridgeReader:
     def _header_checksum(self) -> bool:
         return self.header_checksum[0] \
             == self.compute_header_checksum()
+            
+    def handle_rom_banks(self, rom_num):
+        num_banks = dict((num, pow(2, num + 1)) for num in range(0, 9))
+        num_banks.update({0x52: 72, 0x53: 80, 0x54: 96})
+        return num_banks.get(rom_num, 0)
+
+    def handle_ram_banks(self, ram_num):
+        num_banks = {
+            0x00: 0,
+            0x01: 0,
+            0x02: 1,
+            0x03: 4,
+            0x04: 16,
+            0x05: 8
+        }
+        return num_banks.get(ram_num, 0)
+    
 
     def get_cartridge(self) -> Cartridge:
         self.read()
@@ -380,8 +398,9 @@ class CartridgeReader:
                               manufacturer_code=self.manufacturer_code,
                               licensee=self.handle_licensee(),
                               rom_size=self.handle_rom_size(),
-                              rom_banks=pow(2, self.rom_size[0] + 1),
+                              rom_banks=self.handle_rom_banks(self.rom_size[0]),
                               ram_size=self.handle_ram_size(),
+                              ram_banks=self.handle_ram_banks(self.ram_size[0]),
                               destination_code=self.destination_code[0],
                               destination=self.handle_destination(),
                               content=self.content)
