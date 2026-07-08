@@ -92,17 +92,7 @@ class Gameboy:
         new = (old_cycles + elapsed) // mc
         falls = new - old
         for _ in range(falls):
-            TIMA = self.memctl.io_registers[0xFF05].value
-            if BO.add_full_carry(TIMA, 1):
-                TMA = self.memctl.io_registers[0xFF06].value
-                # wrap to TMA
-                self.memctl.io_registers[0xFF05].value = TMA
-                IF = self.memctl.io_registers[0xFF0F].value
-                new_IF = BO.set_nth_bit(IF, 2)
-                # request a timer interupt
-                self.memctl.io_registers[0xFF0F].value = new_IF
-            else:
-                self.memctl.inc_byte_at(0xFF05)
+            self.memctl.inc_TIMA()
 
     def start_DMA(self):
         # logger.debug("starting DMA...")
