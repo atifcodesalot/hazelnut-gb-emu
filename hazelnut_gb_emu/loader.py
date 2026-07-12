@@ -75,16 +75,3 @@ def init_instructions():
 
 init_operands()
 init_instructions()
-
-
-class GBRomLoader:
-    unprefixed_opcodes = GB_UNPREFIXED_OPCODES_JSON
-    prefixed_opcodes = GB_PREFIXED_OPCODES_JSON
-
-    @classmethod
-    def identify_instruction(cls, opcode, prefixed):
-        if prefixed:
-            ins = cls.prefixed_opcodes[opcode]
-        else:
-            ins = cls.unprefixed_opcodes[opcode]
-        return ins

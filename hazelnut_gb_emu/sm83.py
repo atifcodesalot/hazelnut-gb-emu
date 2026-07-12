@@ -1,6 +1,7 @@
 
 
-from .loader import *
+from .loader import (GB_PREFIXED_OPCODES_JSON,
+                     GB_UNPREFIXED_OPCODES_JSON, GameboyInstruction)
 from . import logger
 from .memory import *
 from .aux import BO
@@ -115,7 +116,7 @@ class CPU:
 
 
 class SM83(CPU):
-    def __init__(self, loader: GBRomLoader, memory, peripherals: list):
+    def __init__(self, memory):
         def r8bit(name): return Register(
             name=name, value=0, max_value=0xFF, bit_length=8)
         def r16bit(name): return Register(
@@ -139,11 +140,10 @@ class SM83(CPU):
             'HL', general_registers['H'], general_registers['L'])
 
         flags = {'Z': False, 'N': False, 'H': False, 'C': False, 'IME': False}
-        super().__init__(memory, peripherals,
+        super().__init__(memory, [],
                          general_registers, flags,
                          PC=r16bit('PC'),
                          SP=r16bit('SP'))
-        self.loader = loader
 
         self.pending_interrupt_enable = False
         self.enable_interrupts_now = False
@@ -754,8 +754,10 @@ class SM83(CPU):
             raise AttributeError(f"{name} is not a valid attribute of CPU.")
 
     def decode(self, opcode, prefixed: bool):
-        ins = self.loader.identify_instruction(
-            opcode, prefixed)
+        if prefixed:
+            ins = GB_PREFIXED_OPCODES_JSON[opcode]
+        else:
+            ins = GB_UNPREFIXED_OPCODES_JSON[opcode]
         prefixl = 1 if prefixed else 0
         # fetch instruction incremented PC by 1, so we need to -1 to get the correct operands
         operands = self.get_operands(

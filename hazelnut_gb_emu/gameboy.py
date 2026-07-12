@@ -26,12 +26,11 @@ class Gameboy:
     }
 
     def __init__(self):
-        self.loader = GBRomLoader
         self.input_state = 255
         self.TIMA_hertz = [256*4, 16, 64, 256]
         self.memctl = GBMemoryController(
             self, ext_ram=False)
-        self.SM83_processor = SM83(self.loader, self.memctl, [])
+        self.SM83_processor = SM83(self.memctl)
         self.PPU = GbPPU(self.memctl)
         # 16 bit internal divider register value
         self.cycles = 0
