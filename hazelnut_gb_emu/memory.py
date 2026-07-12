@@ -1,7 +1,7 @@
 
 from .aux import BO
 from .cartridge import Cartridge
-from math import log
+from . import logger
 from . import IOhole, Register
 import math
 from .MBCs import MBC1, MBC3
