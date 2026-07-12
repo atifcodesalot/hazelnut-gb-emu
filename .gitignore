@@ -4,6 +4,8 @@ debugging/
 
 hazelnutlog.txt
 
+test_ROMS/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -11,6 +13,9 @@ __pycache__/
 
 # C extensions
 *.so
+
+# Save file from the emu
+*.save
 
 # Distribution / packaging
 .Python
