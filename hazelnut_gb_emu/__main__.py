@@ -38,8 +38,8 @@ class SessionController:
 
     def save(self):
         ext = self.gameboy.memctl.ext_ram
-        if  ext is not None \
-                and ext > 0 and self.cart_has_battery:
+        if ext is not None \
+                and ext.size > 0 and self.cart_has_battery:
 
             f = open(self.cartridge.title+'.save', "wb")
             f.write(self.gameboy.memctl.ext_ram.array)

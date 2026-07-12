@@ -614,6 +614,7 @@ class SM83(CPU):
 
     def exe_INS_DI(self, _):
         self.set_flags_fast(IME=False)
+        self.pending_interrupt_enable = False
 
     def exe_INS_EI(self, _):
         self.pending_interrupt_enable = True
