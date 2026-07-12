@@ -122,7 +122,7 @@ class MBC3(MBC):
     def __init__(self, memctl, cartridge: Cartridge):
         super().__init__(memctl, cartridge)
         self.cart_regs = {
-            0x2000: Register("RAM \ TIMER EN", 0, 0xFF, 8),
+            0x2000: Register("RAM/TIMER EN", 0, 0xFF, 8),
             0x4000: Register("ROM BANK NUM", 1, 0x7F, 7),
             0x6000: Register("RAM BANK/RTC SEL", 0, 0x0C, 4),
             0x8000: Register("LATCH CLK", 0, 0x01, 1),
@@ -187,10 +187,10 @@ class MBC3(MBC):
             self.cart_regs[0x4000].value = value
             return
         if address < 0x6000:
-            self.cart_regs[0x6000].value = value % 0x0C
+            self.cart_regs[0x6000].value = value & 0x0F
             return
         if address < 0x8000:
-            self.cart_regs[0x8000].value = value & 0x1
+            self.cart_regs[0x8000].value = value & 1
             return
 
     def handle_ram_banking_read(self, address, sel):
@@ -238,14 +238,15 @@ class MBC3(MBC):
             return self.handle_rom_banking(address)
 
         sel = self.cart_regs[0x6000].value
-        if sel < 0x08:
+        if sel < 0x04:
             # ram banking starts here
             return self.handle_ram_banking_read(address, sel)
 
         # rtc register reads start here
         if self.RTC_read_enabled:
             return self.handle_RTC_read(sel)
-        # if RTC isn't enabled, do nothing
+        # if RTC isn't enabled, read nothing
+        return 0xFF
 
     def write(self, address, value):
         if address < 0xA000:
@@ -254,9 +255,10 @@ class MBC3(MBC):
 
         # ram banking, RTC writes start here
         sel = self.cart_regs[0x6000].value
-        if sel < 0x08:
+        if sel < 0x04:
             # ram banking starts here
             return self.handle_ram_banking_write(address, value, sel)
 
         if self.RTC_read_enabled:
             self.handle_RTC_write(sel, value)
+         # if RTC isn't enabled, write nothing
