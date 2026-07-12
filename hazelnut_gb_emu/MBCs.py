@@ -81,13 +81,12 @@ class MBC1(MBC):
         m = self.memctl
         offset = address & 0x1fff
 
-        if mode == 1 and m.rom_banks > 1:
+        if mode == 1 and m.ram_banks > 1:
             bank_num = self.cart_regs[0x6000].value % m.ram_banks
-        else:
-            bank_num = 0
-            switched_addr = 0x2000 * bank_num + offset
+            switched_addr = 0x2000  * bank_num + offset
             return m.ext_ram.get_byte_at(switched_addr)
-        return m.ext_ram.get_byte_at(offset)
+        else:
+            return m.ext_ram.get_byte_at(offset)
 
     def handle_ram_banking_write(self, address, value):
         m = self.memctl
