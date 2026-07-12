@@ -128,10 +128,6 @@ class GbPPU:
         lcd_control = self.memctl.io_registers[0xFF40].value
         return palette_reg, (scx, scy), (ly, lyc), lcd_control
 
-    def get_tile_pixel(self, row, offset):
-        pixel = BO.get_pixel_2bpp(row[0], row[1], offset)
-        return pixel
-
     def enter_VBLANK(self):
         self.window_internal_counter = 0
         self.mode = 1
@@ -236,7 +232,7 @@ class GbPPU:
                     lcdc, bgx, bgy)
 
             # get background pixel from offset
-            BG_pixel = self.get_tile_pixel(BG_row, bg_offset)
+            BG_pixel = BO.get_pixel_2bpp(BG_row[0], BG_row[1], bg_offset)
 
             window_active = ((lcdc >> 5 & 1) and lwy >=
                              0 and lwx >= 0 and static_enable)
@@ -247,7 +243,7 @@ class GbPPU:
                 if w_offset == 0 or first_window_pixel:
                     W_row = self.get_tile_row_WINDOW(
                         lcdc, lwx, self.window_internal_counter)
-                W_pixel = self.get_tile_pixel(W_row, w_offset)
+                W_pixel = BO.get_pixel_2bpp(W_row[0], W_row[1], w_offset)
 
             # either BG or Window pixel
             if static_enable:

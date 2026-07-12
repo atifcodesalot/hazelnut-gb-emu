@@ -14,7 +14,7 @@ class ByteOperator:
         n1 = byte >> 4
         n2 = byte & 15
         return n1, n2
-    
+
     @staticmethod
     def concat_bytes(high, low):
         return (high << 8) | low
@@ -86,7 +86,7 @@ class ByteOperator:
 
     @classmethod
     def res_nth_bit(cls, byte, n):
-        return byte & (0xFF- (1 << n))
+        return byte & (0xFF - (1 << n))
 
     @classmethod
     def swap_nibbles(cls, byte):
@@ -97,12 +97,9 @@ class ByteOperator:
     def get_pixel_2bpp(lo: int, hi: int, pixel_i: int) -> int:
         bit = 7 - pixel_i
         return (((hi >> bit) & 1) << 1) | ((lo >> bit) & 1)
-    
-    
-    
-    
-BO = ByteOperator
 
+
+BO = ByteOperator
 
 
 def string_to_rgb(hexstr):
@@ -110,6 +107,3 @@ def string_to_rgb(hexstr):
         hexstr = hexstr[1:]
 
     return tuple(int(hexstr[i*2:(i+1)*2], 16) for i in range(0, 3))
-
-    
-    

@@ -168,10 +168,10 @@ class SM83(CPU):
         if byte_count == 0:
             return None
         if byte_count == 1:
-            return [self.memory.read_at(ins_address + 1)]
+            return (self.memory.read_at(ins_address + 1),)
         if byte_count == 2:
-            return [self.memory.read_at(ins_address + 1),
-                    self.memory.read_at(ins_address + 2)]
+            return (self.memory.read_at(ins_address + 1),
+                    self.memory.read_at(ins_address + 2))
 
     # Load, copy related instructions start here
     ###
@@ -768,7 +768,7 @@ class SM83(CPU):
 
     def instruction_cycle(self):
         opcode, prefixed = self.fetch_ins()
-        ins = self.decode(opcode, prefixed=prefixed)
+        ins = self.decode(opcode, prefixed)
         func = getattr(self, f"exe_INS_{ins.mnemonic}")
         func(ins)
         if self.pending_interrupt_enable and not self.flags['IME']:

@@ -76,8 +76,13 @@ def main():
         if sys.argv[2] in ["--benchmark", "-b", "--profile", "-p"]:
             logger.info("Running in benchmark mode... Will run much slower than normal,\
                     but will generate a profile_stats file.")
-            cProfile.run('controller.play()', sort='time',
-                         filename='profile_stats')
+            profiler = cProfile.Profile()
+            profiler.enable()
+
+            controller.play()
+
+            profiler.disable()
+            profiler.dump_stats("profile_stats")
 
         else:
             controller.play()
