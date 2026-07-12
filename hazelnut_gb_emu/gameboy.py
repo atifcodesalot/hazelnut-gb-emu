@@ -117,7 +117,7 @@ class Gameboy:
         lcdc = self.memctl.io_registers[0xFF40].value
 
         # clear the lcd if PPU is disabled
-        if not BO.get_nth_bit(lcdc, 7):
+        if not lcdc >> 7 & 1:
             self.PPU.disable()
             self.CPU_burst(456)
             pygame.display.flip()

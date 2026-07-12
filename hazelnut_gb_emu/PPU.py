@@ -150,7 +150,7 @@ class GbPPU:
         lyc = self.memctl.io_registers[0xFF45].value
         STAT = self.memctl.io_registers[0xFF41]
         if ly == lyc:
-            if BO.get_nth_bit(STAT.value, 6):
+            if STAT.value >> 6 & 1:
                 # request STAT int
                 IF = self.memctl.io_registers[0xFF0F].value
                 new_IF = BO.set_nth_bit(IF, 1)
@@ -211,10 +211,12 @@ class GbPPU:
                     objpreg, sprite)
 
     def drawing_mode(self, ctx):
+        # todo: please refactor this function
         self.enter_drawing_mode()
         st_palette_reg, (scx, scy), (ly, _), lcdc = ctx
         wy, wx = self.memctl.io_registers[0xFF4A].value, self.memctl.io_registers[0xFF4B].value
         window_was_visible = False
+        row_n = GB_LCD_RES[0] * ly
         for x in range(GB_LCD_RES[0]):
             # compute local background and window pixel coordinates
             lwx = x - wx + 7
@@ -230,9 +232,13 @@ class GbPPU:
             if x == 0 or bg_offset == 0:
                 BG_row = self.get_tile_row_BG(
                     lcdc, bgx, bgy)
+                BG_pixels = [
+                    (((BG_row[1] >> bit) & 1) << 1) | ((BG_row[0] >> bit) & 1)
+                    for bit in range(7, -1, -1)
+                ]
 
             # get background pixel from offset
-            BG_pixel = BO.get_pixel_2bpp(BG_row[0], BG_row[1], bg_offset)
+            BG_pixel = BG_pixels[bg_offset]
 
             window_active = ((lcdc >> 5 & 1) and lwy >=
                              0 and lwx >= 0 and static_enable)
@@ -243,7 +249,13 @@ class GbPPU:
                 if w_offset == 0 or first_window_pixel:
                     W_row = self.get_tile_row_WINDOW(
                         lcdc, lwx, self.window_internal_counter)
-                W_pixel = BO.get_pixel_2bpp(W_row[0], W_row[1], w_offset)
+                    W_pixels = [
+                        (((W_row[1] >> bit) & 1) << 1) | (
+                            (W_row[0] >> bit) & 1)
+                        for bit in range(7, -1, -1)
+                    ]
+
+                W_pixel = W_pixels[w_offset]
 
             # either BG or Window pixel
             if static_enable:
@@ -254,8 +266,7 @@ class GbPPU:
 
             final_shade = self.pixel_mixer(st_palette_reg,
                                            static_pixel, sprite_pixel, sprite)
-            self.buffer[GB_LCD_RES[0] * ly +
-                        x] = final_shade
+            self.buffer[row_n + x] = final_shade
 
         if window_was_visible:
             self.window_internal_counter += 1
