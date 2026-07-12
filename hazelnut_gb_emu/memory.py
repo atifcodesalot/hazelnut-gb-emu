@@ -279,9 +279,6 @@ class GBMemoryController:
 
         # --- IO / HRAM / IE ---
         if a < 0xFF80:
-            # if a == 0xFF44: # for doctor gameboy
-            #     return 0x90
-
             if a == 0xFF00:
                 return self.handle_joypad_read()
 
