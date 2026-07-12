@@ -81,8 +81,11 @@ class MBC1(MBC):
         m = self.memctl
         offset = address & 0x1fff
 
-        if mode == 1 and m.ram_banks > 1:
-            bank_num = self.cart_regs[0x6000].value % m.ram_banks
+        if mode == 1:
+            if m.ram_banks > 0:
+                bank_num = self.cart_regs[0x6000].value % m.ram_banks
+            else:
+                bank_num = 0
             switched_addr = 0x2000  * bank_num + offset
             return m.ext_ram.get_byte_at(switched_addr)
         else:
@@ -92,14 +95,15 @@ class MBC1(MBC):
         m = self.memctl
         mode = self.cart_regs[0x8000].value
         offset = address & 0x1fff
-        if mode == 0:
-            # logger.debug(
-            #     "MBC1 ext ram mode 0 write at address %s" % hex(address))
-            m.ext_ram.write_to(offset, value)
-        else:
-            bank_num = self.cart_regs[0x6000].value
-            switched_addr = 0x2000 * bank_num + offset
+        if mode == 1:
+            if m.ram_banks > 0:
+                bank_num = self.cart_regs[0x6000].value % m.ram_banks
+            else:
+                bank_num = 0
+            switched_addr = 0x2000  * bank_num + offset
             m.ext_ram.write_to(switched_addr, value)
+        else:
+            m.ext_ram.write_to(offset, value)
 
     def read(self, address, rom: bool):
         mode = self.cart_regs[0x8000].value  # get mode
