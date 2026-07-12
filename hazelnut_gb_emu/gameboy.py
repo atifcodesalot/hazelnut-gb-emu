@@ -33,6 +33,7 @@ class Gameboy:
             self, ext_ram=False)
         self.SM83_processor = SM83(self.loader, self.memctl, [])
         self.PPU = GbPPU(self.memctl)
+        # 16 bit internal divider register value
         self.cycles = 0
         self.DMA = False
 
@@ -53,12 +54,12 @@ class Gameboy:
             self.awake()
             return True
 
-    def tick_timers(self, clock_cycles):
+    def tick_timers(self, dots):
         TAC = self.memctl.io_registers[0xFF07].value
         TIMA_en = (TAC >> 2) & 1
         if TIMA_en:
-            self.handle_TIMA(old_cycles=self.cycles, elapsed=clock_cycles)
-        self.cycles = (self.cycles + clock_cycles) & 0xffff
+            self.handle_TIMA(old_cycles=self.cycles, elapsed=dots)
+        self.cycles = (self.cycles + dots) & 0xffff
         self.handle_DIV()
 
     def CPU_burst(self, clock_cycles):
@@ -68,7 +69,7 @@ class Gameboy:
                 return
         cycles_passed = 0
         while cycles_passed < clock_cycles:
-            ins, ins_cycles = self.SM83_processor.tick_one_ins()
+            ins, ins_cycles = self.SM83_processor.tick_one_ins(self)
             self.tick_timers(ins_cycles)
             # if self.debug:
             #     self.debug_state(ins, colorama=colorama)
@@ -150,7 +151,7 @@ class Gameboy:
     def handle_inputs(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                exit()
+                self.running = False
             elif event.type in [pygame.KEYDOWN, pygame.KEYUP]:
                 is_pressed = event.type == pygame.KEYDOWN
                 if event.key == pygame.K_q:
@@ -169,7 +170,8 @@ class Gameboy:
         self.set_display()
         self.SM83_processor.set_register('PC', 0x0)
         self.memctl.boot_enabled = True
-        while True:
+        self.running = True
+        while self.running:
             self.tick_PPU_modes_basis()
             self.screen.blit(self.PPU.pgdisplay, (10, 10))
 

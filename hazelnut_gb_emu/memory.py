@@ -4,7 +4,7 @@ from .cartridge import Cartridge
 from math import log
 from . import IOhole, Register
 import math
-from .MBCs import MBC1
+from .MBCs import MBC1, MBC3
 
 
 class RAM:
@@ -164,6 +164,9 @@ class GBMemoryController:
         elif cartridge.type in [0x1, 0x2, 0x3]:
             self.bank_switching = True
             self.mbc = MBC1(self, cartridge)
+        elif cartridge.type in [0x11, 0x12, 0x13]:
+            self.bank_switching = True
+            self.mbc = MBC3(self, cartridge)
 
     def hex_dump(self, start, end):
         for i in range(start, end + 1):

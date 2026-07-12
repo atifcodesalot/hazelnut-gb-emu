@@ -2,9 +2,10 @@
 from math import log
 from .cartridge import Cartridge
 from . import Register
+import time
 
 
-class MBC1:
+class MBC:
     def __init__(self, memctl, cartridge):
         self.memctl = memctl
         self.cartridge = cartridge
@@ -17,15 +18,19 @@ class MBC1:
                 int(log(cartridge.ram_size, 2)))
         #
 
+        self.memctl.rom_banks = cartridge.rom_banks
+        self.memctl.ram_banks = cartridge.ram_banks
+
+
+class MBC1(MBC):
+    def __init__(self, memctl, cartridge: Cartridge):
+        super().__init__(memctl, cartridge)
         self.cart_regs = {
             0x2000: Register("RAM EN", 0, 0xFF, 8),
             0x4000: Register("ROM BANK NUM", 1, 0x1F, 5),
             0x6000: Register("RAM BANK/UPPER", 0, 0x03, 2),
             0x8000: Register("BANK MODE", 0, 0x01, 1)
         }
-
-        self.memctl.rom_banks = cartridge.rom_banks
-        self.memctl.ram_banks = cartridge.ram_banks
 
     def read(self, address, rom: bool):
         m = self.memctl
@@ -97,3 +102,122 @@ class MBC1:
                 bank_num = self.cart_regs[0x6000].value
                 switched_addr = 0x2000 * bank_num + offset
                 m.ext_ram.write_to(switched_addr, value)
+
+
+class MBC3:
+    def __init__(self, memctl, cartridge: Cartridge):
+        super().__init__(memctl, cartridge)
+        self.cart_regs = {
+            0x2000: Register("RAM\TIMER EN", 0, 0xFF, 8),
+            0x4000: Register("ROM BANK NUM", 1, 0x7F, 7),
+            0x6000: Register("RAM BANK/RTC SEL", 0, 0x0C, 4),
+            0x8000: Register("LATCH CLK", 0, 0x01, 1),
+            0xC008: Register("RTC S", 0, 0xFF, 8),
+            0xC009: Register("RTC M", 0, 0x3B, 6),
+            0xC00A: Register("RTC H", 0, 0x17, 5),
+            0xC00B: Register("RTC DL", 0, 0xFF, 8),
+            0xC00C: Register("RTC DH", 0, 0x7, 3),
+        }
+        self.last_sample = 0
+        self.seconds = 0
+        self.RTC_read_enabled = False
+
+    def start_RTC(self):
+        self.start_seconds = time.monotonic()
+
+    def sample_sec_diff(self):
+        now = time.monotonic()
+        elapsed = now - self.last_sample
+        self.last_sample = now
+        return elapsed
+    
+    def update_seconds(self):
+        self.seconds += self.sample_sec_diff()
+
+    def sample_seconds_reg(self):
+        self.cart_regs[0xC008].value = self.seconds
+
+    def sample_minutes_reg(self):
+        self.cart_regs[0xC009].value = self.seconds// 60
+
+    def sample_hours_reg(self):
+        self.cart_regs[0xC00A].value = self.seconds // 3600
+
+    def sample_days(self):
+        days = self.seconds // 86400
+        self.cart_regs[0xC00B].value = days & 0xFF
+        self.cart_regs[0xC00C].value = days >> 8
+
+    def read(self, address, rom: bool):
+        m = self.memctl
+        if rom:
+            offset = address & 0x3fff
+            bank_i = (address >> 14) & 1
+            if bank_i == 0:
+                # no conversion, bank 0 is never bank switched in mbc3
+                return m.rom.get_byte_at(address)
+            # bank 1 handling starts here
+            bank_num = self.cart_regs[0x4000].value
+            return bank_num * 0x4000 + offset
+
+        sel = self.cart_regs[0x6000]
+        if sel < 0x08:
+            # ram banking starts here
+            return m.ext_ram.get_byte_at(
+                sel * 0x2000 + address)
+            
+        # rtc register reads start here
+        if self.RTC_read_enabled:
+            self.update_seconds()
+            if sel == 0x08:
+                self.sample_seconds_reg()
+                return self.cart_regs[0xC008].value
+            if sel == 0x09:
+                self.sample_minutes_reg()
+                return self.cart_regs[0xC009].value
+            if sel == 0x0A:
+                self.sample_hours_reg()
+                return self.cart_regs[0xC00A].value
+            if sel == 0x0B or sel == 0x0C:
+                self.sample_days()
+                return self.cart_regs[0xC000 + sel].value
+    
+    def write(self, address, value):
+        m = self.memctl
+        if address < 0x2000:
+            b = (value & 0x0F) == 0x0A
+            m.ext_ram_enabled = b
+            self.RTC_read_enabled = b
+            return
+        if address < 0x4000:
+            # cant be 0, reset to 1 like mbc1
+            if value == 0:
+                value = 1
+            self.cart_regs[0x4000].value = value
+            return
+        if address < 0x6000:
+            self.cart_regs[0x6000].value = value % 0x0C
+            return
+        if address < 0x8000:
+            self.cart_regs[0x8000].value = value & 0x1
+            return
+        
+        
+        if 0xA000 < address:
+            # ram banked write starts here
+            return
+        
+        # return from RTC registers
+        if self.RTC_read_enabled:
+            self.update_seconds()
+            if address == 0xC008:
+                diff = value - self.cart_regs[0xC008].value
+                self.seconds += diff
+            # to do compete
+            
+        
+        
+        # if RTC isn't enabled, do nothing
+        return 
+        
+        

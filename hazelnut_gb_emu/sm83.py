@@ -788,7 +788,7 @@ class SM83(CPU):
         self.memory.write_to(0xFF0F, new_IF)
         self.set_flags_fast(IME=False)
 
-    def handle_interrupts(self):
+    def handle_interrupts(self, gb):
         # interrupts are disabled, exit
         if not self.flags['IME']:
             return
@@ -798,26 +798,32 @@ class SM83(CPU):
         # handle priorities
         if res & 1:
             self.call(0x40)
+            # interrupt dispatch lasts 20 dots
+            gb.tick_timers(dots=20)
             self.disable_IF_at(IF, 0)
             return
         elif res >> 1 & 1:
             self.call(0x48)
+            gb.tick_timers(dots=20)
             self.disable_IF_at(IF, 1)
             return
         elif res >> 2 & 1:
             self.call(0x50)
+            gb.tick_timers(dots=20)
             self.disable_IF_at(IF, 2)
             return
         elif res >> 3 & 1:
             self.call(0x58)
+            gb.tick_timers(dots=20)
             self.disable_IF_at(IF, 3)
             return
         elif (res >> 4) & 1:
             self.call(0x60)
+            gb.tick_timers(dots=20)
             self.disable_IF_at(IF, 4)
 
-    def tick_one_ins(self):
-        self.handle_interrupts()
+    def tick_one_ins(self, gb):
+        self.handle_interrupts(gb)
         ins = self.instruction_cycle()
         cycles = ins.cycles if ins else 0
         return ins, cycles
