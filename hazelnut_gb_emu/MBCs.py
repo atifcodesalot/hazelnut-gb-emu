@@ -34,17 +34,19 @@ class MBC1(MBC):
 
     def handle_rom_banking(self, address, mode):
         m = self.memctl
-        offset = address & 0x3fff  # get the lower 14 bits
         bank_i = (address >> 14) & 1
+
+        if mode == 0 and bank_i == 0:
+                return m.rom.get_byte_at(address)
+        
         r2 = self.cart_regs[0x6000].value
         bank_num = (
-            (r2 << 5) | self.cart_regs[0x4000].value) % m.rom_banks
+        (r2 << 5) | self.cart_regs[0x4000].value) % m.rom_banks
+        offset = address & 0x3fff  # get the lower 14 bits
         switched_addr_b1 = bank_num * 0x4000 + offset
-
-        if mode == 0:
-            if bank_i == 0:
-                return m.rom.get_byte_at(address)
-            # bank 1
+        
+        # bank 1
+        if mode == 0 and bank_i == 1:
             return m.rom.get_byte_at(switched_addr_b1)
 
         # MBC1 mode 1 starts here
@@ -53,9 +55,8 @@ class MBC1(MBC):
                                 m.rom_banks * 0x4000) + offset
             return m.rom.get_byte_at(switched_addr_b0)
 
-        # bank 1
+        # bank 1, mode 1
         # logger.debug("MBC1 mode 1 read at address %s" % hex(address))
-        switched_addr_b1 = bank_num * 0x4000 + offset
         return m.rom.get_byte_at(switched_addr_b1)
 
     def handle_rom_write(self, address, value):
