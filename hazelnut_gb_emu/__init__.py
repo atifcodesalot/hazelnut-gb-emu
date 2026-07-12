@@ -11,6 +11,9 @@ class Register:
     value: int
     max_value: int
     bit_length: int
+    
+    def set_val(self, val):
+        self.value = val % self.max_value
 
     def __repr__(self):
         return str(self.value)
