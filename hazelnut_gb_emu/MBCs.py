@@ -37,7 +37,7 @@ class MBC1(MBC):
         bank_i = (address >> 14) & 1
 
         if mode == 0 and bank_i == 0:
-                return m.rom.get_byte_at(address)
+                return m.rom.array[address]
         
         r2 = self.cart_regs[0x6000].value
         bank_num = (
@@ -47,17 +47,17 @@ class MBC1(MBC):
         
         # bank 1
         if mode == 0 and bank_i == 1:
-            return m.rom.get_byte_at(switched_addr_b1)
+            return m.rom.array[switched_addr_b1]
 
         # MBC1 mode 1 starts here
         if bank_i == 0:
             switched_addr_b0 = ((r2 << 5) %
                                 m.rom_banks * 0x4000) + offset
-            return m.rom.get_byte_at(switched_addr_b0)
+            return m.rom.array[switched_addr_b0]
 
         # bank 1, mode 1
         # logger.debug("MBC1 mode 1 read at address %s" % hex(address))
-        return m.rom.get_byte_at(switched_addr_b1)
+        return m.rom.array[switched_addr_b1]
 
     def handle_rom_write(self, address, value):
         m = self.memctl
@@ -88,9 +88,9 @@ class MBC1(MBC):
             else:
                 bank_num = 0
             switched_addr = 0x2000  * bank_num + offset
-            return m.ext_ram.get_byte_at(switched_addr)
+            return m.ext_ram.array[switched_addr]
         else:
-            return m.ext_ram.get_byte_at(offset)
+            return m.ext_ram.array[offset]
 
     def handle_ram_banking_write(self, address, value):
         m = self.memctl
@@ -172,10 +172,10 @@ class MBC3(MBC):
         bank_i = (address >> 14) & 1
         if bank_i == 0:
             # no conversion, bank 0 is never bank switched in mbc3
-            return m.rom.get_byte_at(address)
+            return m.rom.array[address]
         # bank 1 handling starts here
         bank_num = self.cart_regs[0x4000].value
-        return m.rom.get_byte_at(bank_num * 0x4000 + offset)
+        return m.rom.array[bank_num * 0x4000 + offset]
 
     def handle_rom_write(self, address, value):
         m = self.memctl
@@ -199,8 +199,8 @@ class MBC3(MBC):
 
     def handle_ram_banking_read(self, address, sel):
         offset = address & 0x1fff
-        return self.memctl.ext_ram.get_byte_at(
-            sel * 0x2000 + offset)
+        return self.memctl.ext_ram.array[
+            sel * 0x2000 + offset]
 
     def handle_ram_banking_write(self, address, value, sel):
         offset = address & 0x1fff
