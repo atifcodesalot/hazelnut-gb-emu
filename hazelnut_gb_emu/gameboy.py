@@ -192,8 +192,8 @@ class Gameboy:
         self.memctl.rom.burn_from(cartridge=cartridge)
 
     def interrupt_pending(self):
-        _if = self.memctl.read_at(0xFF0F)
-        _ie = self.memctl.read_at(0xFFFF)
+        _if = self.memctl.io_registers[0xFF0F].value
+        _ie = self.memctl.io_registers[0xFFFF].value
         return _if & _ie
 
     def debug_state(self, ins, colorama):

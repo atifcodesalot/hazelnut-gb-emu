@@ -64,9 +64,6 @@ class CPU:
         self.PC.value = (self.PC.value + 1) & 0xffff
         return opcode, prefixed
 
-    def dump_state(self):
-        return f"PC: {hex(self.PC)}, SP: {hex(self.SP)}, general_registers: {self.__dict__}"
-
     def set_flags(self, **values):
         for k in values.keys():
             if k not in self.flag_names:
@@ -792,15 +789,15 @@ class SM83(CPU):
 
     def disable_IF_at(self, IF, n):
         new_IF = BO.res_nth_bit(IF, n)
-        self.memory.write_to(0xFF0F, new_IF)
+        self.memory.io_registers[0xFF0F].value = new_IF
         self.set_flags_fast(IME=False)
 
     def handle_interrupts(self, gb):
         # interrupts are disabled, exit
         if not self.flags['IME']:
             return
-        IE = self.memory.read_at(0xFFFF)
-        IF = self.memory.read_at(0xFF0F)
+        IE = self.memory.io_registers[0xFFFF].value
+        IF = self.memory.io_registers[0xFF0F].value
         res = IF & IE
         # handle priorities
         if res & 1:
