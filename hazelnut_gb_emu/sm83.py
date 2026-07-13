@@ -42,27 +42,11 @@ class CPU:
         self.machine_cycles = 0
         self.HALT = False
 
-    def add_cycles(self, cycles):
-        self.machine_cycles += cycles
-
     # very fast, can be used for every register fetching and writing
     # also handles register increment and decrement if needed
     def register_guard(self, register_name):
         if register_name not in self.register_names:
             raise ValueError(f"Invalid register name: {register_name}")
-
-    def fetch_ins(self):
-        prefixed = False
-        opcode = self.memory.read_at(self.PC.value)
-
-        if opcode == 0xCB:
-            # the instruction is prefixed
-            self.PC.value = (self.PC.value + 1) & 0xffff
-            opcode = self.memory.read_at(self.PC.value)
-            prefixed = True
-
-        self.PC.value = (self.PC.value + 1) & 0xffff
-        return opcode, prefixed
 
     def set_flags(self, **values):
         for k in values.keys():
@@ -770,10 +754,28 @@ class SM83(CPU):
         return ins
 
     def instruction_cycle(self):
-        opcode, prefixed = self.fetch_ins()
+        # fetch
+        prefixed = False
+        opcode = self.memory.read_at(self.PC.value)
+
+        if opcode == 0xCB:
+            # the instruction is prefixed
+            self.PC.value = (self.PC.value + 1) & 0xffff
+            opcode = self.memory.read_at(self.PC.value)
+            prefixed = True
+
+        self.PC.value = (self.PC.value + 1) & 0xffff
+        #
+        # decode
         ins = self.decode(opcode, prefixed)
+        #
+        
+        # execute
         func = getattr(self, f"exe_INS_{ins.mnemonic}")
         func(ins)
+        #
+        
+        # handle pending interrupts
         if self.pending_interrupt_enable and not self.flags['IME']:
             if not self.enable_interrupts_now:
                 # ensure interrupts are enabled next cycle
@@ -784,6 +786,7 @@ class SM83(CPU):
                 # clear flags
                 self.enable_interrupts_now = False
                 self.pending_interrupt_enable = False
+        #
 
         return ins
 

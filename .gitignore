@@ -4,6 +4,7 @@ debugging/
 
 hazelnutlog.txt
 
+test_ROMS/*
 test_ROMS/
 
 # Byte-compiled / optimized / DLL files

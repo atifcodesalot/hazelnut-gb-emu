@@ -182,25 +182,7 @@ class GbPPU:
 
     def pixel_mixer(self, preg, BG_Window, sprite, sprite_obj):
         # if no winning pixel or sprite is transparent, return bg or window
-        if sprite is None or sprite == 0:
-            if BG_Window:
-                return self.get_shade(preg, BG_Window)
-            # if bg is also none, meaning bg and window is disabled (lcdc bit 0 is False)
-            return 0
-        else:
-            priority = sprite_obj[3] >> 7 & 1
-            # if priority bit is 0, then obj has priority over bg or window pxels
-            if not priority:
-                objpreg = self.memctl.io_registers[0xFF48 +
-                                                   (sprite_obj[3] >> 4 & 1)].value
-                return self.get_shade(objpreg, sprite)
-            else:
-                if BG_Window:
-                    return self.get_shade(preg, BG_Window)
-                objpreg = self.memctl.io_registers[0xFF48 +
-                                                   (sprite_obj[3] >> 4 & 1)].value
-                return self.get_shade(
-                    objpreg, sprite)
+        pass
 
     def drawing_mode(self, ctx):
         # todo: please refactor this function
@@ -261,8 +243,26 @@ class GbPPU:
             else:
                 sprite_pixel = sprite = None
 
-            final_shade = self.pixel_mixer(st_palette_reg,
-                                           static_pixel, sprite_pixel, sprite)
+            if sprite_pixel is None or sprite_pixel == 0:
+                if static_pixel:
+                    final_shade = self.get_shade(st_palette_reg, static_pixel)
+                else:
+                    # if bg is also none, meaning bg and window is disabled (lcdc bit 0 is False)
+                    final_shade = self.get_shade(st_palette_reg, 0)
+            else:
+                objpreg = self.memctl.io_registers[0xFF48 +
+                                                    (sprite[3] >> 4 & 1)].value
+                priority = sprite[3] >> 7 & 1
+                # if priority bit is 0, then obj has priority over bg or window pxels
+                if not priority:
+                    final_shade = self.get_shade(objpreg, sprite_pixel)
+                else:
+                    if static_pixel:
+                        final_shade = self.get_shade(st_palette_reg, static_pixel)
+                    else:
+                        final_shade = self.get_shade(
+                            objpreg, sprite_pixel)
+                        
             self.buffer[row_n + x] = final_shade
 
         if window_was_visible:
