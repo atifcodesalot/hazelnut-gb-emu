@@ -168,7 +168,7 @@ class SM83(CPU):
         if byte_count == 0:
             return None
         if byte_count == 1:
-            return (self.memory.read_at(ins_address + 1),)
+            return self.memory.read_at(ins_address + 1),
         if byte_count == 2:
             return (self.memory.read_at(ins_address + 1),
                     self.memory.read_at(ins_address + 2))
@@ -754,6 +754,7 @@ class SM83(CPU):
             raise AttributeError(f"{name} is not a valid attribute of CPU.")
 
     def decode(self, opcode, prefixed: bool):
+        pc = self.PC.value
         if prefixed:
             ins = GB_PREFIXED_OPCODES_JSON[opcode]
         else:
@@ -762,9 +763,9 @@ class SM83(CPU):
         # fetch instruction incremented PC by 1, so we need to -1 to get the correct operands
         operands = self.get_operands(
             # if the instruction is prefixed, fetch ins already incremented the PC
-            ins.byte_count - 1 - prefixl, self.PC.value - 1)
+            ins.byte_count - 1 - prefixl,  pc - 1)
         # skip the operands
-        self.PC.value = (self.PC.value + ins.byte_count - 1 - prefixl) & 0xffff
+        self.PC.value = (pc + ins.byte_count - 1 - prefixl) & 0xffff
         ins.operands_raw = operands
         return ins
 
