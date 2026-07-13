@@ -42,7 +42,7 @@ class GbPPU:
         lcdc_Q = lcdc >> map_control_bit & 1
         map_start = 0x1C00 if lcdc_Q else 0x1800
         lcdc_4 = lcdc >> 4 & 1
-        index = self.vram.get_byte_at(map_start + (py >> 3) * 32 + (px >> 3))
+        index = self.vram.array[map_start + (py >> 3) * 32 + (px >> 3)]
         offset = 0x0000 if lcdc_4 else 0x1000
         tile_offset = offset + index * 16 if lcdc_4 else offset + \
             BO.byte_twos_complement(index) * 16
@@ -199,14 +199,16 @@ class GbPPU:
             return 0
         else:
             priority = sprite_obj[3] >> 7 & 1
-            objpreg = self.memctl.io_registers[0xFF48 +
-                                               (sprite_obj[3] >> 4 & 1)].value
             # if priority bit is 0, then obj has priority over bg or window pxels
             if not priority:
+                objpreg = self.memctl.io_registers[0xFF48 +
+                                               (sprite_obj[3] >> 4 & 1)].value
                 return self.get_shade(objpreg, sprite)
             else:
                 if BG_Window:
                     return self.get_shade(preg, BG_Window)
+                objpreg = self.memctl.io_registers[0xFF48 +
+                                               (sprite_obj[3] >> 4 & 1)].value
                 return self.get_shade(
                     objpreg, sprite)
 

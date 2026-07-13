@@ -23,8 +23,9 @@ class RAM:
         if i >= self.size or i < 0:
             raise IndexError(f"Address out of bounds: {hex(i)} for {self}.")
 
+    # dont call it on hot paths
     def get_byte_at(self, i) -> int:
-        # self.address_range_guard(i)
+        self.address_range_guard(i)
         return self.array[i]
 
     def get_block_at(self, i, block_size) -> bytearray:
@@ -241,18 +242,18 @@ class GBMemoryController:
             # Boot ROM overlays 0x0000-0x00FF while enabled
             if a <= 0x00FF and self.boot_enabled:
                 # or boot_rom[a] if bytearray
-                return self.boot_rom.get_byte_at(a)
+                return self.boot_rom.array[a]
             if self.bank_switching is not None:
                 # logger.debug(f"Bank switching read at address {hex(a)}")
                 return self.mbc.read(a, rom=True)
             else:
                 # logger.debug(f"Reading from ROM at address {hex(a)}")
                 # simply get the byte from ROM
-                return self.rom.get_byte_at(a)
+                return self.rom.array[a]
 
         # --- VRAM ---
         if a < 0xA000:
-            return self.vram.get_byte_at(a - 0x8000)
+            return self.vram.array[a - 0x8000]
 
         # --- External RAM ---
         if a < 0xC000:
@@ -263,7 +264,7 @@ class GBMemoryController:
 
         # --- WRAM (C000-DFFF) ---
         if a < 0xE000:
-            return self.ram.get_byte_at(a - 0xC000)
+            return self.ram.array[a - 0xC000]
 
         # --- Echo RAM unusable yet (E000-FDFF) ---
         if a < 0xFE00:
@@ -286,7 +287,7 @@ class GBMemoryController:
 
         # --- HRAM (FF80-FFFE) ---
         if a < 0xFFFF:
-            return self.hram.get_byte_at(a - 0xFF80)
+            return self.hram.array[a - 0xFF80]
 
         # --- IE (FFFF) ---
         return self.io_registers[0xFFFF].value

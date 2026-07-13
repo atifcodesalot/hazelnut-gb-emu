@@ -163,15 +163,7 @@ class SM83(CPU):
     def flags_register(self):
         return (self.flags['Z'] << 7) | (self.flags['N'] << 6) |\
             (self.flags['H'] << 5) | (self.flags['C'] << 4)
-
-    def get_operands(self, byte_count, ins_address):
-        if byte_count == 0:
-            return None
-        if byte_count == 1:
-            return self.memory.read_at(ins_address + 1),
-        if byte_count == 2:
-            return (self.memory.read_at(ins_address + 1),
-                    self.memory.read_at(ins_address + 2))
+        
 
     # Load, copy related instructions start here
     ###
@@ -754,19 +746,30 @@ class SM83(CPU):
             raise AttributeError(f"{name} is not a valid attribute of CPU.")
 
     def decode(self, opcode, prefixed: bool):
-        pc = self.PC.value
+        # get ins from the tables
         if prefixed:
             ins = GB_PREFIXED_OPCODES_JSON[opcode]
         else:
             ins = GB_UNPREFIXED_OPCODES_JSON[opcode]
+            
+        # operand length
+        ol = ins.byte_count
+        
         prefixl = 1 if prefixed else 0
-        # fetch instruction incremented PC by 1, so we need to -1 to get the correct operands
-        operands = self.get_operands(
-            # if the instruction is prefixed, fetch ins already incremented the PC
-            ins.byte_count - 1 - prefixl,  pc - 1)
-        # skip the operands
-        self.PC.value = (pc + ins.byte_count - 1 - prefixl) & 0xffff
-        ins.operands_raw = operands
+        bc = ins.byte_count - 1 - prefixl
+        
+        if bc == 0:
+            operands_raw = None
+        if bc == 1:
+            operands_raw = (self.memory.read_at(self.PC.value),)
+        if bc == 2:
+            operands_raw = (self.memory.read_at(self.PC.value),
+                    self.memory.read_at(self.PC.value + 1))
+        
+        ins.operands_raw = operands_raw
+        
+        # inc PC
+        self.PC.value = (self.PC.value + ol - 1 - prefixl) & 0xffff
         return ins
 
     def instruction_cycle(self):
