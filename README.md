@@ -2,6 +2,10 @@
 This is a gameboy emulator written with python and pygame.
 ![Gameplay showcase](showcases/showcase.gif)
 
+## Some Screenshots
+#### Bombjack
+![Bombjack ss](showcases/resim.png)
+
 
 ## How to download and play
 
@@ -36,6 +40,10 @@ Windows:
 - The APU unit is not implemented yet, hence no sound.
 - the STOP instruction isn't implemented yet.
 - Serial transfer is not implemented yet, resulting in bugs in Alleyway for example.
+
+## Credits and AI usage
+%99 of the code and the full CPU, PPU implementation is written by me, only. Rarely, some functions were refactored, enchanced by AI: no code was generated from scratch.
+AI was used extensively, only for; bug hunting, diassembly and optimization problems. 
 
 ## Known bugs
 
