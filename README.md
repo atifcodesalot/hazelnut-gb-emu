@@ -3,8 +3,8 @@ This is a gameboy emulator written with python and pygame.
 ![Gameplay showcase](showcases/showcase.gif)
 
 ## Some Screenshots
-#### Bombjack
 ![Bombjack ss](showcases/resim.png)
+
 ![Metroid](showcases/metroid.png)
 
 
