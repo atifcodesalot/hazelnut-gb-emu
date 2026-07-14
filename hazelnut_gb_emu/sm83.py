@@ -4,7 +4,7 @@ from .loader import (GB_PREFIXED_OPCODES_JSON,
                      GB_UNPREFIXED_OPCODES_JSON, GameboyInstruction)
 from . import logger
 from .memory import *
-from .aux import BO
+from .auxiliary import BO
 
 
 class PairRegister:
