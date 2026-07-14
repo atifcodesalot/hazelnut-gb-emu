@@ -211,19 +211,6 @@ class Gameboy:
                 {colorama.Fore.YELLOW}{ins}{colorama.Style.RESET_ALL}")
         print(self.SM83_processor.dump_state_colorama(colorama=colorama))
 
-    # for doctor gameboy
-    def log_pc_state(self, logfile):
-        AA = self.memctl.read_at(
-            self.SM83_processor.get_register('PC'))
-        BB = self.memctl.read_at(
-            self.SM83_processor.get_register('PC') + 1)
-        CC = self.memctl.read_at(
-            self.SM83_processor.get_register('PC') + 2)
-        DD = self.memctl.read_at(
-            self.SM83_processor.get_register('PC') + 3)
-        with open(logfile, 'a') as f:
-            f.write(f"A:{self.SM83_processor.get_register('A'):02X} F:{self.SM83_processor.flags_register():02X} B:{self.SM83_processor.get_register('B'):02X} C:{self.SM83_processor.get_register('C'):02X} D:{self.SM83_processor.get_register('D'):02X} E:{self.SM83_processor.get_register('E'):02X} H:{self.SM83_processor.get_register('H'):02X} L:{self.SM83_processor.get_register('L'):02X} SP:{self.SM83_processor.get_register('SP'):04X} PC:{self.SM83_processor.get_register('PC'):04X} PCMEM:{AA:02X},{BB:02X},{CC:02X},{DD:02X}\n")
-
 
 # A session controller for the gameboy class
 # Takes the gb instance and spawns two threads:
