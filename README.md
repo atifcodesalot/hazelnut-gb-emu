@@ -61,7 +61,7 @@ Windows:
 - Only MBC1 and MBC3 are implemented for bank switching.
 - It runs slower than the actual gameboy most of the time.
 - The APU unit is not implemented yet, hence no sound.
-- the STOP instruction isn't implemented yet.
+- the STOP instruction isn't implemented yet. :poop:
 - Serial transfer is not implemented yet, resulting in bugs in Alleyway for example.
 
 ## Credits and AI usage
