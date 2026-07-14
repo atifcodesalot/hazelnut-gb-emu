@@ -824,7 +824,7 @@ class SM83(CPU):
             gb.tick_timers(dots=20)
             self.disable_IF_at(IF, 3)
             return
-        elif (res >> 4) & 1:
+        elif res >> 4 & 1:
             self.call(0x60)
             gb.tick_timers(dots=20)
             self.disable_IF_at(IF, 4)

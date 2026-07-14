@@ -48,8 +48,10 @@ class Gameboy:
         self.DMA = False
 
         self.debug = False
-        
+
         self.running = True
+
+        self.cpu_debt = 0
 
     def turn_on_LCD(self):
         self.memctl[0xFF40] = 0x91
@@ -71,7 +73,7 @@ class Gameboy:
         TIMA_en = (TAC >> 2) & 1
         if TIMA_en:
             self.handle_TIMA(old_cycles=self.cycles, elapsed=dots)
-        self.cycles = (self.cycles + dots) & 0xffff
+        self.cycles = (self.cycles + dots) 
         self.handle_DIV()
 
     def CPU_burst(self, clock_cycles):
@@ -92,7 +94,11 @@ class Gameboy:
 
             if self.SM83_processor.HALT:
                 self.tick_timers(clock_cycles - cycles_passed)
-                break
+                self.cpu_debt = 0
+                return
+
+        # get debt
+        self.cpu_debt = cycles_passed - clock_cycles
 
     def handle_DIV(self):
         self.memctl.io_registers[0xFF04].value = (self.cycles >> 8) & 0xff
@@ -114,18 +120,20 @@ class Gameboy:
         # copy 160 bytes to OAM
         for i in range(0xA0):
             m.OAM[i] = m.read_at(source + i)
+        # takes 640 dots
+        self.tick_timers(640)
         # logger.debug("ending DMA...")
         # logger.debug(f"OAM:{self.memctl.OAM}")
 
     def scanline_PPU_modes(self):
         # timer tick are inside cpu burst calls
         self.PPU.OAM_scan(self.PPU.get_context())
-        self.CPU_burst(80)
+        self.CPU_burst(80 - self.cpu_debt)
         # recall because CPU burst may change the context
         self.PPU.drawing_mode(self.PPU.get_context())
-        self.CPU_burst(172)
+        self.CPU_burst(172 - self.cpu_debt)
         self.PPU.HBLANK_mode()
-        self.CPU_burst(204)
+        self.CPU_burst(204 - self.cpu_debt)
 
     def tick_PPU_modes_basis(self):
         lcdc = self.memctl.io_registers[0xFF40].value
@@ -159,6 +167,7 @@ class Gameboy:
             self.PPU.enter_VBLANK()
 
         self.PPU.inc_ly()
+
         # handle real keyboard inputs from the user
         self.handle_inputs()
 
