@@ -138,7 +138,7 @@ class GbPPU:
         ly = self.memctl.io_registers[0xFF44].value
         lyc = self.memctl.io_registers[0xFF45].value
         STAT = self.memctl.io_registers[0xFF41]
-        if ly == lyc:
+        if ly == lyc and not STAT.value >> 2 & 1:
             if STAT.value >> 6 & 1:
                 # request STAT int
                 IF = self.memctl.io_registers[0xFF0F].value
@@ -148,7 +148,8 @@ class GbPPU:
             new_STAT = BO.set_nth_bit(STAT.value, 2)
             STAT.value = new_STAT
         else:
-            if BO.set_nth_bit(STAT.value, 2):
+            # clear if STAT's lyc == ly bit was true
+            if STAT.value >> 2 & 1:
                 new_STAT = BO.res_nth_bit(STAT.value, 2)
                 STAT.value = new_STAT
 
@@ -179,10 +180,6 @@ class GbPPU:
         new_STAT = BO.set_nth_bit(STAT.value, 0)
         new_STAT = BO.set_nth_bit(new_STAT, 1)
         STAT.value = new_STAT
-
-    def pixel_mixer(self, preg, BG_Window, sprite, sprite_obj):
-        # if no winning pixel or sprite is transparent, return bg or window
-        pass
 
     def drawing_mode(self, ctx):
         # todo: please refactor this function
@@ -274,6 +271,7 @@ class GbPPU:
         self.enter_OAM()
         lcdc_1 = lcdc >> 1 & 1
         if not lcdc_1:
+            self.dots += 80
             return
         lcdc_2 = lcdc >> 2 & 1
         self.mode = 2
@@ -318,8 +316,9 @@ class GbPPU:
 
     def handle_VBLANK(self):
         # do other stuff ?
-        self.handle_LY_compare()
+        self.dots += 456
         self.inc_ly()
+        self.handle_LY_compare()
 
     def inc_ly(self):
         ly = self.memctl.io_registers[0xFF44]
