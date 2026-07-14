@@ -9,6 +9,7 @@ from .cartridge import Cartridge
 from .auxiliary import BO
 import os
 import threading
+import time
 
 
 pyclock = pygame.time.Clock()
@@ -35,7 +36,7 @@ class Gameboy:
     }
 
     def __init__(self):
-        self.set_display()
+        self.screen = None
         self.input_state = 255
         self.TIMA_hertz = [256*4, 16, 64, 256]
         self.memctl = GBMemoryController(
@@ -162,7 +163,6 @@ class Gameboy:
             # update real display at the end of scanline
             pygame.display.flip()
             # ensure framerate is 60
-            pyclock.tick(60)
             #
             self.PPU.enter_VBLANK()
 
@@ -352,14 +352,19 @@ class SessionController:
         pass
 
     def display(self):
+        self.gameboy.set_display()
         clock = pygame.time.Clock()
         while self.gameboy.running:
             self.draw_inputs()
             self.draw_cosmetic()
-            clock.tick(20)
+            pygame.event.pump()
+            clock.tick(60)
 
     def main(self):
-        self.emu_thread = threading.Thread(target=self.emulate)
         self.disp_thread = threading.Thread(target=self.display)
-        self.emu_thread.start()
+        self.emu_thread = threading.Thread(target=self.emulate)
         self.disp_thread.start()
+        while self.gameboy.screen is None:
+            # wait for display init
+            continue
+        self.emu_thread.start()

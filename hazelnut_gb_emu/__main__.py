@@ -53,8 +53,6 @@ def main():
             controller.play()
     except IndexError:
         controller.main()
-        controller.emu_thread.join()
-        controller.disp_thread.join()
         
         
 
