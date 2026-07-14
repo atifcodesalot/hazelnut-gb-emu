@@ -5,6 +5,7 @@ This is a gameboy emulator written with python and pygame.
 ## Some Screenshots
 #### Bombjack
 ![Bombjack ss](showcases/resim.png)
+![Metroid](showcases/metroid.png)
 
 
 ## How to download and play
