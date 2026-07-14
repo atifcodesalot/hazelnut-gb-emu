@@ -1,7 +1,6 @@
 
 
-from ast import Interactive
-from dataclasses import dataclass
+from . import dataclass
 
 
 NINTENDO_LOGO = bytearray.fromhex(

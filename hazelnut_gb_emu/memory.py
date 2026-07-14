@@ -1,5 +1,5 @@
 
-from .aux import BO
+from .auxiliary import BO
 from .cartridge import Cartridge
 from . import logger
 from . import IOhole, Register

@@ -6,7 +6,7 @@ from .memory import *
 
 import colorama
 from .cartridge import Cartridge
-from .aux import BO
+from .auxiliary import BO
 import os
 import threading
 
