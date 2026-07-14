@@ -4,7 +4,9 @@ This is a gameboy emulator written with python and pygame.
 
 ## Some Screenshots
 ![Bombjack ss](showcases/resim.png)
-![Metroid](showcases/metroid.png)
+![Metroid ss](showcases/metroid.png)
+![Wario land ss](showcases/wario.png)
+![Harvest moon ss](showcases/hmoon.png)
 
 
 ## How to download and play
