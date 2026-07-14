@@ -1,7 +1,7 @@
 
 
 from .memory import GBMemoryController
-from .aux import ByteOperator as BO, string_to_rgb as s2rgb
+from .auxiliary import ByteOperator as BO, string_to_rgb as s2rgb
 import pygame
 from . import logger
 
