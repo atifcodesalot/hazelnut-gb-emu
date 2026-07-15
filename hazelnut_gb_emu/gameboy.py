@@ -143,7 +143,6 @@ class Gameboy:
         if not lcdc >> 7 & 1:
             self.PPU.disable()
             self.CPU_burst(456)
-            pygame.display.flip()
             return
 
         ly = self.memctl.io_registers[0xFF44].value
@@ -160,8 +159,6 @@ class Gameboy:
 
         # if just finished the last visible scanline
         if ly == GB_LCD_RES[1] - 1:
-            # update real display at the end of scanline
-            pygame.display.flip()
             # ensure framerate is 60
             #
             self.PPU.enter_VBLANK()
@@ -358,6 +355,7 @@ class SessionController:
             self.draw_inputs()
             self.draw_cosmetic()
             pygame.event.pump()
+            pygame.display.flip()
             clock.tick(60)
 
     def main(self):
