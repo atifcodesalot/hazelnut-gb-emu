@@ -260,7 +260,7 @@ class GBMemoryController:
         if a < 0xFE00:
             return 0xFF
 
-        # --- OAM (FE00-FE9F) marked unimplemented in your map ---
+        # --- OAM (FE00-FE9F)  ---
         if a < 0xFEA0:
             return self.OAM[a - 0xFE00]
 
@@ -313,8 +313,6 @@ class GBMemoryController:
             return
 
         # --- Echo RAM (E000-FDFF) ---
-        # SOme emulators mark this as None/unusable. Real HW mirrors C000-DDFF.
-        # Choose one behavior. For speed + later correctness, mirroring is nice:
         if a < 0xFE00:
             # mirror to C000-DDFF region
             self.ram.write_to(a - 0xE000, v)
@@ -333,7 +331,7 @@ class GBMemoryController:
         if a < 0xFF80:
             # Boot ROM disable register (FF50)
             if a == 0xFF50:
-                # Any nonzero write disables boot ROM on DMG
+                # Any nonzero write disables boot ROM 
                 self.disable_boot_rom()
                 return
 
