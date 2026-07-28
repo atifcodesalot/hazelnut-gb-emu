@@ -5,6 +5,9 @@ from .loader import (GB_PREFIXED_OPCODES_JSON,
 from . import logger
 from .memory import *
 from .auxiliary import BO
+from . import Register
+
+
 
 
 class PairRegister:
@@ -30,9 +33,8 @@ class PairRegister:
 
 
 class CPU:
-    def __init__(self, memory, peripherals, general_registers: list[Register], flags, PC, SP=None):
+    def __init__(self, memory, general_registers: list[Register], flags, PC, SP=None):
         self.memory = memory
-        self.peripherals = peripherals
         self.register_names = list(general_registers.keys()) + ["PC", "SP"]
         self.flag_names = flags.keys()
         self.__dict__.update(general_registers)
@@ -121,7 +123,7 @@ class SM83(CPU):
             'HL', general_registers['H'], general_registers['L'])
 
         flags = {'Z': False, 'N': False, 'H': False, 'C': False, 'IME': False}
-        super().__init__(memory, [],
+        super().__init__(memory,
                          general_registers, flags,
                          PC=r16bit('PC'),
                          SP=r16bit('SP'))
@@ -144,7 +146,6 @@ class SM83(CPU):
     def flags_register(self):
         return (self.flags['Z'] << 7) | (self.flags['N'] << 6) |\
             (self.flags['H'] << 5) | (self.flags['C'] << 4)
-        
 
     # Load, copy related instructions start here
     ###
@@ -732,23 +733,23 @@ class SM83(CPU):
             ins = GB_PREFIXED_OPCODES_JSON[opcode]
         else:
             ins = GB_UNPREFIXED_OPCODES_JSON[opcode]
-            
+
         # operand length
         ol = ins.byte_count
-        
+
         prefixl = 1 if prefixed else 0
         bc = ins.byte_count - 1 - prefixl
-        
+
         if bc == 0:
             operands_raw = None
         if bc == 1:
             operands_raw = (self.memory.read_at(self.PC.value),)
         if bc == 2:
             operands_raw = (self.memory.read_at(self.PC.value),
-                    self.memory.read_at(self.PC.value + 1))
-        
+                            self.memory.read_at(self.PC.value + 1))
+
         ins.operands_raw = operands_raw
-        
+
         # inc PC
         self.PC.value = (self.PC.value + ol - 1 - prefixl) & 0xffff
         return ins
@@ -769,12 +770,12 @@ class SM83(CPU):
         # decode
         ins = self.decode(opcode, prefixed)
         #
-        
+
         # execute
         func = getattr(self, f"exe_INS_{ins.mnemonic}")
         func(ins)
         #
-        
+
         # handle pending interrupts
         if self.pending_interrupt_enable and not self.flags['IME']:
             if not self.enable_interrupts_now:
@@ -792,15 +793,15 @@ class SM83(CPU):
 
     def disable_IF_at(self, IF, n):
         new_IF = BO.res_nth_bit(IF, n)
-        self.memory.io_registers[0xFF0F].value = new_IF
+        self.memory.io_registers[0xFF0F] = new_IF
         self.set_flags_fast(IME=False)
 
     def handle_interrupts(self, gb):
         # interrupts are disabled, exit
         if not self.flags['IME']:
             return
-        IE = self.memory.io_registers[0xFFFF].value
-        IF = self.memory.io_registers[0xFF0F].value
+        IE = self.memory.io_registers[0xFFFF]
+        IF = self.memory.io_registers[0xFF0F]
         res = IF & IE
         # handle priorities
         if res & 1:
