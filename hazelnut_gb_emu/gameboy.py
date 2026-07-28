@@ -3,6 +3,7 @@
 from .sm83 import *
 from .PPU import *
 from .memory import *
+from .sound import *
 
 import colorama
 from .cartridge import Cartridge
@@ -43,6 +44,7 @@ class Gameboy:
             self, ext_ram=False)
         self.SM83_processor = SM83(self.memctl)
         self.PPU = GbPPU(self.memctl)
+        self.APU = GbAPU(self.memctl, self)
         # 16 bit internal divider register value
         self.cycles = 0
         #
@@ -70,22 +72,25 @@ class Gameboy:
             return True
 
     def tick_timers(self, dots):
-        TAC = self.memctl.io_registers[0xFF07].value
+        TAC = self.memctl.io_registers[0xFF07]
         TIMA_en = (TAC >> 2) & 1
         if TIMA_en:
             self.handle_TIMA(old_cycles=self.cycles, elapsed=dots)
         self.cycles = (self.cycles + dots) 
         self.handle_DIV()
 
-    def CPU_burst(self, clock_cycles):
+    def CPU_APU_burst(self, clock_cycles):
         if self.SM83_processor.HALT:
             if not self.handle_cpu_halt():
                 self.tick_timers(clock_cycles)
+                # self.APU.tick_cycles(clock_cycles)
                 return
         cycles_passed = 0
         while cycles_passed < clock_cycles:
             ins, ins_cycles = self.SM83_processor.tick_one_ins(self)
             self.tick_timers(ins_cycles)
+            # if self.APU.audio_on:
+            #     self.APU.tick_cycles(ins_cycles)
             # if self.debug:
             #     self.debug_state(ins, colorama=colorama)
             #     if self.memctl.io_registers[0xFF0F].value != 0:
@@ -102,10 +107,10 @@ class Gameboy:
         self.cpu_debt = cycles_passed - clock_cycles
 
     def handle_DIV(self):
-        self.memctl.io_registers[0xFF04].value = (self.cycles >> 8) & 0xff
+        self.memctl.io_registers[0xFF04] = (self.cycles >> 8) & 0xff
 
     def handle_TIMA(self, old_cycles, elapsed):
-        TAC = self.memctl.io_registers[0xFF07].value
+        TAC = self.memctl.io_registers[0xFF07]
         mc = self.TIMA_hertz[TAC & 0b11]
         old = old_cycles // mc
         new = (old_cycles + elapsed) // mc
@@ -117,7 +122,7 @@ class Gameboy:
         # logger.debug("starting DMA...")
         m = self.memctl
         self.DMA = True
-        source = (m.io_registers[0xFF46].value) * 0x100
+        source = (m.io_registers[0xFF46]) * 0x100
         # copy 160 bytes to OAM
         for i in range(0xA0):
             m.OAM[i] = m.read_at(source + i)
@@ -129,27 +134,27 @@ class Gameboy:
     def scanline_PPU_modes(self):
         # timer tick are inside cpu burst calls
         self.PPU.OAM_scan(self.PPU.get_context())
-        self.CPU_burst(80 - self.cpu_debt)
+        self.CPU_APU_burst(80 - self.cpu_debt)
         # recall because CPU burst may change the context
         self.PPU.drawing_mode(self.PPU.get_context())
-        self.CPU_burst(172 - self.cpu_debt)
+        self.CPU_APU_burst(172 - self.cpu_debt)
         self.PPU.HBLANK_mode()
-        self.CPU_burst(204 - self.cpu_debt)
+        self.CPU_APU_burst(204 - self.cpu_debt)
 
     def tick_PPU_modes_basis(self):
-        lcdc = self.memctl.io_registers[0xFF40].value
+        lcdc = self.memctl.io_registers[0xFF40]
 
         # clear the lcd if PPU is disabled
         if not lcdc >> 7 & 1:
             self.PPU.disable()
-            self.CPU_burst(456)
+            self.CPU_APU_burst(456)
             return
 
-        ly = self.memctl.io_registers[0xFF44].value
+        ly = self.memctl.io_registers[0xFF44]
 
         if self.PPU.is_VBLANK_scan(ly):
             # cpu burst then inc ly and handle lyc compare
-            self.CPU_burst(456)
+            self.CPU_APU_burst(456)
             self.PPU.handle_VBLANK()
             return
 
@@ -198,8 +203,8 @@ class Gameboy:
         self.memctl.rom.burn_from(cartridge=cartridge)
 
     def interrupt_pending(self):
-        _if = self.memctl.io_registers[0xFF0F].value
-        _ie = self.memctl.io_registers[0xFFFF].value
+        _if = self.memctl.io_registers[0xFF0F]
+        _ie = self.memctl.io_registers[0xFFFF]
         return _if & _ie
 
     def debug_state(self, ins, colorama):
