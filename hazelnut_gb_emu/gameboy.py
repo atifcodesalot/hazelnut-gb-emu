@@ -81,19 +81,12 @@ class Gameboy:
         if self.SM83_processor.HALT:
             if not self.handle_cpu_halt():
                 self.tick_timers(clock_cycles)
-                # self.APU.tick_cycles(clock_cycles)
+                self.cpu_debt = 0
                 return
         cycles_passed = 0
         while cycles_passed < clock_cycles:
             ins, ins_cycles = self.SM83_processor.tick_one_ins(self)
             self.tick_timers(ins_cycles)
-            # if self.APU.audio_on:
-            #     self.APU.tick_cycles(ins_cycles)
-            # if self.debug:
-            #     self.debug_state(ins, colorama=colorama)
-            #     if self.memctl.io_registers[0xFF0F].value != 0:
-            #         print(self.memctl.io_registers[0xFF0F])
-            #     print(self.memctl.io_registers[0xFF05].value)
             cycles_passed += ins_cycles
 
             if self.SM83_processor.HALT:
@@ -155,10 +148,12 @@ class Gameboy:
             self.CPU_APU_burst(456)
             self.PPU.handle_VBLANK()
             return
-
-        self.PPU.handle_LY_compare()
-
+        
+        
         self.scanline_PPU_modes()
+        
+        self.PPU.inc_ly()
+        self.PPU.handle_LY_compare()
 
         # if just finished the last visible scanline
         if ly == GB_LCD_RES[1] - 1:
@@ -166,7 +161,6 @@ class Gameboy:
             #
             self.PPU.enter_VBLANK()
 
-        self.PPU.inc_ly()
 
         # handle real keyboard inputs from the user
         self.handle_inputs()
