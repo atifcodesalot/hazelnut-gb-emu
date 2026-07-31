@@ -70,5 +70,6 @@ AI was used extensively, only for; bug hunting, diassembly and optimization prob
 
 ## Known bugs
 
-- Alleyway serial bug
-- Street Fighter 2 periodically rendering giberrish due to PPU and CPU sync problems.
+- Alleyway and Mortal Kombat refuse to run due to serial transfer not being implemented yet
+- Street Fighter 2 periodically rendering giberrish due to PPU and CPU sync problems (fixed)
+- SuperStar Wars character sprite not rendering
