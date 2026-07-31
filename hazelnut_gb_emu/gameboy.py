@@ -3,7 +3,6 @@
 from .sm83 import *
 from .PPU import *
 from .memory import *
-from .sound import *
 
 import colorama
 from .cartridge import Cartridge
@@ -44,7 +43,6 @@ class Gameboy:
             self, ext_ram=False)
         self.SM83_processor = SM83(self.memctl)
         self.PPU = GbPPU(self.memctl)
-        self.APU = GbAPU(self.memctl, self)
         # 16 bit internal divider register value
         self.cycles = 0
         #
