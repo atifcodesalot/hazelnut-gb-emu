@@ -89,7 +89,6 @@ class GbPPU:
             if xflip:
                 rpx = 7 - rpx
 
-
             pixel = self.get_pixel_SPRITE(row, rpx)
 
             # OBJ color 0 is transparent
@@ -180,6 +179,10 @@ class GbPPU:
         new_STAT = BO.set_nth_bit(STAT, 0)
         new_STAT = BO.set_nth_bit(new_STAT, 1)
         self.memctl.io_registers[0xFF41] = new_STAT
+        lcdc = self.memctl.io_registers[0xFF40] 
+        ly = self.memctl.io_registers[0xFF44]
+        sprite_height = 16 if lcdc >> 2 & 1 else 8
+        self.cache_sprite_rows(sprite_height, ly)
 
     def drawing_mode(self, ctx):
         # todo: please refactor this function
@@ -233,9 +236,9 @@ class GbPPU:
                 static_pixel = BG_pixel if not window_active else W_pixel
             else:
                 static_pixel = None
-                
+
             # call sprite pixel function only if there are sprites
-            if self.sprites:
+            if self.sprites and (lcdc >> 1) & 1:
                 sprite_pixel, sprite = self.get_winning_pixel_SPRITE(x)
             else:
                 sprite_pixel = sprite = None
@@ -248,18 +251,19 @@ class GbPPU:
                     final_shade = self.get_shade(st_palette_reg, 0)
             else:
                 objpreg = self.memctl.io_registers[0xFF48 +
-                                                    (sprite[3] >> 4 & 1)]
+                                                   (sprite[3] >> 4 & 1)]
                 obj_priority = sprite[3] >> 7 & 1
                 # if priority bit is 0, then obj has priority over bg or window pxels
                 if not obj_priority:
                     final_shade = self.get_shade(objpreg, sprite_pixel)
                 else:
                     if static_pixel:
-                        final_shade = self.get_shade(st_palette_reg, static_pixel)
+                        final_shade = self.get_shade(
+                            st_palette_reg, static_pixel)
                     else:
                         final_shade = self.get_shade(
                             objpreg, sprite_pixel)
-                        
+
             self.buffer[row_n + x] = final_shade
 
         if window_was_visible:
@@ -284,11 +288,9 @@ class GbPPU:
 
         # only 10 sprites max for each scanline
         self.sprites = self.sprites[:10]
-        # cache sprite rows
-        self.cache_sprite_rows(sprite_height, ly)
 
         self.dots += 80
-        
+
     def cache_sprite_rows(self, sprite_height, py):
         for sr in self.sprites:
             sy = sr[0] - 16
@@ -298,7 +300,7 @@ class GbPPU:
             rpy = py - sy
 
             # handle Y flip
-            if info & 0x40:  
+            if info & 0x40:
                 rpy = sprite_height - 1 - rpy
 
             if sprite_height == 16:
