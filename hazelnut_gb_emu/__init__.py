@@ -17,8 +17,3 @@ class Register:
 
     def __repr__(self):
         return str(self.value)
-
-
-@dataclass
-class IOhole:
-    value: int
