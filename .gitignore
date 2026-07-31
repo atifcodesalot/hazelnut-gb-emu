@@ -1,8 +1,10 @@
 
+# custom
 doctor/
 debugging/
 
 hazelnutlog.txt
+profile_stats
 
 test_ROMS/*
 test_ROMS
