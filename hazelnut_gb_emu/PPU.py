@@ -147,7 +147,7 @@ class GbPPU:
 
             new_STAT = BO.set_nth_bit(STAT, 2)
             self.memctl.io_registers[0xFF41] = new_STAT
-        else:
+        elif ly != lyc:
             # clear if STAT's lyc == ly bit was true
             if STAT >> 2 & 1:
                 new_STAT = BO.res_nth_bit(STAT, 2)
@@ -249,9 +249,9 @@ class GbPPU:
             else:
                 objpreg = self.memctl.io_registers[0xFF48 +
                                                     (sprite[3] >> 4 & 1)]
-                priority = sprite[3] >> 7 & 1
+                obj_priority = sprite[3] >> 7 & 1
                 # if priority bit is 0, then obj has priority over bg or window pxels
-                if not priority:
+                if not obj_priority:
                     final_shade = self.get_shade(objpreg, sprite_pixel)
                 else:
                     if static_pixel:

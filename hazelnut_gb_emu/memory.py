@@ -334,6 +334,11 @@ class GBMemoryController:
                 # Any nonzero write disables boot ROM 
                 self.disable_boot_rom()
                 return
+            
+            if a == 0xFF45:
+                self.io_registers[0xFF45] = v
+                self.gameboy.PPU.handle_LY_compare()
+                return 
 
             if a == 0xFF46:
                 self.gameboy.start_DMA()
@@ -352,7 +357,6 @@ class GBMemoryController:
                 self.handle_TAC_write(v)
                 return
 
-            reg = self.io_registers.get(a)
             if a not in self.io_registers:
                 # unimplemented/unused IO, ignore
                 return
