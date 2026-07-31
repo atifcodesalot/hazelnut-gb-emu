@@ -1,7 +1,7 @@
 
 from .auxiliary import BO
 from .cartridge import Cartridge
-from . import logger
+from . import logger, Register
 import math
 from .MBCs import MBC1, MBC3
 
@@ -108,6 +108,9 @@ class GBMemoryController:
         self.ext_ram = RAM(addressable_bits=13)
         self.hram = RAM(addressable_bits=7)  # 127B
         self.OAM = bytearray(160)
+        
+        def r8bit(name): return Register(
+                    name=name, value=0, max_value=0xFF, bit_length=8)
     
         # Note: Audio, serial transfer registers are not implemented.
         self.io_registers = {
@@ -127,7 +130,7 @@ class GBMemoryController:
 
             # --- Sound (stub for now) ---
             # FF10–FF3F
-            **{addr: 0 for addr in range(0xFF10, 0xFF40)},
+            **{addr: r8bit(f"SND_{addr & 0xF}") for addr in range(0xFF10, 0xFF40)},
 
             # --- LCD / PPU ---
             0xFF40: 0, # LCDC
@@ -260,7 +263,7 @@ class GBMemoryController:
         if a < 0xFE00:
             return 0xFF
 
-        # --- OAM (FE00-FE9F) marked unimplemented in your map ---
+        # --- OAM (FE00-FE9F) ---
         if a < 0xFEA0:
             return self.OAM[a - 0xFE00]
 
@@ -272,6 +275,9 @@ class GBMemoryController:
         if a < 0xFF80:
             if a == 0xFF00:
                 return self.handle_joypad_read()
+            
+            if 0xFF40 > a >= 0xFF10:
+                return self.io_registers[a].value
 
             return self.io_registers.get(a, 0xFF)
 
@@ -353,8 +359,13 @@ class GBMemoryController:
             if a == 0xFF07:
                 self.handle_TAC_write(v)
                 return
+            
+            if 0xFF40 > a >= 0xFF10:
+                self.io_registers[a].value = v
+                for ch in self.gameboy.APU.gb_channels:
+                    ch.update()
+                return 
 
-            reg = self.io_registers.get(a)
             if a not in self.io_registers:
                 # unimplemented/unused IO, ignore
                 return
