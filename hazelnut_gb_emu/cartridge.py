@@ -299,8 +299,8 @@ class CartridgeReader:
         "global_checksum": (0x14E, 0x14F)
     }
 
-    def __init__(self, filename):
-        self.file = open(filename, "rb")
+    def __init__(self, file):
+        self.file = file
 
     def read(self):
         self.content = bytearray(self.file.read())
