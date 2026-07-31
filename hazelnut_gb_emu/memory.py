@@ -2,7 +2,6 @@
 from .auxiliary import BO
 from .cartridge import Cartridge
 from . import logger
-from . import IOhole, Register
 import math
 from .MBCs import MBC1, MBC3
 
@@ -91,9 +90,6 @@ class VRAM(RAM):
     pass
 
 
-hole = IOhole(0xFF)
-
-
 class GBMemoryController:
     def __init__(self, gameboy, ext_ram=False, bank_switching=None):
         self.gameboy = gameboy
@@ -112,48 +108,47 @@ class GBMemoryController:
         self.ext_ram = RAM(addressable_bits=13)
         self.hram = RAM(addressable_bits=7)  # 127B
         self.OAM = bytearray(160)
-        def r8bit(name): return Register(
-            name=name, value=0, max_value=0xFF, bit_length=8)
+    
         # Note: Audio, serial transfer registers are not implemented.
         self.io_registers = {
             # --- Joypad / Serial ---
-            0xFF00: r8bit('JOYP'),
-            0xFF01: r8bit('SB'),
-            0xFF02: r8bit('SC'),
+            0xFF00: 0,
+            0xFF01: 0,
+            0xFF02: 0,
 
             # --- Timer ---
-            0xFF04: r8bit('DIV'),
-            0xFF05: r8bit('TIMA'),
-            0xFF06: r8bit('TMA'),
-            0xFF07: r8bit('TAC'),
+            0xFF04: 0, # DIV
+            0xFF05: 0, # TIMA
+            0xFF06: 0,  # TMA
+            0xFF07: 0,  # TAC
 
             # --- Interrupt flag ---
-            0xFF0F: r8bit('IF'),
+            0xFF0F: 0,
 
             # --- Sound (stub for now) ---
             # FF10–FF3F
-            **{addr: r8bit(f'SND_{hex(addr)}') for addr in range(0xFF10, 0xFF40)},
+            **{addr: 0 for addr in range(0xFF10, 0xFF40)},
 
             # --- LCD / PPU ---
-            0xFF40: r8bit('LCDC'),
-            0xFF41: r8bit('STAT'),
-            0xFF42: r8bit('SCY'),
-            0xFF43: r8bit('SCX'),
-            0xFF44: r8bit('LY'),
-            0xFF45: r8bit('LYC'),
-            0xFF46: r8bit('DMA'),   # IMPORTANT: separate from BGP
-            0xFF47: r8bit('BGP'),
-            0xFF48: r8bit('OBP0'),
-            0xFF49: r8bit('OBP1'),
-            0xFF4A: r8bit('WY'),
-            0xFF4B: r8bit('WX'),
-            0xFF50: r8bit('BOOT'),
+            0xFF40: 0, # LCDC
+            0xFF41: 0, # STAT
+            0xFF42: 0, # SCY
+            0xFF43: 0, # SCX
+            0xFF44: 0,  # LY
+            0xFF45: 0, # LYC
+            0xFF46: 0,   # IMPORTANT: separate from BGP
+            0xFF47: 0, # BGP
+            0xFF48: 0, # OBP0
+            0xFF49: 0, # OBP1
+            0xFF4A: 0, # WY
+            0xFF4B: 0, # WX
+            0xFF50: 0, # Boot ROM disable register
 
             # --- Unused area FF4C–FF7F ---
-            **{addr: r8bit(f'UNUSED_{hex(addr)}') for addr in range(0xFF4C, 0xFF80)},
+            **{addr: 0 for addr in range(0xFF4C, 0xFF80)},
 
             # --- Interrupt Enable ---
-            0xFFFF: r8bit('IE'),
+            0xFFFF: 0,
         }
 
     def configure_bank_switching(self, cartridge: Cartridge):
@@ -173,12 +168,8 @@ class GBMemoryController:
         for i in range(start, end + 1):
             print(f"{hex(i)}: {hex(self.read_at(i))}")
 
-    def set_register(self, reg_loc: str, value):
-        r = self.io_registers[reg_loc]
-        r.value = value % (r.max_value + 1)
-
     def handle_joypad_read(self):
-        current_joyp = self.io_registers[0xFF00].value
+        current_joyp = self.io_registers[0xFF00]
 
         # These must be active-low lower-nibble masks:
         # 1 = released, 0 = pressed
@@ -197,34 +188,33 @@ class GBMemoryController:
         return result
 
     def inc_TIMA(self):
-        TIMA = self.io_registers[0xFF05].value
+        TIMA = self.io_registers[0xFF05]
         if BO.add_full_carry(TIMA, 1):
-            TMA = self.io_registers[0xFF06].value
+            TMA = self.io_registers[0xFF06]
             # wrap to TMA
-            self.io_registers[0xFF05].value = TMA
-            IF = self.io_registers[0xFF0F].value
+            self.io_registers[0xFF05] = TMA
+            IF = self.io_registers[0xFF0F]
             new_IF = BO.set_nth_bit(IF, 2)
             # request a timer interupt
-            self.io_registers[0xFF0F].value = new_IF
+            self.io_registers[0xFF0F] = new_IF
         else:
             self.inc_byte_at(0xFF05)
 
     def handle_DIV_write(self):
-        TAC = self.io_registers[0xFF07].value
+        TAC = self.io_registers[0xFF07]
         old_cycles = self.gameboy.cycles
-        self.io_registers[0xFF04].value = 0
+        self.io_registers[0xFF04] = 0
         self.gameboy.cycles = 0
-        mc = self.io_registers[0xFF07].value & 0b11
+        mc = self.io_registers[0xFF07] & 0b11
         wbit = self.TIMA_hertz_bit_index[mc]  # watch bit
         old_bit = (old_cycles >> wbit) & 1
         if old_bit and (TAC & 0b100):
             self.inc_TIMA()
 
     def handle_TAC_write(self, v):
-        TAC = self.io_registers[0xFF07]
-        old_TAC = TAC.value
-        old_mc = TAC.value & 0b11
-        TAC.value = v
+        old_TAC = self.io_registers[0xFF07]
+        old_mc = old_TAC & 0b11
+        self.io_registers[0xFF07] = v
         new_mc = v & 0b11
         neww = self.TIMA_hertz_bit_index[new_mc]  # new watch bit
         oldw = self.TIMA_hertz_bit_index[old_mc]  # old watch bit
@@ -270,7 +260,7 @@ class GBMemoryController:
         if a < 0xFE00:
             return 0xFF
 
-        # --- OAM (FE00-FE9F) marked unimplemented in your map ---
+        # --- OAM (FE00-FE9F)  ---
         if a < 0xFEA0:
             return self.OAM[a - 0xFE00]
 
@@ -283,14 +273,14 @@ class GBMemoryController:
             if a == 0xFF00:
                 return self.handle_joypad_read()
 
-            return self.io_registers.get(a, hole).value
+            return self.io_registers.get(a, 0xFF)
 
         # --- HRAM (FF80-FFFE) ---
         if a < 0xFFFF:
             return self.hram.array[a - 0xFF80]
 
         # --- IE (FFFF) ---
-        return self.io_registers[0xFFFF].value
+        return self.io_registers[0xFFFF]
 
     def write_to(self, loc: int, byte: int) -> None:
         a = loc
@@ -323,8 +313,6 @@ class GBMemoryController:
             return
 
         # --- Echo RAM (E000-FDFF) ---
-        # SOme emulators mark this as None/unusable. Real HW mirrors C000-DDFF.
-        # Choose one behavior. For speed + later correctness, mirroring is nice:
         if a < 0xFE00:
             # mirror to C000-DDFF region
             self.ram.write_to(a - 0xE000, v)
@@ -343,7 +331,7 @@ class GBMemoryController:
         if a < 0xFF80:
             # Boot ROM disable register (FF50)
             if a == 0xFF50:
-                # Any nonzero write disables boot ROM on DMG
+                # Any nonzero write disables boot ROM 
                 self.disable_boot_rom()
                 return
 
@@ -352,11 +340,11 @@ class GBMemoryController:
 
             if a == 0xFF00:
                 # joyp write
-                self.io_registers[0xFF00].value = 0xC0 | (v & 0x30) | 0x0F
+                self.io_registers[0xFF00] = 0xC0 | (v & 0x30) | 0x0F
                 return
 
             if a == 0xFF04:
-                # div is reset always so no argument
+                # div is always reset so no argument
                 self.handle_DIV_write()
                 return
 
@@ -365,13 +353,13 @@ class GBMemoryController:
                 return
 
             reg = self.io_registers.get(a)
-            if reg is None:
+            if a not in self.io_registers:
                 # unimplemented/unused IO, ignore
                 return
 
             # DMA (FF46) often triggers a transfer;
             # later when implementing DMA, hook it here.
-            reg.value = (v) % 256
+            self.io_registers[a] = v
             return
 
         # --- HRAM (FF80-FFFE) ---
@@ -380,10 +368,7 @@ class GBMemoryController:
             return
 
         # --- IE (FFFF) ---
-        reg_ie = self.io_registers.get(0xFFFF) or self.io_registers.get("IE")
-        if reg_ie is None:
-            raise KeyError("IE register not found in io_registers")
-        reg_ie.value = v
+        self.io_registers[0xFFFF] = v
 
     def get_block_at(self, loc, byte_count):
         return [self.read_at(loc + i) for i in range(byte_count)]
