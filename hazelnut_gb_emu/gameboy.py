@@ -74,7 +74,7 @@ class Gameboy:
         TIMA_en = (TAC >> 2) & 1
         if TIMA_en:
             self.handle_TIMA(old_cycles=self.cycles, elapsed=dots)
-        self.cycles = (self.cycles + dots) 
+        self.cycles = (self.cycles + dots)
         self.handle_DIV()
 
     def CPU_APU_burst(self, clock_cycles):
@@ -148,10 +148,9 @@ class Gameboy:
             self.CPU_APU_burst(456)
             self.PPU.handle_VBLANK()
             return
-        
-        
+
         self.scanline_PPU_modes()
-        
+
         self.PPU.inc_ly()
         self.PPU.handle_LY_compare()
 
@@ -160,7 +159,6 @@ class Gameboy:
             # ensure framerate is 60
             #
             self.PPU.enter_VBLANK()
-
 
         # handle real keyboard inputs from the user
         self.handle_inputs()
@@ -218,6 +216,9 @@ class Gameboy:
 
 
 class SessionController:
+    save_path_name = "saves"
+    save_path = os.path.join('.', save_path_name)
+
     def __init__(self, gameboy: Gameboy, cartridge: Cartridge):
         self.gameboy = gameboy
         self.cartridge = cartridge
@@ -272,7 +273,9 @@ class SessionController:
         if ext is not None \
                 and ext.size > 0 and self.cart_has_battery:
             try:
-                f = open(str(self.cartridge.title)+'.save', "rb")
+                name = os.path.join(self.save_path, str(
+                    self.cartridge.title)+'.save')
+                f = open(name, "rb")
             except FileNotFoundError:
                 logger.info(f"No save file found for {self.game_name}")
                 return
@@ -284,12 +287,14 @@ class SessionController:
         ext = self.gameboy.memctl.ext_ram
         if ext is not None \
                 and ext.size > 0 and self.cart_has_battery:
-
-            f = open(self.cartridge.title+'.save', "wb")
+            if not os.path.isdir(self.save_path):
+                os.mkdir(self.save_path)
+            f = open(os.path.join(
+                self.save_path, self.cartridge.title + '.save'), "wb")
             f.write(self.gameboy.memctl.ext_ram.array)
             f.close()
             logger.info(
-                f"Save file generated for {self.game_name} at {os.getcwd()}.")
+                f"Save file generated for {self.game_name} at {os.path.join(os.getcwd(), self.save_path_name)}.")
 
     def draw_A(self):
         s = self.gameboy.screen

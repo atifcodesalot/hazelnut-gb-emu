@@ -577,8 +577,9 @@ class SM83(CPU):
         # logger.debug("HALT instruction executed.")
         self.HALT = True
 
-    # def exe_INS_STOP(self, ins):
-    #     pass
+    def exe_INS_STOP(self, ins):
+        logger.debug("STOP instruction executed.")
+        pass
 
     # MISC instructions end here
 
