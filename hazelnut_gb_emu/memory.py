@@ -256,9 +256,9 @@ class GBMemoryController:
         if a < 0xE000:
             return self.ram.array[a - 0xC000]
 
-        # --- Echo RAM unusable yet (E000-FDFF) ---
-        if a < 0xFE00:
-            return 0xFF
+        # --- Echo RAM (E000-FDFF) mirror WRAM ---
+        if a < 0xFE00 :
+            return self.ram.array[a - 0xE000]
 
         # --- OAM (FE00-FE9F)  ---
         if a < 0xFEA0:
