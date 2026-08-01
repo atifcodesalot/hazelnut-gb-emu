@@ -133,6 +133,9 @@ class GbPPU:
         new_if |= 1
         self.memctl.io_registers[0xFF0F] = new_if
         # # #
+        # request VBlank stat int, different from the above interrupt line
+        if (STAT >> 4) & 1:
+            self.request_STAT_int()
 
     def is_VBLANK_scan(self, ly):
         return 144 <= ly <= 153
@@ -163,6 +166,9 @@ class GbPPU:
         STAT = self.memctl.io_registers[0xFF41]
         new_STAT = BO.res_nth_bit(STAT, 0)
         new_STAT = BO.set_nth_bit(new_STAT, 1)
+        if (STAT >> 5) & 1:
+            # oam mode stat int
+            self.request_STAT_int()
         self.memctl.io_registers[0xFF41] = new_STAT
 
         # clear sprites from previous scanline
