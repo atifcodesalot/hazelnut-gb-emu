@@ -136,6 +136,11 @@ class GbPPU:
 
     def is_VBLANK_scan(self, ly):
         return 144 <= ly <= 153
+    
+    def request_STAT_int(self):
+        IF = self.memctl.io_registers[0xFF0F]
+        new_IF = BO.set_nth_bit(IF, 1)
+        self.memctl.io_registers[0xFF0F] = new_IF
 
     def handle_LY_compare(self):
         ly = self.memctl.io_registers[0xFF44]
@@ -143,11 +148,7 @@ class GbPPU:
         STAT = self.memctl.io_registers[0xFF41]
         if ly == lyc and not STAT >> 2 & 1:
             if STAT >> 6 & 1:
-                # request STAT int
-                IF = self.memctl.io_registers[0xFF0F]
-                new_IF = BO.set_nth_bit(IF, 1)
-                self.memctl.io_registers[0xFF0F] = new_IF
-
+                self.request_STAT_int()
             new_STAT = BO.set_nth_bit(STAT, 2)
             self.memctl.io_registers[0xFF41] = new_STAT
         elif ly != lyc:
@@ -174,6 +175,9 @@ class GbPPU:
         STAT = self.memctl.io_registers[0xFF41]
         new_STAT = BO.res_nth_bit(STAT, 0)
         new_STAT = BO.res_nth_bit(new_STAT, 1)
+        if (STAT >> 3) & 1:
+            # hblank stat int
+            self.request_STAT_int()
         self.memctl.io_registers[0xFF41] = new_STAT
 
     def enter_drawing_mode(self):
@@ -183,6 +187,7 @@ class GbPPU:
         new_STAT = BO.set_nth_bit(STAT, 0)
         new_STAT = BO.set_nth_bit(new_STAT, 1)
         self.memctl.io_registers[0xFF41] = new_STAT
+        
         lcdc = self.memctl.io_registers[0xFF40]
         ly = self.memctl.io_registers[0xFF44]
         sprite_height = 16 if lcdc >> 2 & 1 else 8
@@ -272,11 +277,14 @@ class GbPPU:
             # and if lcdc now enables objects
             if self.sprites and (lcdc >> 1) & 1:
                 sprite_pixel, sprite = self.get_winning_pixel_SPRITE(x)
+                sprite_pixel, sprite = self.get_winning_pixel_SPRITE(x)
+
             else:
                 sprite_pixel = sprite = None
 
-            self.buffer[row_n + x] = self.mix(static_pixel,
-                                              sprite_pixel, sprite)
+            shade = self.mix(static_pixel, sprite_pixel, sprite)
+
+            self.buffer[row_n + x] = shade
 
         if window_was_visible:
             self.window_internal_counter += 1
@@ -286,10 +294,6 @@ class GbPPU:
     def OAM_scan(self, ctx):
         _, (_, _), (ly, _), lcdc = ctx
         self.enter_OAM()
-        lcdc_1 = lcdc >> 1 & 1
-        if not lcdc_1:
-            self.dots += 80
-            return
         lcdc_2 = lcdc >> 2 & 1
         self.mode = 2
         for i in range(0, 160, 4):
