@@ -34,6 +34,10 @@ class GbPPU:
 
         self.window_internal_counter = 0
 
+    def get_bg_color_palete(self, palette_reg):
+        self.bg_color_palette = [
+            (palette_reg >> s) & 0b11 for s in range(0, 8, 2)]
+
     def get_shade(self, palette_reg, shade_bits):
         ti = shade_bits * 2
         mask = (1 << ti) * 3
@@ -179,27 +183,54 @@ class GbPPU:
         new_STAT = BO.set_nth_bit(STAT, 0)
         new_STAT = BO.set_nth_bit(new_STAT, 1)
         self.memctl.io_registers[0xFF41] = new_STAT
-        lcdc = self.memctl.io_registers[0xFF40] 
+        lcdc = self.memctl.io_registers[0xFF40]
         ly = self.memctl.io_registers[0xFF44]
         sprite_height = 16 if lcdc >> 2 & 1 else 8
         self.cache_sprite_rows(sprite_height, ly)
+
+    def mix(self, st_px, sp_px, sp_obj):
+        if sp_obj is None or sp_px == 0:
+            if st_px:
+                final_shade = self.bg_color_palette[st_px]
+            else:
+                # if bg is also none, meaning bg and window is disabled (lcdc bit 0 is False)
+                final_shade = self.bg_color_palette[0]
+            return final_shade
+        # if there is a sprite pixel
+        sp_plt = self.memctl.io_registers[0xFF48 +
+                                          (sp_obj[3] >> 4 & 1)]
+        obj_priority = sp_obj[3] >> 7 & 1
+        # if priority bit is 0, then obj has priority over bg or window pxels
+        if not obj_priority:
+            final_shade = self.get_shade(sp_plt, sp_px)
+        else:
+            if st_px:
+                final_shade = self.bg_color_palette[st_px]
+            else:
+                final_shade = self.get_shade(
+                    sp_plt, sp_px)
+        return final_shade
 
     def drawing_mode(self, ctx):
         # todo: please refactor this function
         self.enter_drawing_mode()
         st_palette_reg, (scx, scy), (ly, _), lcdc = ctx
+        self.get_bg_color_palete(st_palette_reg)
         wy, wx = self.memctl.io_registers[0xFF4A], self.memctl.io_registers[0xFF4B]
+
+        bgy = (ly + scy) & 0xff
+        lwy = ly - wy
+
         window_was_visible = False
         row_n = GB_LCD_RES[0] * ly
+        static_enable = lcdc & 1
+
         for x in range(GB_LCD_RES[0]):
             # compute local background and window pixel coordinates
             lwx = x - wx + 7
-            lwy = ly - wy
             bgx = (scx + x) & 0xff
-            bgy = (ly + scy) & 0xff
             bg_offset = bgx % 8
             w_offset = lwx % 8
-            static_enable = lcdc & 1
             #
 
             # if new bg row needs to be fetched
@@ -238,36 +269,18 @@ class GbPPU:
                 static_pixel = None
 
             # call sprite pixel function only if there are sprites
+            # and if lcdc now enables objects
             if self.sprites and (lcdc >> 1) & 1:
                 sprite_pixel, sprite = self.get_winning_pixel_SPRITE(x)
             else:
                 sprite_pixel = sprite = None
 
-            if sprite_pixel is None or sprite_pixel == 0:
-                if static_pixel:
-                    final_shade = self.get_shade(st_palette_reg, static_pixel)
-                else:
-                    # if bg is also none, meaning bg and window is disabled (lcdc bit 0 is False)
-                    final_shade = self.get_shade(st_palette_reg, 0)
-            else:
-                objpreg = self.memctl.io_registers[0xFF48 +
-                                                   (sprite[3] >> 4 & 1)]
-                obj_priority = sprite[3] >> 7 & 1
-                # if priority bit is 0, then obj has priority over bg or window pxels
-                if not obj_priority:
-                    final_shade = self.get_shade(objpreg, sprite_pixel)
-                else:
-                    if static_pixel:
-                        final_shade = self.get_shade(
-                            st_palette_reg, static_pixel)
-                    else:
-                        final_shade = self.get_shade(
-                            objpreg, sprite_pixel)
-
-            self.buffer[row_n + x] = final_shade
+            self.buffer[row_n + x] = self.mix(static_pixel,
+                                              sprite_pixel, sprite)
 
         if window_was_visible:
             self.window_internal_counter += 1
+
         self.dots += 172
 
     def OAM_scan(self, ctx):
