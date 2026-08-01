@@ -410,7 +410,7 @@ class CartridgeReader:
 def identify():
     import sys
     # read a cartridge and get type data
-    reader = CartridgeReader(sys.argv[1])
+    reader = CartridgeReader(open(sys.argv[1], "rb"))
     c = reader.get_cartridge()
     print(f"""
     Cartridge type: {c.type_name} (0x{c.type:02X})
