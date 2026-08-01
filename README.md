@@ -72,4 +72,4 @@ AI was used extensively, only for; bug hunting, diassembly and optimization prob
 
 - Alleyway and Mortal Kombat refuse to run due to serial transfer not being implemented yet
 - ~Street Fighter 2 periodically rendering giberrish due to PPU and CPU sync problems~ (fixed)
-- SuperStar Wars character sprite not rendering
+- ~Super Star Wars character sprite not rendering~ (fixed, was due to missing hblank stat interrupts)
