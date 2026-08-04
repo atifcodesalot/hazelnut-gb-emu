@@ -82,7 +82,7 @@ class ByteOperator:
 
     @staticmethod
     def set_nth_bit(byte, n):
-        return byte | pow(2, n)
+        return byte | (1 << n)
 
     @classmethod
     def res_nth_bit(cls, byte, n):
