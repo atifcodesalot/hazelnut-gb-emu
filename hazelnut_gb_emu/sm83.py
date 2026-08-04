@@ -747,6 +747,8 @@ class SM83(CPU):
             ins = GB_PREFIXED_OPCODES_JSON[opcode]
         else:
             ins = GB_UNPREFIXED_OPCODES_JSON[opcode]
+            
+        current_pc = self.PC.value
 
         # operand length
         ol = ins.byte_count
@@ -757,15 +759,15 @@ class SM83(CPU):
         if bc == 0:
             operands_raw = None
         if bc == 1:
-            operands_raw = (self.memory.read_at(self.PC.value),)
+            operands_raw = (self.memory.read_at(current_pc),)
         if bc == 2:
-            operands_raw = (self.memory.read_at(self.PC.value),
-                            self.memory.read_at(self.PC.value + 1))
+            operands_raw = (self.memory.read_at(current_pc),
+                            self.memory.read_at(current_pc + 1))
 
         ins.operands_raw = operands_raw
 
         # inc PC
-        self.PC.value = (self.PC.value + ol - 1 - prefixl) & 0xffff
+        self.PC.value = (current_pc + ol - 1 - prefixl) & 0xffff
         return ins
 
     def instruction_cycle(self):
