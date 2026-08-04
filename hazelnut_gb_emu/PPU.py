@@ -137,7 +137,7 @@ class GbPPU:
 
     def is_VBLANK_scan(self, ly):
         return 144 <= ly <= 153
-    
+
     def request_STAT_int(self):
         IF = self.memctl.io_registers[0xFF0F]
         new_IF = BO.set_nth_bit(IF, 1)
@@ -191,7 +191,7 @@ class GbPPU:
         new_STAT = BO.set_nth_bit(STAT, 0)
         new_STAT = BO.set_nth_bit(new_STAT, 1)
         self.memctl.io_registers[0xFF41] = new_STAT
-        
+
         lcdc = self.memctl.io_registers[0xFF40]
         ly = self.memctl.io_registers[0xFF44]
         sprite_height = 16 if lcdc >> 2 & 1 else 8
@@ -220,6 +220,23 @@ class GbPPU:
                     sp_plt, sp_px)
         return final_shade
 
+    def get_BG_pixels(self, lcdc, bgx, bgy, map_start_bg):
+        BG_row = self.get_tile_row_BG(
+            lcdc, bgx, bgy, map_start_bg)
+        return [
+            (((BG_row[1] >> bit) & 1) << 1) | ((BG_row[0] >> bit) & 1)
+            for bit in range(7, -1, -1)
+        ]
+
+    def get_W_pixels(self, lcdc, lwx, map_start_window):
+        W_row = self.get_tile_row_WINDOW(
+            lcdc, lwx, self.window_internal_counter, map_start_window)
+        return [
+            (((W_row[1] >> bit) & 1) << 1) | (
+                (W_row[0] >> bit) & 1)
+            for bit in range(7, -1, -1)
+        ]
+
     def drawing_mode(self, ctx):
         # todo: please refactor this function
         self.enter_drawing_mode()
@@ -229,7 +246,7 @@ class GbPPU:
 
         bgy = (ly + scy) & 0xff
         lwy = ly - wy
-        
+
         lcdc_Q = lcdc >> 3 & 1
         map_start_bg = 0x1C00 if lcdc >> 3 & 1 else 0x1800
         map_start_window = 0x1C00 if lcdc >> 6 & 1 else 0x1800
@@ -248,12 +265,8 @@ class GbPPU:
 
             # if new bg row needs to be fetched
             if x == 0 or bg_offset == 0:
-                BG_row = self.get_tile_row_BG(
+                BG_pixels = self.get_BG_pixels(
                     lcdc, bgx, bgy, map_start_bg)
-                BG_pixels = [
-                    (((BG_row[1] >> bit) & 1) << 1) | ((BG_row[0] >> bit) & 1)
-                    for bit in range(7, -1, -1)
-                ]
 
             # get background pixel from offset
             BG_pixel = BG_pixels[bg_offset]
@@ -265,13 +278,7 @@ class GbPPU:
                 window_was_visible = True
                 # if new window row needs to be fetched
                 if w_offset == 0 or first_window_pixel:
-                    W_row = self.get_tile_row_WINDOW(
-                        lcdc, lwx, self.window_internal_counter, map_start_window)
-                    W_pixels = [
-                        (((W_row[1] >> bit) & 1) << 1) | (
-                            (W_row[0] >> bit) & 1)
-                        for bit in range(7, -1, -1)
-                    ]
+                    W_pixels = self.get_W_pixels(lcdc, lwx, map_start_window)
 
                 W_pixel = W_pixels[w_offset]
 
@@ -284,7 +291,6 @@ class GbPPU:
             # call sprite pixel function only if there are sprites
             # and if lcdc now enables objects
             if self.sprites and (lcdc >> 1) & 1:
-                sprite_pixel, sprite = self.get_winning_pixel_SPRITE(x)
                 sprite_pixel, sprite = self.get_winning_pixel_SPRITE(x)
 
             else:
