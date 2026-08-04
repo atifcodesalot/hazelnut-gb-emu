@@ -43,9 +43,7 @@ class GbPPU:
         mask = (1 << ti) * 3
         return (palette_reg & mask) >> ti
 
-    def get_static_tile(self, lcdc, px, py, map_control_bit):
-        lcdc_Q = lcdc >> map_control_bit & 1
-        map_start = 0x1C00 if lcdc_Q else 0x1800
+    def get_static_tile(self, lcdc, px, py, map_start):
         lcdc_4 = lcdc >> 4 & 1
         index = self.vram.array[map_start + (py >> 3) * 32 + (px >> 3)]
         offset = 0x0000 if lcdc_4 else 0x1000
@@ -54,11 +52,11 @@ class GbPPU:
         final_offset = tile_offset + (py % 8) * 2
         return self.vram.get_block_at(final_offset, 2)
 
-    def get_tile_row_BG(self, lcdc, px, py):
-        return self.get_static_tile(lcdc, px, py, map_control_bit=3)
+    def get_tile_row_BG(self, lcdc, px, py, bgm_start):
+        return self.get_static_tile(lcdc, px, py, bgm_start)
 
-    def get_tile_row_WINDOW(self, lcdc, px, py):
-        return self.get_static_tile(lcdc, px, py, map_control_bit=6)
+    def get_tile_row_WINDOW(self, lcdc, px, py, wm_start):
+        return self.get_static_tile(lcdc, px, py, wm_start)
 
     # takes relative pixels pos
     def get_pixel_SPRITE(self, row, rpx):
@@ -231,6 +229,10 @@ class GbPPU:
 
         bgy = (ly + scy) & 0xff
         lwy = ly - wy
+        
+        lcdc_Q = lcdc >> 3 & 1
+        map_start_bg = 0x1C00 if lcdc >> 3 & 1 else 0x1800
+        map_start_window = 0x1C00 if lcdc >> 6 & 1 else 0x1800
 
         window_was_visible = False
         row_n = GB_LCD_RES[0] * ly
@@ -247,7 +249,7 @@ class GbPPU:
             # if new bg row needs to be fetched
             if x == 0 or bg_offset == 0:
                 BG_row = self.get_tile_row_BG(
-                    lcdc, bgx, bgy)
+                    lcdc, bgx, bgy, map_start_bg)
                 BG_pixels = [
                     (((BG_row[1] >> bit) & 1) << 1) | ((BG_row[0] >> bit) & 1)
                     for bit in range(7, -1, -1)
@@ -264,7 +266,7 @@ class GbPPU:
                 # if new window row needs to be fetched
                 if w_offset == 0 or first_window_pixel:
                     W_row = self.get_tile_row_WINDOW(
-                        lcdc, lwx, self.window_internal_counter)
+                        lcdc, lwx, self.window_internal_counter, map_start_window)
                     W_pixels = [
                         (((W_row[1] >> bit) & 1) << 1) | (
                             (W_row[0] >> bit) & 1)
