@@ -37,14 +37,14 @@ class MBC1(MBC):
         bank_i = (address >> 14) & 1
 
         if mode == 0 and bank_i == 0:
-                return m.rom.array[address]
-        
+            return m.rom.array[address]
+
         r2 = self.cart_regs[0x6000].value
         bank_num = (
-        (r2 << 5) | self.cart_regs[0x4000].value) % m.rom_banks
+            (r2 << 5) | self.cart_regs[0x4000].value) % m.rom_banks
         offset = address & 0x3fff  # get the lower 14 bits
         switched_addr_b1 = bank_num * 0x4000 + offset
-        
+
         # bank 1
         if mode == 0 and bank_i == 1:
             return m.rom.array[switched_addr_b1]
@@ -87,7 +87,7 @@ class MBC1(MBC):
                 bank_num = self.cart_regs[0x6000].value % m.ram_banks
             else:
                 bank_num = 0
-            switched_addr = 0x2000  * bank_num + offset
+            switched_addr = 0x2000 * bank_num + offset
             return m.ext_ram.array[switched_addr]
         else:
             return m.ext_ram.array[offset]
@@ -101,7 +101,7 @@ class MBC1(MBC):
                 bank_num = self.cart_regs[0x6000].value % m.ram_banks
             else:
                 bank_num = 0
-            switched_addr = 0x2000  * bank_num + offset
+            switched_addr = 0x2000 * bank_num + offset
             m.ext_ram.write_to(switched_addr, value)
         else:
             m.ext_ram.write_to(offset, value)
@@ -120,6 +120,67 @@ class MBC1(MBC):
 
         # ram banked write starts here
         self.handle_ram_banking_write(address, value)
+
+
+class MBC2(MBC):
+    def __init__(self, memctl, cartridge):
+        super().__init__(memctl, cartridge)
+        self.cart_regs = {
+            # technically there is one register
+            0x4000: Register("RAM EN", 0, 0xFF, 8),
+            0x4001: Register("ROM BANK", 0, 0xFF, 8)
+        }
+
+    def handle_ram_read(self, address):
+        m = self.memctl
+
+        # echo of half byte ram 15 times
+        if 0xC000 > address > 0xA200:
+            address %= 512
+
+        return m.ext_ram.array[address]
+
+    def handle_ram_write(self, address, value):
+        m = self.memctl
+
+        # echo of half byte ram 15 times
+        if 0xC000 > address > 0xA200:
+            address %= 512
+
+        m.ext_ram.array[address].value = value
+
+    def handle_rom_read(self, address):
+        if address < 0x4000:
+            return self.memctl.rom.array[address]
+
+        # banked read starts here
+        offset = address & 0x3fff
+        reg = self.cart_regs[0x4001].value
+
+        ln = reg & 0xF
+        # bank number on the register can't be 0 as usual
+        bank_num = ln if ln != 0 else 1
+
+        return self.memctl.rom.array[bank_num * 0x4000 + offset]
+
+    def read(self, address, rom: bool):
+        if rom:
+            return self.handle_rom_read(address)
+        else:
+            return self.handle_ram_read(address)
+
+    def write(self, address, value):
+        if address < 0x4000:
+            self.handle_reg_write(address, value)
+            return
+        # ram write
+        self.handle_ram_write(address, value)
+
+    def handle_reg_write(self, address, value):
+        reg_num = ((address >> 8) & 0xFF) & 1
+        self.cart_regs[0x4000 + reg_num].value = value
+        if (value & 0xF == 0xA) and reg_num == 1:
+            self.memctl.ext_ram_enabled = True
 
 
 class MBC3(MBC):
@@ -234,7 +295,7 @@ class MBC3(MBC):
             self.seconds += diff * 3600
         if sel == 0x0B or sel == 0x0C:
             self.seconds += diff * 86400
-            
+
         reg.set_val(value)
 
     def read(self, address, rom: bool):

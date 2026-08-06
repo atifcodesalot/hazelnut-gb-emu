@@ -12,7 +12,7 @@ class ByteOperator:
     @staticmethod
     def nibblesfrom_bytes(byte):
         n1 = byte >> 4
-        n2 = byte & 15
+        n2 = byte & 0xF
         return n1, n2
 
     @staticmethod
@@ -24,7 +24,7 @@ class ByteOperator:
         if high_half:
             return (addend & 0xFFF) + (summand & 0xFFF) > 0xFFF
 
-        return (addend & 0x0F) + (summand & 0x0F) > 0x0F
+        return (addend & 0xF) + (summand & 0x0F) > 0xF
 
     @classmethod
     def add_full_carry(cls, addend, summand, bit_width=8) -> bool:
@@ -32,7 +32,7 @@ class ByteOperator:
 
     @classmethod
     def sub_half_borrow(cls, minuend, subtrahend) -> bool:
-        return (minuend & 0x0F) < (subtrahend & 0x0F)
+        return (minuend & 0xF) < (subtrahend & 0xF)
 
     @classmethod
     def sub_full_borrow(cls, minuend, subtrahend) -> bool:
