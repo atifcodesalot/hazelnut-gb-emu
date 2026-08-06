@@ -3,7 +3,7 @@ from .auxiliary import BO
 from .cartridge import Cartridge
 from . import logger
 import math
-from .MBCs import MBC1, MBC3
+from .MBCs import MBC1, MBC2, MBC3
 
 
 class RAM:
@@ -160,6 +160,11 @@ class GBMemoryController:
         elif cartridge.type in [0x1, 0x2, 0x3]:
             self.bank_switching = True
             self.mbc = MBC1(self, cartridge)
+        # MBC2
+        elif cartridge.type in [0x5, 0x6]:
+            self.bank_switching = True
+            self.mbc = MBC2(self, cartridge)
+        # MBC3
         elif cartridge.type in [0x11, 0x12, 0x13]:
             self.bank_switching = True
             self.mbc = MBC3(self, cartridge)
