@@ -1,4 +1,4 @@
-# hazelnut gameboy emulator
+# Hazelnut gameboy emulator
 This is a gameboy emulator written solo with python and pygame, only for learning and fun.
 
 ![Gameplay showcase](showcases/showcase.gif)
@@ -46,20 +46,22 @@ on windows:
 #### Run ROMS
 On the repo root directory:
 Unix:
-```python3 -m hazelnut_gb_emu [Path to the rom file]```
+```python3 -m hazelnut_gb_emu```
 
 Windows:
 
-```py -m hazelnut_gb_emu [Path to the rom file]```
+```py -m hazelnut_gb_emu```
+
+Then choose a ROM file to play, simple.
 
 
 ## Info on the emulator, disclaimers
 
-- This emulator is currently not clock or machine cycle accurate: it does not emulate GameBoy hardware in full accuraccy. Due to this, you are likely to experience bugs every now and then.
-- Due to the point above, it fails tests that expect full accurate hardware behaviour.
-- It is in no way complete, just functional enough to run most commercial games.
+- This emulator is currently not clock or machine cycle accurate: it does not emulate GameBoy hardware in full accuraccy.
+It is instead instruction stepped, due to this, you may experience bugs every now and then.
+- It is in no way complete, but functional enough to run most commercial games.
 - Only MBC1, MBC2 and MBC3 are implemented for bank switching (MBC5 is next :D).
-- It runs slower than the actual gameboy most of the time.
+- It sometimes runs slower than the actual gameboy (60 fps).
 - The APU unit is not implemented yet, hence no sound.
 - the STOP instruction isn't implemented yet. :poop:
 - Serial transfer is not implemented yet, resulting in bugs in Alleyway for example.
