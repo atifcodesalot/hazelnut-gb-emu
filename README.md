@@ -58,7 +58,7 @@ Windows:
 - This emulator is currently not clock or machine cycle accurate: it does not emulate GameBoy hardware in full accuraccy. Due to this, you are likely to experience bugs every now and then.
 - Due to the point above, it fails tests that expect full accurate hardware behaviour.
 - It is in no way complete, just functional enough to run most commercial games.
-- Only MBC1 and MBC3 are implemented for bank switching.
+- Only MBC1, MBC2 and MBC3 are implemented for bank switching (MBC5 is next :D).
 - It runs slower than the actual gameboy most of the time.
 - The APU unit is not implemented yet, hence no sound.
 - the STOP instruction isn't implemented yet. :poop:
