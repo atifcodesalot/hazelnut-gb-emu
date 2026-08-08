@@ -60,7 +60,7 @@ Then choose a ROM file to play, simple.
 - This emulator is currently not clock or machine cycle accurate: it does not emulate GameBoy hardware in full accuraccy.
 It is instead instruction stepped, due to this, you may experience bugs every now and then.
 - It is in no way complete, but functional enough to run most commercial games.
-- Only MBC1, MBC2 and MBC3 are implemented for bank switching (MBC5 is next :D).
+- Only MBC1, MBC2 and MBC3 are implemented for bank switching (MBC5 is next :yum:).
 - It sometimes runs slower than the actual gameboy (60 fps).
 - The APU unit is not implemented yet, hence no sound.
 - the STOP instruction isn't implemented yet. :poop:
