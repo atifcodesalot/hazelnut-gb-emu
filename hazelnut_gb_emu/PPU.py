@@ -59,11 +59,6 @@ class GbPPU:
         return self.get_static_tile(lcdc, px, py, wm_start)
 
     # takes relative pixels pos
-    def get_pixel_SPRITE(self, row, rpx):
-        pixel = BO.get_pixel_2bpp(row[0], row[1], rpx)
-        return pixel
-
-    # takes relative pixels pos
     def get_pixel_row(self, ti, rpy):
         row = self.vram.get_block_at(ti * 16 + 2 * rpy, 2)
         return row
@@ -75,8 +70,8 @@ class GbPPU:
 
         for i in range(len(self.sprites)):
             sr = self.sprites[i]
-            row = self.sprite_rows[i]
-            sx = sr[1] - 8
+            x = sr[1]
+            sx = x - 8
             info = sr[3]
 
             rpx = px - sx
@@ -84,6 +79,8 @@ class GbPPU:
             # Sprite does not cover this scanline pixel
             if not 0 <= rpx < 8:
                 continue
+            
+            row = self.sprite_rows[i]
 
             # Apply flips
             xflip = (info >> 5) & 1
@@ -91,13 +88,11 @@ class GbPPU:
             if xflip:
                 rpx = 7 - rpx
 
-            pixel = self.get_pixel_SPRITE(row, rpx)
+            pixel = row[rpx]
 
             # OBJ color 0 is transparent
             if pixel == 0:
                 continue
-
-            x = sr[1]
 
             # DMG priority rule:
             # smaller X coordinate wins.
@@ -246,8 +241,6 @@ class GbPPU:
 
         bgy = (ly + scy) & 0xff
         lwy = ly - wy
-
-        lcdc_Q = lcdc >> 3 & 1
         map_start_bg = 0x1C00 if lcdc >> 3 & 1 else 0x1800
         map_start_window = 0x1C00 if lcdc >> 6 & 1 else 0x1800
 
@@ -289,15 +282,15 @@ class GbPPU:
                 static_pixel = None
 
             # call sprite pixel function only if there are sprites
-            # and if lcdc now enables objects
+            # and if lcdc NOW enables objects
             if self.sprites and (lcdc >> 1) & 1:
                 sprite_pixel, sprite = self.get_winning_pixel_SPRITE(x)
-
             else:
                 sprite_pixel = sprite = None
 
             shade = self.mix(static_pixel, sprite_pixel, sprite)
 
+            # set final shade on buffer
             self.buffer[row_n + x] = shade
 
         if window_was_visible:
@@ -341,7 +334,10 @@ class GbPPU:
                     ti += 1
                     rpy -= 8
 
-            self.sprite_rows.append(self.get_pixel_row(ti, rpy))
+            row = self.get_pixel_row(ti, rpy)
+
+            self.sprite_rows.append(
+                [BO.get_pixel_2bpp(row[0], row[1], i) for i in range(8)])
 
     def HBLANK_mode(self):
         self.enter_HBLANK()
