@@ -34,9 +34,12 @@ class GbPPU:
 
         self.window_internal_counter = 0
 
-    def get_bg_color_palete(self, palette_reg):
-        self.bg_color_palette = [
-            (palette_reg >> s) & 0b11 for s in range(0, 8, 2)]
+        self.bg_palette = []
+        self.obj0_palette = []
+        self.obj1_palette = []
+
+    def get_color_palette(self, palette_reg):
+        return [(palette_reg >> s) & 0b11 for s in range(0, 8, 2)]
 
     def get_shade(self, palette_reg, shade_bits):
         ti = shade_bits * 2
@@ -64,7 +67,7 @@ class GbPPU:
         return row
 
     def get_winning_pixel_SPRITE(self, px):
-        winner = None
+        winner_px = None
         wsr = None
         best_x = 9999
 
@@ -79,7 +82,7 @@ class GbPPU:
             # Sprite does not cover this scanline pixel
             if not 0 <= rpx < 8:
                 continue
-            
+
             row = self.sprite_rows[i]
 
             # Apply flips
@@ -95,17 +98,17 @@ class GbPPU:
                 continue
 
             # DMG priority rule:
-            # smaller X coordinate wins.
-            if winner is None or x < best_x:
-                winner = pixel
+            # smaller x coordinate wins.
+            if winner_px is None or x < best_x:
+                winner_px = pixel
                 wsr = sr
                 best_x = x
 
-        return winner, wsr
+        return winner_px, wsr
 
     def get_context(self):
         # palette register
-        palette_reg = self.memctl.io_registers[0xff47]
+        palette_reg = self.memctl.io_registers[0xFF47]
         scx = self.memctl.io_registers[0xFF43]
         scy = self.memctl.io_registers[0xFF42]
         ly = self.memctl.io_registers[0xFF44]
@@ -195,24 +198,23 @@ class GbPPU:
     def mix(self, st_px, sp_px, sp_obj):
         if sp_obj is None or sp_px == 0:
             if st_px:
-                final_shade = self.bg_color_palette[st_px]
+                final_shade = self.bg_palette[st_px]
             else:
                 # if bg is also none, meaning bg and window is disabled (lcdc bit 0 is False)
-                final_shade = self.bg_color_palette[0]
+                final_shade = self.bg_palette[0]
             return final_shade
         # if there is a sprite pixel
-        sp_plt = self.memctl.io_registers[0xFF48 +
-                                          (sp_obj[3] >> 4 & 1)]
+        sp_plt = self.obj1_palette if (
+            sp_obj[3] >> 4 & 1) else self.obj0_palette
         obj_priority = sp_obj[3] >> 7 & 1
         # if priority bit is 0, then obj has priority over bg or window pxels
         if not obj_priority:
-            final_shade = self.get_shade(sp_plt, sp_px)
+            final_shade = sp_plt[sp_px]
         else:
             if st_px:
-                final_shade = self.bg_color_palette[st_px]
+                final_shade = self.bg_palette[st_px]
             else:
-                final_shade = self.get_shade(
-                    sp_plt, sp_px)
+                final_shade = sp_plt[sp_px]
         return final_shade
 
     def get_BG_pixels(self, lcdc, bgx, bgy, map_start_bg):
@@ -236,7 +238,11 @@ class GbPPU:
         # todo: please refactor this function
         self.enter_drawing_mode()
         st_palette_reg, (scx, scy), (ly, _), lcdc = ctx
-        self.get_bg_color_palete(st_palette_reg)
+        self.bg_palette = self.get_color_palette(st_palette_reg)
+        self.obj0_palette = self.get_color_palette(
+            self.memctl.io_registers[0xFF48])
+        self.obj1_palette = self.get_color_palette(
+            self.memctl.io_registers[0xFF49])
         wy, wx = self.memctl.io_registers[0xFF4A], self.memctl.io_registers[0xFF4B]
 
         bgy = (ly + scy) & 0xff
