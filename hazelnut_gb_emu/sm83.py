@@ -14,7 +14,7 @@ def init_mnemonics():
     MNEMONICS = set([ins.mnemonic for ins in GB_PREFIXED_OPCODES_JSON.values()] + \
         [ins.mnemonic for ins in GB_UNPREFIXED_OPCODES_JSON.values()])
 
-    MNEMONICS = [m for m in MNEMONICS if not (m.startswith('ILLEGAL') or m == "PREFIX")]
+    MNEMONICS = frozenset([m for m in MNEMONICS if not (m.startswith('ILLEGAL') or m == "PREFIX")])
     
 init_mnemonics()
 
@@ -751,23 +751,17 @@ class SM83(CPU):
         current_pc = self.PC.value
 
         # operand length
-        ol = ins.byte_count
+        op_len = ins.operand_bytes
 
-        prefixl = 1 if prefixed else 0
-        bc = ins.byte_count - 1 - prefixl
-
-        if bc == 0:
-            operands_raw = None
-        if bc == 1:
-            operands_raw = (self.memory.read_at(current_pc),)
-        if bc == 2:
-            operands_raw = (self.memory.read_at(current_pc),
-                            self.memory.read_at(current_pc + 1))
-
-        ins.operands_raw = operands_raw
+        if op_len == 1:
+            ins.operands_raw[0] = self.memory.read_at(current_pc)
+        if op_len == 2:
+            ins.operands_raw[0] = self.memory.read_at(current_pc)
+            ins.operands_raw[1] = self.memory.read_at(current_pc + 1)
 
         # inc PC
-        self.PC.value = (current_pc + ol - 1 - prefixl) & 0xffff
+        self.PC.value = (current_pc + op_len) & 0xffff
+        
         return ins
 
     def instruction_cycle(self):
@@ -783,6 +777,7 @@ class SM83(CPU):
 
         self.PC.value = (self.PC.value + 1) & 0xffff
         #
+        
         # decode
         ins = self.decode(opcode, prefixed)
         #
