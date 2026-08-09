@@ -5,12 +5,11 @@ from . import dataclass
 from typing import Optional
 import os
 
-path = os.path.dirname(os.path.abspath(__file__))
-
-GB_OPCODES_JSON = json.load(open(os.path.join(path, "Opcodes.json"), "r"))
-
+PATH = os.path.dirname(os.path.abspath(__file__))
 
 # operand format in the json file
+
+
 @dataclass
 class Operand:
     name: str
@@ -23,6 +22,7 @@ class Operand:
 # turn the operands in the json file to dataclasses
 def init_operands():
     global GB_OPCODES_JSON
+    GB_OPCODES_JSON = json.load(open(os.path.join(PATH, "Opcodes.json"), "r"))
     for i in ["unprefixed", "cbprefixed"]:
         inset = GB_OPCODES_JSON[i]
         for opcode in inset:
@@ -35,7 +35,8 @@ class GameboyInstruction:
     prefixed: bool
     mnemonic: str
     raw: bytes
-    operands_raw: tuple
+    operands_raw: bytearray
+    operand_bytes: int
     operands: tuple[Operand]
     cycles: list
     byte_count: int  # variable instruction size
@@ -50,22 +51,26 @@ class GameboyInstruction:
         return self.__repr__()
 
 
-GB_UNPREFIXED_OPCODES_JSON = dict()
-GB_PREFIXED_OPCODES_JSON = dict()
-
-
 def init_instructions():
-    global GB_OPCODES_JSON
+    global GB_OPCODES_JSON, \
+        GB_UNPREFIXED_OPCODES_JSON, GB_PREFIXED_OPCODES_JSON
+    GB_UNPREFIXED_OPCODES_JSON = dict()
+    GB_PREFIXED_OPCODES_JSON = dict()
     for i in ["unprefixed", "cbprefixed"]:
-        inset = GB_PREFIXED_OPCODES_JSON if i == "cbprefixed" else GB_UNPREFIXED_OPCODES_JSON
+        prefixed = i == "cbprefixed"
+        inset = GB_PREFIXED_OPCODES_JSON if prefixed else GB_UNPREFIXED_OPCODES_JSON
         for opcode in GB_OPCODES_JSON[i]:
             ins_json = GB_OPCODES_JSON[i][opcode]
+            op_len = ins_json["bytes"] - \
+                2 if prefixed else ins_json["bytes"] - 1
             ins_json["cycles"] = int(ins_json["cycles"][0])
+
             inset[int(opcode, 16)] = GameboyInstruction(
-                prefixed=i == "cbprefixed",
+                prefixed=prefixed,
                 mnemonic=ins_json["mnemonic"],
                 raw=int(opcode, 16),
-                operands_raw=[],
+                operands_raw=bytearray(op_len),
+                operand_bytes=op_len,
                 operands=ins_json["operands"],
                 cycles=ins_json["cycles"],
                 byte_count=int(ins_json["bytes"]),
