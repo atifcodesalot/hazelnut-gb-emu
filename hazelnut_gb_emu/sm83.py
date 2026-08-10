@@ -577,13 +577,13 @@ class SM83(CPU):
             new_Z = old_A - adjustment == 0
 
         else:
-            if H or old_A & 0xF > 0x9:
+            if H or (old_A & 0xF) > 0x9:
                 adjustment += 0x6
             if C or old_A > 0x99:
                 adjustment += 0x60
                 self.set_flags_fast(C=True)
             self.set_register('A', old_A + adjustment)
-            new_Z = old_A + adjustment == 0
+            new_Z = (old_A + adjustment) & 0xFF == 0
 
         self.set_flags_fast(H=False, Z=new_Z)
 
