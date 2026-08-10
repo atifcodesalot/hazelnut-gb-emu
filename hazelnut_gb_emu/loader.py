@@ -69,7 +69,7 @@ def init_instructions():
                 prefixed=prefixed,
                 mnemonic=ins_json["mnemonic"],
                 raw=int(opcode, 16),
-                operands_raw=bytearray(2),
+                operands_raw=bytearray(op_len),
                 operand_bytes=op_len,
                 operands=ins_json["operands"],
                 cycles=ins_json["cycles"],
