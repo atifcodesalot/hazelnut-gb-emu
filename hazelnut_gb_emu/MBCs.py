@@ -6,9 +6,9 @@ import time
 
 
 class MBC:
-    def __init__(self, memctl, cartridge):
+    def __init__(self, memctl, cartridge: Cartridge):
         self.memctl = memctl
-        self.cartridge = cartridge
+        self.cart = cartridge
 
         # adjust rom and external ram size
         self.memctl.rom.resize(
@@ -16,10 +16,6 @@ class MBC:
         if cartridge.ram_size != 0:
             self.memctl.ext_ram.resize(
                 int(log(cartridge.ram_size, 2)))
-        #
-
-        self.memctl.rom_banks = cartridge.rom_banks
-        self.memctl.ram_banks = cartridge.ram_banks
 
 
 class MBC1(MBC):
@@ -41,7 +37,7 @@ class MBC1(MBC):
 
         r2 = self.cart_regs[0x6000].value
         bank_num = (
-            (r2 << 5) | self.cart_regs[0x4000].value) % m.rom_banks
+            (r2 << 5) | self.cart_regs[0x4000].value) % self.cart.rom_banks
         offset = address & 0x3fff  # get the lower 14 bits
         switched_addr_b1 = bank_num * 0x4000 + offset
 
@@ -52,7 +48,7 @@ class MBC1(MBC):
         # MBC1 mode 1 starts here
         if bank_i == 0:
             switched_addr_b0 = ((r2 << 5) %
-                                m.rom_banks * 0x4000) + offset
+                                self.cart.rom_banks * 0x4000) + offset
             return m.rom.array[switched_addr_b0]
 
         # bank 1, mode 1
@@ -84,7 +80,7 @@ class MBC1(MBC):
 
         if mode == 1:
             if m.ram_banks > 0:
-                bank_num = self.cart_regs[0x6000].value % m.ram_banks
+                bank_num = self.cart_regs[0x6000].value % self.cart.ram_banks
             else:
                 bank_num = 0
             switched_addr = 0x2000 * bank_num + offset
@@ -98,7 +94,7 @@ class MBC1(MBC):
         offset = address & 0x1fff
         if mode == 1:
             if m.ram_banks > 0:
-                bank_num = self.cart_regs[0x6000].value % m.ram_banks
+                bank_num = self.cart_regs[0x6000].value % self.cart.ram_banks
             else:
                 bank_num = 0
             switched_addr = 0x2000 * bank_num + offset
@@ -135,19 +131,15 @@ class MBC2(MBC):
         m = self.memctl
 
         # echo of half byte ram 15 times
-        if 0xC000 > address > 0xA200:
-            address %= 512
+        offset = (address - 0xA000) % 200
 
-        return m.ext_ram.array[address]
+        return m.ext_ram.array[offset]
 
     def handle_ram_write(self, address, value):
         m = self.memctl
-
         # echo of half byte ram 15 times
-        if 0xC000 > address > 0xA200:
-            address %= 512
-
-        m.ext_ram.array[address].value = value
+        offset = (address - 0xA000) % 200
+        m.ext_ram.array[offset] = value
 
     def handle_rom_read(self, address):
         if address < 0x4000:
@@ -160,7 +152,7 @@ class MBC2(MBC):
         ln = reg & 0xF
         # bank number on the register can't be 0 as usual
         bank_num = ln if ln != 0 else 1
-
+        bank_num %= self.cart.rom_banks
         return self.memctl.rom.array[bank_num * 0x4000 + offset]
 
     def read(self, address, rom: bool):
@@ -179,8 +171,9 @@ class MBC2(MBC):
     def handle_reg_write(self, address, value):
         reg_num = ((address >> 8) & 0xFF) & 1
         self.cart_regs[0x4000 + reg_num].value = value
-        if (value & 0xF == 0xA) and reg_num == 1:
-            self.memctl.ext_ram_enabled = True
+        # if bit 8 was clear, control extram enable
+        if not reg_num:
+            self.memctl.ext_ram_enabled = (value & 0xF == 0xA)
 
 
 class MBC3(MBC):
