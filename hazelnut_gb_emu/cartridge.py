@@ -319,7 +319,7 @@ class CartridgeReader:
         stripped_title = self.title.replace(b'\x00', b'')
         if stripped_title.isascii():
             return stripped_title.decode("ASCII")
-        return stripped_title
+        return stripped_title.strip()
 
     def handle_licensee(self):
         olc = self.old_licensee_code[0]
