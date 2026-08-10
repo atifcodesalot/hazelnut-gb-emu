@@ -54,8 +54,8 @@ class GameboyInstruction:
 def init_instructions():
     global GB_OPCODES_JSON, \
         GB_UNPREFIXED_OPCODES_JSON, GB_PREFIXED_OPCODES_JSON
-    GB_UNPREFIXED_OPCODES_JSON = dict()
-    GB_PREFIXED_OPCODES_JSON = dict()
+    GB_UNPREFIXED_OPCODES_JSON = [None,]*256
+    GB_PREFIXED_OPCODES_JSON = [None,]*256
     for i in ["unprefixed", "cbprefixed"]:
         prefixed = i == "cbprefixed"
         inset = GB_PREFIXED_OPCODES_JSON if prefixed else GB_UNPREFIXED_OPCODES_JSON
@@ -69,7 +69,7 @@ def init_instructions():
                 prefixed=prefixed,
                 mnemonic=ins_json["mnemonic"],
                 raw=int(opcode, 16),
-                operands_raw=bytearray(op_len),
+                operands_raw=bytearray(2),
                 operand_bytes=op_len,
                 operands=ins_json["operands"],
                 cycles=ins_json["cycles"],

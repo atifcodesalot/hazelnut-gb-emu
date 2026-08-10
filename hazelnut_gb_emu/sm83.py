@@ -11,8 +11,8 @@ from . import Register
 
 def init_mnemonics():
     global MNEMONICS
-    MNEMONICS = set([ins.mnemonic for ins in GB_PREFIXED_OPCODES_JSON.values()] +
-                    [ins.mnemonic for ins in GB_UNPREFIXED_OPCODES_JSON.values()])
+    MNEMONICS = [ins.mnemonic for ins in GB_PREFIXED_OPCODES_JSON] + \
+                    [ins.mnemonic for ins in GB_UNPREFIXED_OPCODES_JSON]
 
     MNEMONICS = frozenset([m for m in MNEMONICS if not (
         m.startswith('ILLEGAL') or m == "PREFIX")])
@@ -183,15 +183,12 @@ class SM83(CPU):
             self.set_flags_fast(Z=0, N=0, H=BO.add_half_carry(
                 self.SP.value, signed), C=BO.add_full_carry(self.SP.value & 0xFF, e8))
             return
+        
+        data = ins.operands_raw[0] | (ins.operands_raw[1] << 8)
 
         # o1 is the load destionation, ALWAYS
         # o2 is ALWAYS the data to load
         if o2.name in ["n8", "n16", "a16"]:
-            if o2.name == "n8":
-                data = ins.operands_raw[0]
-            else:
-                data = BO.concat_bytes(
-                    *ins.operands_raw[:2][::-1])  # little endian
             w = data if o2.immediate else self.memory.read_at(data)
         else:
             r = self.get_register(o2.name)
@@ -200,7 +197,6 @@ class SM83(CPU):
         # when operand 1 is an address, operand 2 is always a register, hence we use the whole raw operands
         # in fact it is either SP or A
         if o1.name == "a16":
-            data = BO.concat_bytes(*ins.operands_raw[:2][::-1])
             if o2.name == "SP":
                 high, low = self.SP.value >> 8, self.SP.value & 0xFF
                 self.memory.write_to(data + 1, high)  # little endian
