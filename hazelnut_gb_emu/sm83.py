@@ -11,12 +11,15 @@ from . import Register
 
 def init_mnemonics():
     global MNEMONICS
-    MNEMONICS = set([ins.mnemonic for ins in GB_PREFIXED_OPCODES_JSON.values()] + \
-        [ins.mnemonic for ins in GB_UNPREFIXED_OPCODES_JSON.values()])
+    MNEMONICS = set([ins.mnemonic for ins in GB_PREFIXED_OPCODES_JSON.values()] +
+                    [ins.mnemonic for ins in GB_UNPREFIXED_OPCODES_JSON.values()])
 
-    MNEMONICS = frozenset([m for m in MNEMONICS if not (m.startswith('ILLEGAL') or m == "PREFIX")])
-    
+    MNEMONICS = frozenset([m for m in MNEMONICS if not (
+        m.startswith('ILLEGAL') or m == "PREFIX")])
+
+
 init_mnemonics()
+
 
 class PairRegister:
     def __init__(self, name, hi_reg, low_reg):
@@ -157,8 +160,6 @@ class SM83(CPU):
     def flags_register(self):
         return (self.flags['Z'] << 7) | (self.flags['N'] << 6) |\
             (self.flags['H'] << 5) | (self.flags['C'] << 4)
-
-
 
     # Load, copy related instructions start here
     ###
@@ -747,7 +748,7 @@ class SM83(CPU):
             ins = GB_PREFIXED_OPCODES_JSON[opcode]
         else:
             ins = GB_UNPREFIXED_OPCODES_JSON[opcode]
-            
+
         current_pc = self.PC.value
 
         # operand length
@@ -761,7 +762,7 @@ class SM83(CPU):
 
         # inc PC
         self.PC.value = (current_pc + op_len) & 0xffff
-        
+
         return ins
 
     def instruction_cycle(self):
@@ -777,7 +778,7 @@ class SM83(CPU):
 
         self.PC.value = (self.PC.value + 1) & 0xffff
         #
-        
+
         # decode
         ins = self.decode(opcode, prefixed)
         #
