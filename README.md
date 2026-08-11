@@ -32,6 +32,11 @@ respective owners.
 
 ## How to download and play
 
+## The PyPy runtime
+
+The PyPy runtime is heavily recommended for this emulator, if you want real GameBoy speed.
+Automatic installation is supported, and you will be prompted to; initially.
+
 #### Clone the repo
 ```git clone https://github.com/atifcodesalot/hazelnut-gb-emu```
 
@@ -52,7 +57,8 @@ Windows:
 
 ```py -m hazelnut_gb_emu```
 
-Then choose a ROM file to play, simple.
+Choose if you want to download and use PyPy, by pressing y or n then enter,
+afterwatds choose a ROM file to play, simple.
 
 
 ## Info on the emulator, disclaimers
@@ -61,17 +67,16 @@ Then choose a ROM file to play, simple.
 It is instead instruction stepped, due to this, you may experience bugs every now and then.
 - It is in no way complete, but functional enough to run most commercial games.
 - Only MBC1, MBC2 and MBC3 are implemented for bank switching (MBC5 is next :yum:).
-- It sometimes runs slower than the actual gameboy (60 fps).
+- It sometimes runs slower than the actual gameboy (60 fps), except if you use PyPy, then it is 60 fps constantly.
 - The APU unit is not implemented yet, hence no sound.
 - the STOP instruction isn't implemented yet. :poop:
 - Serial transfer is not implemented yet, resulting in bugs in Alleyway for example.
 
 ## Credits and AI usage
 %99 of the code and the full CPU, PPU implementation is written by me, only. Rarely, some functions were refactored, enchanced by AI: no code was generated from scratch.
-AI was used extensively, only for; bug hunting, diassembly and optimization problems. 
+AI was used extensively, only for; bug hunting, disassembly and optimization problems. 
 
 ## Known bugs
-
 - Alleyway and Mortal Kombat refuse to run due to serial transfer not being implemented yet
 - ~Street Fighter 2 periodically rendering giberrish due to PPU and CPU sync problems~ (fixed)
 - ~Super Star Wars character sprite not rendering~ (fixed, was due to missing hblank stat interrupts)
