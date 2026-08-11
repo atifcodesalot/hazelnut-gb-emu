@@ -3,13 +3,10 @@
 from .sm83 import *
 from .PPU import *
 from .memory import *
-
-import colorama
 from .cartridge import Cartridge
 from .auxiliary import BO
 import os
 import threading
-import time
 
 
 pyclock = pygame.time.Clock()
