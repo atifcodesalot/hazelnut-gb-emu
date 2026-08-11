@@ -1,17 +1,29 @@
 
 
-from .gameboy import Gameboy, SessionController
-from .cartridge import *
-from . import logger
+from .emu_core.gameboy import Gameboy, SessionController
+from .emu_core.cartridge import *
+from .emu_core import logger
 import sys
 import cProfile
 import threading
 import time
 import gc
-from tkinter import filedialog, colorchooser, Tk
+import os
+import platform
+import urllib.request
+
+from tkinter import filedialog, Tk
 
 
-IMPLEMENTED = [0x00, 0x01, 0x02, 0x3, 0x5, 0x6, 0x11, 0x12, 0x13]
+PLATFORM = platform.system()
+PLATFORM_WINDOWS = os.name == "Windows"
+PLATFORM_LINUX = os.name == "Linux"
+INTERPRETER = sys.implementation.name
+
+PYPY_WINDOWS_URL = "https://downloads.python.org/pypy/pypy3.11-v7.3.23-win64.zip"
+
+
+IMPLEMENTED_MODES = [0x00, 0x01, 0x02, 0x3, 0x5, 0x6, 0x11, 0x12, 0x13]
 
 
 def get_file():
@@ -19,11 +31,10 @@ def get_file():
                  ("Binary files,", "*.bin")]
     title = "Choose a ROM file"
     dir_ = "."
-    
+
     root = Tk()
     root.withdraw()
-    
-    
+
     try:
         return filedialog.askopenfile(
             mode="rb",
@@ -33,12 +44,12 @@ def get_file():
     finally:
         # make sure to destroy and kill,
         # the tk object in this thread
-        root.destroy()   
+        root.destroy()
         del root
         gc.collect()
 
 
-def init():
+def init_gb_objects():
     gb = Gameboy()
     file = get_file()
     if file is None:
@@ -60,10 +71,10 @@ def run_profiled(target, filename):
 
 
 def main():
-    gb, cart = init()
+    gb, cart = init_gb_objects()
     controller = SessionController(gameboy=gb, cartridge=cart)
     controller.check_implementations(
-        cartridge_types=CARTRIDGE_TYPES, implemented=IMPLEMENTED)
+        cartridge_types=CARTRIDGE_TYPES, implemented=IMPLEMENTED_MODES)
     try:
         if sys.argv[1] in ["--benchmark", "-b", "--profile", "-p"]:
             logger.info("Running in benchmark mode... Will run much slower than normal,\
