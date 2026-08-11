@@ -362,7 +362,9 @@ class GBMemoryController:
                 return 
 
             if a == 0xFF46:
+                self.io_registers[a] = v
                 self.gameboy.start_DMA()
+                return
 
             if a == 0xFF00:
                 # joyp write
