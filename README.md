@@ -35,7 +35,7 @@ respective owners.
 ## The PyPy runtime
 
 The [PyPy](https://pypy.org/) runtime is heavily recommended for this emulator, if you want real GameBoy speed.
-Automatic installation is supported, and you will be prompted to; initially.
+Automatic installation is supported, which you will be initially prompted to.
 
 #### Clone the repo
 ```git clone https://github.com/atifcodesalot/hazelnut-gb-emu```
