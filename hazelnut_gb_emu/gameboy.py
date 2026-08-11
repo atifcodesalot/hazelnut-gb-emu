@@ -53,6 +53,8 @@ class Gameboy:
         self.running = True
 
         self.cpu_debt = 0
+        
+        self.pyclock = pygame.time.Clock()
 
     def turn_on_LCD(self):
         self.memctl[0xFF40] = 0x91
@@ -147,6 +149,8 @@ class Gameboy:
             # cpu burst then inc ly and handle lyc compare
             self.CPU_APU_burst(456)
             self.PPU.handle_VBLANK()
+            if ly == 153:
+                self.pyclock.tick(59)
             return
 
         self.scanline_PPU_modes()
@@ -352,13 +356,11 @@ class SessionController:
 
     def display(self):
         self.gameboy.set_display()
-        clock = pygame.time.Clock()
         while self.gameboy.running:
             self.draw_inputs()
             self.draw_cosmetic()
             pygame.event.pump()
             pygame.display.flip()
-            clock.tick(60)
 
     def main(self):
         self.disp_thread = threading.Thread(target=self.display)
