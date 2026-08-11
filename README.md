@@ -58,7 +58,7 @@ Windows:
 ```py -m hazelnut_gb_emu```
 
 Choose if you want to download and use PyPy, by pressing y or n then enter,
-afterwatds choose a ROM file to play, simple.
+afterwards choose a ROM file to play, simple.
 
 
 ## Info on the emulator, disclaimers
