@@ -7,7 +7,8 @@ import sys
 import cProfile
 import threading
 import time
-from tkinter import filedialog, colorchooser
+import gc
+from tkinter import filedialog, colorchooser, Tk
 
 
 IMPLEMENTED = [0x00, 0x01, 0x02, 0x3, 0x5, 0x6, 0x11, 0x12, 0x13]
@@ -19,11 +20,22 @@ def get_file():
     title = "Choose a ROM file"
     dir_ = "."
     
-    return filedialog.askopenfile(
-        mode="rb",
-        filetypes=filetypes,
-        title=title,
-        initialdir=dir_)
+    root = Tk()
+    root.withdraw()
+    
+    
+    try:
+        return filedialog.askopenfile(
+            mode="rb",
+            filetypes=filetypes,
+            title=title,
+            initialdir=dir_)
+    finally:
+        # make sure to destroy and kill,
+        # the tk object in this thread
+        root.destroy()   
+        del root
+        gc.collect()
 
 
 def init():
