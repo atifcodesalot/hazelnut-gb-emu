@@ -79,7 +79,7 @@ class MBC1(MBC):
         offset = address & 0x1fff
 
         if mode == 1:
-            if m.ram_banks > 0:
+            if self.cart.ram_banks > 0:
                 bank_num = self.cart_regs[0x6000].value % self.cart.ram_banks
             else:
                 bank_num = 0
@@ -93,7 +93,7 @@ class MBC1(MBC):
         mode = self.cart_regs[0x8000].value
         offset = address & 0x1fff
         if mode == 1:
-            if m.ram_banks > 0:
+            if self.cart.ram_banks > 0:
                 bank_num = self.cart_regs[0x6000].value % self.cart.ram_banks
             else:
                 bank_num = 0
