@@ -8,20 +8,14 @@ import cProfile
 import threading
 import time
 import gc
-import os
-import platform
-import urllib.request
+from pypy_setup import *
+
 
 from tkinter import filedialog, Tk
 
 
-PLATFORM = platform.system()
-PLATFORM_WINDOWS = os.name == "Windows"
-PLATFORM_LINUX = os.name == "Linux"
+
 INTERPRETER = sys.implementation.name
-
-PYPY_WINDOWS_URL = "https://downloads.python.org/pypy/pypy3.11-v7.3.23-win64.zip"
-
 
 IMPLEMENTED_MODES = [0x00, 0x01, 0x02, 0x3, 0x5, 0x6, 0x11, 0x12, 0x13]
 
@@ -71,6 +65,8 @@ def run_profiled(target, filename):
 
 
 def main():
+    if INTERPRETER != "pypy":
+        try_pypy()
     gb, cart = init_gb_objects()
     controller = SessionController(gameboy=gb, cartridge=cart)
     controller.check_implementations(
