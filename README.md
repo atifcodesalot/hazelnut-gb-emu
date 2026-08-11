@@ -34,7 +34,7 @@ respective owners.
 
 ## The PyPy runtime
 
-The PyPy runtime is heavily recommended for this emulator, if you want real GameBoy speed.
+The [PyPy](https://pypy.org/) runtime is heavily recommended for this emulator, if you want real GameBoy speed.
 Automatic installation is supported, and you will be prompted to; initially.
 
 #### Clone the repo
