@@ -77,6 +77,6 @@ It is instead instruction stepped, due to this, you may experience bugs every no
 AI was used extensively, only for; bug hunting, disassembly and optimization problems. 
 
 ## Known bugs
-- Alleyway and Mortal Kombat refuse to run due to serial transfer not being implemented yet
+- ~Alleyway and Mortal Kombat refuse to run due to serial transfer not being implemented yet~ (fixed, impemented serial stub)
 - ~Street Fighter 2 periodically rendering giberrish due to PPU and CPU sync problems~ (fixed)
 - ~Super Star Wars character sprite not rendering~ (fixed, was due to missing hblank stat interrupts)
