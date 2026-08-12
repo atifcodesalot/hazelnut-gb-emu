@@ -8,6 +8,7 @@ This is a gameboy emulator written solo with python and pygame, only for learnin
 ![Metroid ss](showcases/metroid.png)
 ![Wario land ss](showcases/wario.png)
 ![Harvest moon ss](showcases/hmoon.png)
+![Pokemon ss](showcases/magikarp.png)
 
 ## Legal notice
 
