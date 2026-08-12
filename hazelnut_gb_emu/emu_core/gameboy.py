@@ -114,7 +114,7 @@ class Gameboy:
 
     def handle_serial(self, elapsed):
         SC = self.memctl.io_registers[0xFF02]
-        if not SC >> 7 & 1:
+        if (SC & 0x81) != 0x81:
             return
         old = self.cycles // 0x200
         new = (self.cycles + elapsed) // 0x200
@@ -128,13 +128,17 @@ class Gameboy:
         self.send_serial_bit(send_bit)
         SB = (SB << 1) & 0x7f
         recvd = self.get_serial_bit()
-        SB &= recvd
+        SB = ((SB << 1) & 0xFF) | recvd
         self.memctl.io_registers[0xFF01] = SB
         if self.serial_timer + 1 == 8:
             # request serial interrupt
             IF = self.memctl.io_registers[0xFF0F]
             new_IF = BO.set_nth_bit(IF, 3)
             self.memctl.io_registers[0xFF0F] = new_IF
+            # clear transmission active bit
+            SC = self.memctl.io_registers[0xFF02]
+            SC = BO.res_nth_bit(SC, 7)
+            
         self.serial_timer = (self.serial_timer + 1) % 8
 
     def send_serial_bit(self, bit):
