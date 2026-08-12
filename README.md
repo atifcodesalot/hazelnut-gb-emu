@@ -4,7 +4,6 @@ This is a gameboy emulator written solo with python and pygame, only for learnin
 ![Gameplay showcase](showcases/showcase.gif)
 
 ## Some Screenshots
-![Bombjack ss](showcases/resim.png)
 ![Metroid ss](showcases/metroid.png)
 ![Wario land ss](showcases/wario.png)
 ![Harvest moon ss](showcases/hmoon.png)
