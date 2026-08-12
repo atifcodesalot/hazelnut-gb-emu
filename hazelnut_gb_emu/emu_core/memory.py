@@ -293,6 +293,13 @@ class GBMemoryController:
         if a < 0xFF80:
             if a == 0xFF00:
                 return self.handle_joypad_read()
+            
+            if a == 0xFF01:
+                # stub
+                return 0xFF
+            
+            if a == 0xFF02:
+                return 0
 
             return self.io_registers.get(a, 0xFF)
 

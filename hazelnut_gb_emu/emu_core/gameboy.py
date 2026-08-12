@@ -46,11 +46,11 @@ class Gameboy:
         self.DMA = False
 
         self.debug = False
-
         self.running = True
 
         self.cpu_debt = 0
-        
+        self.serial_timer = 0
+
         self.pyclock = pygame.time.Clock()
 
     def turn_on_LCD(self):
@@ -80,16 +80,20 @@ class Gameboy:
         if self.SM83_processor.HALT:
             if not self.handle_cpu_halt():
                 self.tick_timers(clock_cycles)
+                self.handle_serial(clock_cycles)
                 self.cpu_debt = 0
                 return
         cycles_passed = 0
         while cycles_passed < clock_cycles:
             ins, ins_cycles = self.SM83_processor.tick_one_ins(self)
             self.tick_timers(ins_cycles)
+            self.handle_serial(ins_cycles)
             cycles_passed += ins_cycles
 
             if self.SM83_processor.HALT:
-                self.tick_timers(clock_cycles - cycles_passed)
+                remaining = clock_cycles - cycles_passed
+                self.tick_timers(remaining)
+                self.handle_serial(remaining)
                 self.cpu_debt = 0
                 return
 
@@ -107,6 +111,38 @@ class Gameboy:
         falls = new - old
         for _ in range(falls):
             self.memctl.inc_TIMA()
+
+    def handle_serial(self, elapsed):
+        SC = self.memctl.io_registers[0xFF02]
+        if not SC >> 7 & 1:
+            return
+        old = self.cycles // 0x200
+        new = (self.cycles + elapsed) // 0x200
+        falls = new - old
+        for _ in range(falls):
+            self.shift_SB()
+
+    def shift_SB(self):
+        SB = self.memctl.io_registers[0xFF01]
+        send_bit = SB >> 7 & 1
+        self.send_serial_bit(send_bit)
+        SB = (SB << 1) & 0x7f
+        recvd = self.get_serial_bit()
+        SB &= recvd
+        self.memctl.io_registers[0xFF01] = SB
+        if self.serial_timer + 1 == 8:
+            # request serial interrupt
+            IF = self.memctl.io_registers[0xFF0F]
+            new_IF = BO.set_nth_bit(IF, 3)
+            self.memctl.io_registers[0xFF0F] = new_IF
+        self.serial_timer = (self.serial_timer + 1) % 8
+
+    def send_serial_bit(self, bit):
+        # stub
+        pass
+
+    def get_serial_bit(self):
+        return 1
 
     def start_DMA(self):
         # logger.debug("starting DMA...")
