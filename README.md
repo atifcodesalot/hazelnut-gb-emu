@@ -9,6 +9,7 @@ This is a gameboy emulator written solo with python and pygame, only for learnin
 ![Wario land ss](showcases/wario.png)
 ![Harvest moon ss](showcases/hmoon.png)
 ![Pokemon ss](showcases/magikarp.png)
+![Chessmaster ss](showcases/chessmaster.png)
 
 ## Legal notice
 
