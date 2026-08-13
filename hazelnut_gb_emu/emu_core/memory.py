@@ -3,7 +3,7 @@ from .auxiliary import BO
 from .cartridge import Cartridge
 from . import logger
 import math
-from .MBCs import MBC1, MBC2, MBC3
+from .MBCs import MBC1, MBC2, MBC3, MBC5
 
 
 class RAM:
@@ -180,10 +180,15 @@ class GBMemoryController:
         elif cartridge.type in [0x5, 0x6]:
             self.bank_switching = True
             self.mbc = MBC2(self, cartridge)
-        # MBC3
+        # MBC3 without RTC
         elif cartridge.type in [0x11, 0x12, 0x13]:
             self.bank_switching = True
             self.mbc = MBC3(self, cartridge)
+            
+        # MBC5 without rumble motor
+        elif cartridge.type in [0x19, 0x1A, 0x1B]:
+            self.bank_switching = True
+            self.mbc = MBC5(self, cartridge)
 
     def hex_dump(self, start, end):
         for i in range(start, end + 1):

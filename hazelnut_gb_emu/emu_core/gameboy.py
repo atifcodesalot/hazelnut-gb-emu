@@ -331,7 +331,7 @@ class SessionController:
             if not os.path.isdir(self.save_path):
                 os.mkdir(self.save_path)
             f = open(os.path.join(
-                self.save_path, self.cartridge.title + '.save'), "wb")
+                self.save_path, str(self.cartridge.title) + '.save'), "wb")
             f.write(self.gameboy.memctl.ext_ram.array)
             f.close()
             logger.info(

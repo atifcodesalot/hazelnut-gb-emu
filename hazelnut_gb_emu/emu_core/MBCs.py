@@ -22,9 +22,9 @@ class MBC1(MBC):
     def __init__(self, memctl, cartridge: Cartridge):
         super().__init__(memctl, cartridge)
         self.cart_regs = {
-            0x2000: 0, # RAM EN
-            0x4000: 1, # ROM BANK NUM
-            0x6000: 0, # RAM BANK/UPPER
+            0x2000: 0,  # RAM EN
+            0x4000: 1,  # ROM BANK NUM
+            0x6000: 0,  # RAM BANK/UPPER
             0x8000: 0  # BANK MODE
         }
 
@@ -103,7 +103,7 @@ class MBC1(MBC):
             m.ext_ram.write_to(offset, value)
 
     def read(self, address, rom: bool):
-        mode = self.cart_regs[0x8000] # get mode
+        mode = self.cart_regs[0x8000]  # get mode
         if rom:
             return self.handle_rom_banking(address, mode)
 
@@ -123,8 +123,8 @@ class MBC2(MBC):
         super().__init__(memctl, cartridge)
         self.cart_regs = {
             # technically there is one register
-            0x4000: 0, # RAM EN
-            0x4001: 0, # ROM BANK
+            0x4000: 0,  # RAM EN
+            0x4001: 0,  # ROM BANK
         }
 
     def handle_ram_read(self, address):
@@ -180,15 +180,15 @@ class MBC3(MBC):
     def __init__(self, memctl, cartridge: Cartridge):
         super().__init__(memctl, cartridge)
         self.cart_regs = {
-            0x2000: 0, # RAM/TIMER EN
-            0x4000: 1, # ROM BANK NUM
-            0x6000: 0, # RAM BANK/RTC SEL
-            0x8000: 0, # LATCH CLK
-            0xA008: 0, # RTC S
-            0xA009: 0, # RTC M
-            0xA00A: 0, # RTC H
-            0xA00B: 0, # RTC DL
-            0xA00C: 0, # RTC DH
+            0x2000: 0,  # RAM/TIMER EN
+            0x4000: 1,  # ROM BANK NUM
+            0x6000: 0,  # RAM BANK/RTC SEL
+            0x8000: 0,  # LATCH CLK
+            0xA008: 0,  # RTC S
+            0xA009: 0,  # RTC M
+            0xA00A: 0,  # RTC H
+            0xA00B: 0,  # RTC DL
+            0xA00C: 0,  # RTC DH
         }
         self.last_sample = 0
         self.seconds = 0
@@ -320,22 +320,67 @@ class MBC3(MBC):
         if self.RTC_read_enabled:
             self.handle_RTC_write(sel, value)
          # if RTC isn't enabled, write nothing
-         
-         
+
 
 class MBC5(MBC):
     def __init__(self, memctl, cartridge):
         super().__init__(memctl, cartridge)
         self.cart_regs = {
-            0x2000: 0, # RAM EN
-            0x3000: 0, # ROM 8 
-            0x4000: 0, # ROM 9
-            0x6000: 0 # RAM BANK NUM
+            0x2000: 0,  # RAM EN
+            0x3000: 1,  # ROM 8
+            0x4000: 0,  # ROM 9
+            0x6000: 0  # RAM BANK NUM
         }
-        
-    def read(self, address, rom: bool):
-        pass
-    
-    def write(self, address, value):
-        pass
+        print(self.cart.rom_banks)
+        print(self.cart.ram_banks)
 
+    def handle_rom_write(self, address, value):
+        if address < 0x2000:
+            self.memctl.ext_ram_enabled = (value & 0x0F) == 0x0A
+            return
+        if address < 0x3000:
+            self.cart_regs[0x3000] = value
+            return
+        if address < 0x4000:
+            self.cart_regs[0x4000] = (value) & 1
+            return
+        if address < 0x6000:
+            self.cart_regs[0x6000] = (value) & 0xF
+
+    def handle_ram_write(self, address, value):
+        offset = address & 0x1fff
+        bank_num = (self.cart_regs[0x6000]) % self.cart.ram_banks
+        switched_addr = bank_num * 0x2000 + offset
+        self.memctl.ext_ram.array[
+            switched_addr] = value
+
+    def handle_rom_read(self, address):
+        bank_i = address >> 14 & 1
+        if not bank_i:
+            return self.memctl.rom.array[address]
+        # banked rom read starts here
+        offset = address & 0x3fff
+        bank_num = (self.cart_regs[0x4000] << 8) | self.cart_regs[0x3000]
+        bank_num %= self.cart.rom_banks
+        return self.memctl.rom.array[
+            bank_num * 0x4000 + offset]
+
+    def handle_ram_read(self, address):
+        offset = address & 0x1fff
+        bank_num = (self.cart_regs[0x6000]) % self.cart.ram_banks
+        return self.memctl.ext_ram.array[
+            bank_num * 0x2000 + offset]
+
+    def read(self, address, rom: bool):
+        if rom:
+            return self.handle_rom_read(address)
+
+        return self.handle_ram_read(address)
+
+    def write(self, address, value):
+        if address < 0x8000:
+            self.handle_rom_write(address, value)
+            return
+
+        # ram write starts here
+        self.handle_ram_write(address, value)
