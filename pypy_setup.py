@@ -99,8 +99,6 @@ ZIP_NAME = pathlib.PurePosixPath(
     urllib.parse.urlsplit(DOWNLOAD_URL).path
 ).name
 
-print(ZIP_NAME)
-
 
 def checksum_arc(zip_bytes):
     hash = hashlib.sha256(zip_bytes).hexdigest()
@@ -149,7 +147,6 @@ def find_pypy3():
 
 
 def install_packages(pypy):
-    print(os.getcwd())
     result = subprocess.run(
         [pypy, "-c", "import pygame"],
         stdout=subprocess.DEVNULL,
