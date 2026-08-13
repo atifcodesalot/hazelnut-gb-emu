@@ -34,14 +34,21 @@ class GbPPU:
 
         self.window_internal_counter = 0
 
+        self.bg_palette = []
+        self.obj0_palette = []
+        self.obj1_palette = []
+
+        self.sp_winner_cache = []
+
+    def get_color_palette(self, palette_reg):
+        return [(palette_reg >> s) & 0b11 for s in range(0, 8, 2)]
+
     def get_shade(self, palette_reg, shade_bits):
         ti = shade_bits * 2
         mask = (1 << ti) * 3
         return (palette_reg & mask) >> ti
 
-    def get_static_tile(self, lcdc, px, py, map_control_bit):
-        lcdc_Q = lcdc >> map_control_bit & 1
-        map_start = 0x1C00 if lcdc_Q else 0x1800
+    def get_static_tile(self, lcdc, px, py, map_start):
         lcdc_4 = lcdc >> 4 & 1
         index = self.vram.array[map_start + (py >> 3) * 32 + (px >> 3)]
         offset = 0x0000 if lcdc_4 else 0x1000
@@ -50,66 +57,20 @@ class GbPPU:
         final_offset = tile_offset + (py % 8) * 2
         return self.vram.get_block_at(final_offset, 2)
 
-    def get_tile_row_BG(self, lcdc, px, py):
-        return self.get_static_tile(lcdc, px, py, map_control_bit=3)
+    def get_tile_row_BG(self, lcdc, px, py, bgm_start):
+        return self.get_static_tile(lcdc, px, py, bgm_start)
 
-    def get_tile_row_WINDOW(self, lcdc, px, py):
-        return self.get_static_tile(lcdc, px, py, map_control_bit=6)
-
-    # takes relative pixels pos
-    def get_pixel_SPRITE(self, row, rpx):
-        pixel = BO.get_pixel_2bpp(row[0], row[1], rpx)
-        return pixel
+    def get_tile_row_WINDOW(self, lcdc, px, py, wm_start):
+        return self.get_static_tile(lcdc, px, py, wm_start)
 
     # takes relative pixels pos
     def get_pixel_row(self, ti, rpy):
         row = self.vram.get_block_at(ti * 16 + 2 * rpy, 2)
         return row
 
-    def get_winning_pixel_SPRITE(self, px):
-        winner = None
-        wsr = None
-        best_x = 9999
-
-        for i in range(len(self.sprites)):
-            sr = self.sprites[i]
-            row = self.sprite_rows[i]
-            sx = sr[1] - 8
-            info = sr[3]
-
-            rpx = px - sx
-
-            # Sprite does not cover this scanline pixel
-            if not 0 <= rpx < 8:
-                continue
-
-            # Apply flips
-            xflip = (info >> 5) & 1
-
-            if xflip:
-                rpx = 7 - rpx
-
-
-            pixel = self.get_pixel_SPRITE(row, rpx)
-
-            # OBJ color 0 is transparent
-            if pixel == 0:
-                continue
-
-            x = sr[1]
-
-            # DMG priority rule:
-            # smaller X coordinate wins.
-            if winner is None or x < best_x:
-                winner = pixel
-                wsr = sr
-                best_x = x
-
-        return winner, wsr
-
     def get_context(self):
         # palette register
-        palette_reg = self.memctl.io_registers[0xff47]
+        palette_reg = self.memctl.io_registers[0xFF47]
         scx = self.memctl.io_registers[0xFF43]
         scy = self.memctl.io_registers[0xFF42]
         ly = self.memctl.io_registers[0xFF44]
@@ -130,9 +91,17 @@ class GbPPU:
         new_if |= 1
         self.memctl.io_registers[0xFF0F] = new_if
         # # #
+        # request VBlank stat int, different from the above interrupt line
+        if (STAT >> 4) & 1:
+            self.request_STAT_int()
 
     def is_VBLANK_scan(self, ly):
         return 144 <= ly <= 153
+
+    def request_STAT_int(self):
+        IF = self.memctl.io_registers[0xFF0F]
+        new_IF = BO.set_nth_bit(IF, 1)
+        self.memctl.io_registers[0xFF0F] = new_IF
 
     def handle_LY_compare(self):
         ly = self.memctl.io_registers[0xFF44]
@@ -140,14 +109,10 @@ class GbPPU:
         STAT = self.memctl.io_registers[0xFF41]
         if ly == lyc and not STAT >> 2 & 1:
             if STAT >> 6 & 1:
-                # request STAT int
-                IF = self.memctl.io_registers[0xFF0F]
-                new_IF = BO.set_nth_bit(IF, 1)
-                self.memctl.io_registers[0xFF0F] = new_IF
-
+                self.request_STAT_int()
             new_STAT = BO.set_nth_bit(STAT, 2)
             self.memctl.io_registers[0xFF41] = new_STAT
-        else:
+        elif ly != lyc:
             # clear if STAT's lyc == ly bit was true
             if STAT >> 2 & 1:
                 new_STAT = BO.res_nth_bit(STAT, 2)
@@ -159,6 +124,9 @@ class GbPPU:
         STAT = self.memctl.io_registers[0xFF41]
         new_STAT = BO.res_nth_bit(STAT, 0)
         new_STAT = BO.set_nth_bit(new_STAT, 1)
+        if (STAT >> 5) & 1:
+            # oam mode stat int
+            self.request_STAT_int()
         self.memctl.io_registers[0xFF41] = new_STAT
 
         # clear sprites from previous scanline
@@ -171,6 +139,9 @@ class GbPPU:
         STAT = self.memctl.io_registers[0xFF41]
         new_STAT = BO.res_nth_bit(STAT, 0)
         new_STAT = BO.res_nth_bit(new_STAT, 1)
+        if (STAT >> 3) & 1:
+            # hblank stat int
+            self.request_STAT_int()
         self.memctl.io_registers[0xFF41] = new_STAT
 
     def enter_drawing_mode(self):
@@ -181,32 +152,83 @@ class GbPPU:
         new_STAT = BO.set_nth_bit(new_STAT, 1)
         self.memctl.io_registers[0xFF41] = new_STAT
 
+        lcdc = self.memctl.io_registers[0xFF40]
+        ly = self.memctl.io_registers[0xFF44]
+        sprite_height = 16 if lcdc >> 2 & 1 else 8
+        self.cache_sprite_rows(sprite_height, ly)
+        self.cache_sprite_winners()
+
+    def mix(self, st_px, sp_px, sp_obj):
+        if sp_obj is None or sp_px == 0:
+            if st_px:
+                final_shade = self.bg_palette[st_px]
+            else:
+                # if bg is also none, meaning bg and window is disabled (lcdc bit 0 is False)
+                final_shade = self.bg_palette[0]
+            return final_shade
+        # if there is a sprite pixel
+        sp_plt = self.obj1_palette if (
+            sp_obj[3] >> 4 & 1) else self.obj0_palette
+        obj_priority = sp_obj[3] >> 7 & 1
+        # if priority bit is 0, then obj has priority over bg or window pxels
+        if not obj_priority:
+            final_shade = sp_plt[sp_px]
+        else:
+            if st_px:
+                final_shade = self.bg_palette[st_px]
+            else:
+                final_shade = sp_plt[sp_px]
+        return final_shade
+
+    def get_BG_pixels(self, lcdc, bgx, bgy, map_start_bg):
+        BG_row = self.get_tile_row_BG(
+            lcdc, bgx, bgy, map_start_bg)
+        return [
+            (((BG_row[1] >> bit) & 1) << 1) | ((BG_row[0] >> bit) & 1)
+            for bit in range(7, -1, -1)
+        ]
+
+    def get_W_pixels(self, lcdc, lwx, map_start_window):
+        W_row = self.get_tile_row_WINDOW(
+            lcdc, lwx, self.window_internal_counter, map_start_window)
+        return [
+            (((W_row[1] >> bit) & 1) << 1) | (
+                (W_row[0] >> bit) & 1)
+            for bit in range(7, -1, -1)
+        ]
+
     def drawing_mode(self, ctx):
         # todo: please refactor this function
         self.enter_drawing_mode()
         st_palette_reg, (scx, scy), (ly, _), lcdc = ctx
+        self.bg_palette = self.get_color_palette(st_palette_reg)
+        self.obj0_palette = self.get_color_palette(
+            self.memctl.io_registers[0xFF48])
+        self.obj1_palette = self.get_color_palette(
+            self.memctl.io_registers[0xFF49])
         wy, wx = self.memctl.io_registers[0xFF4A], self.memctl.io_registers[0xFF4B]
+
+        bgy = (ly + scy) & 0xff
+        lwy = ly - wy
+        map_start_bg = 0x1C00 if lcdc >> 3 & 1 else 0x1800
+        map_start_window = 0x1C00 if lcdc >> 6 & 1 else 0x1800
+
         window_was_visible = False
         row_n = GB_LCD_RES[0] * ly
+        static_enable = lcdc & 1
+
         for x in range(GB_LCD_RES[0]):
             # compute local background and window pixel coordinates
             lwx = x - wx + 7
-            lwy = ly - wy
             bgx = (scx + x) & 0xff
-            bgy = (ly + scy) & 0xff
             bg_offset = bgx % 8
             w_offset = lwx % 8
-            static_enable = lcdc & 1
             #
 
             # if new bg row needs to be fetched
             if x == 0 or bg_offset == 0:
-                BG_row = self.get_tile_row_BG(
-                    lcdc, bgx, bgy)
-                BG_pixels = [
-                    (((BG_row[1] >> bit) & 1) << 1) | ((BG_row[0] >> bit) & 1)
-                    for bit in range(7, -1, -1)
-                ]
+                BG_pixels = self.get_BG_pixels(
+                    lcdc, bgx, bgy, map_start_bg)
 
             # get background pixel from offset
             BG_pixel = BG_pixels[bg_offset]
@@ -218,61 +240,36 @@ class GbPPU:
                 window_was_visible = True
                 # if new window row needs to be fetched
                 if w_offset == 0 or first_window_pixel:
-                    W_row = self.get_tile_row_WINDOW(
-                        lcdc, lwx, self.window_internal_counter)
-                    W_pixels = [
-                        (((W_row[1] >> bit) & 1) << 1) | (
-                            (W_row[0] >> bit) & 1)
-                        for bit in range(7, -1, -1)
-                    ]
+                    W_pixels = self.get_W_pixels(lcdc, lwx, map_start_window)
 
                 W_pixel = W_pixels[w_offset]
 
             # either BG or Window pixel
             if static_enable:
-                static_pixel = BG_pixel if not window_active else W_pixel
+                st_pixel = BG_pixel if not window_active else W_pixel
             else:
-                static_pixel = None
-                
-            # call sprite pixel function only if there are sprites
-            if self.sprites:
-                sprite_pixel, sprite = self.get_winning_pixel_SPRITE(x)
-            else:
-                sprite_pixel = sprite = None
+                st_pixel = None
 
-            if sprite_pixel is None or sprite_pixel == 0:
-                if static_pixel:
-                    final_shade = self.get_shade(st_palette_reg, static_pixel)
-                else:
-                    # if bg is also none, meaning bg and window is disabled (lcdc bit 0 is False)
-                    final_shade = self.get_shade(st_palette_reg, 0)
+            # call sprite pixel function only if there are sprites
+            # and if lcdc NOW enables objects
+            if self.sp_winner_cache[x] and (lcdc >> 1) & 1:
+                sp_px, sr = self.sp_winner_cache[x]
             else:
-                objpreg = self.memctl.io_registers[0xFF48 +
-                                                    (sprite[3] >> 4 & 1)]
-                priority = sprite[3] >> 7 & 1
-                # if priority bit is 0, then obj has priority over bg or window pxels
-                if not priority:
-                    final_shade = self.get_shade(objpreg, sprite_pixel)
-                else:
-                    if static_pixel:
-                        final_shade = self.get_shade(st_palette_reg, static_pixel)
-                    else:
-                        final_shade = self.get_shade(
-                            objpreg, sprite_pixel)
-                        
-            self.buffer[row_n + x] = final_shade
+                sp_px = sr = None
+
+            shade = self.mix(st_pixel, sp_px, sr)
+
+            # set final shade on buffer
+            self.buffer[row_n + x] = shade
 
         if window_was_visible:
             self.window_internal_counter += 1
+
         self.dots += 172
 
     def OAM_scan(self, ctx):
         _, (_, _), (ly, _), lcdc = ctx
         self.enter_OAM()
-        lcdc_1 = lcdc >> 1 & 1
-        if not lcdc_1:
-            self.dots += 80
-            return
         lcdc_2 = lcdc >> 2 & 1
         self.mode = 2
         for i in range(0, 160, 4):
@@ -283,12 +280,11 @@ class GbPPU:
                 self.sprites.append(sr)
 
         # only 10 sprites max for each scanline
-        self.sprites = self.sprites[:10]
-        # cache sprite rows
-        self.cache_sprite_rows(sprite_height, ly)
+        # sort based on x coordinates
+        self.sprites = sorted(self.sprites[:10], key=lambda sr: sr[1])
 
         self.dots += 80
-        
+
     def cache_sprite_rows(self, sprite_height, py):
         for sr in self.sprites:
             sy = sr[0] - 16
@@ -298,7 +294,7 @@ class GbPPU:
             rpy = py - sy
 
             # handle Y flip
-            if info & 0x40:  
+            if info & 0x40:
                 rpy = sprite_height - 1 - rpy
 
             if sprite_height == 16:
@@ -308,7 +304,30 @@ class GbPPU:
                     ti += 1
                     rpy -= 8
 
-            self.sprite_rows.append(self.get_pixel_row(ti, rpy))
+            row = self.get_pixel_row(ti, rpy)
+
+            self.sprite_rows.append(
+                [BO.get_pixel_2bpp(row[0], row[1], i) for i in range(8)])
+
+    def cache_sprite_winners(self):
+        self.sp_winner_cache = [None,] * 160
+        for i, sr in enumerate(self.sprites):
+            xflip = (sr[3] >> 5) & 1
+            sx = sr[1] - 8
+            row = self.sprite_rows[i]
+            for j in range(8):
+                scan = sx + j
+                if not (GB_LCD_RES[0] > scan > 0):
+                    continue
+                old = self.sp_winner_cache[scan]
+                # if no sprite that has higher priority,
+                # occupied this pixel before
+                if old is None:
+                    # account for x flip
+                    px = row[7 - j] if xflip else row[j]
+                    # if pixel is not transparent
+                    if px != 0:
+                        self.sp_winner_cache[scan] = (px, sr)
 
     def HBLANK_mode(self):
         self.enter_HBLANK()

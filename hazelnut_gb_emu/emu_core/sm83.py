@@ -2,12 +2,23 @@
 
 from .loader import (GB_PREFIXED_OPCODES_JSON,
                      GB_UNPREFIXED_OPCODES_JSON, GameboyInstruction)
+
 from . import logger
 from .memory import *
 from .auxiliary import BO
 from . import Register
 
 
+def init_mnemonics():
+    global MNEMONICS
+    MNEMONICS = [ins.mnemonic for ins in GB_PREFIXED_OPCODES_JSON] + \
+                    [ins.mnemonic for ins in GB_UNPREFIXED_OPCODES_JSON]
+
+    MNEMONICS = frozenset([m for m in MNEMONICS if not (
+        m.startswith('ILLEGAL') or m == "PREFIX")])
+
+
+init_mnemonics()
 
 
 class PairRegister:
@@ -131,6 +142,9 @@ class SM83(CPU):
         self.pending_interrupt_enable = False
         self.enable_interrupts_now = False
 
+        self.mnemonic_ins_table = dict(
+            (m, getattr(self, f"exe_INS_{m}")) for m in MNEMONICS)
+
     def set_flags_fast(self, Z=None, N=None, H=None, C=None, IME=None):
         if Z is not None:
             self.flags['Z'] = Z
@@ -150,59 +164,60 @@ class SM83(CPU):
     # Load, copy related instructions start here
     ###
     # LD; LDH
-
-    def handle_operand_inc(self, operand):
-        if operand.increment or operand.decrement:
-            if operand.increment:
-                self.inc_register(operand.name)
-            else:
-                self.dec_register(operand.name)
-
+            
     def exe_INS_LD(self, ins: GameboyInstruction):
+        op = ins.raw
         # at max 3 operands at a LD instruction
-        # In fact only one instruction that uses 3 operands which is LD HL,SP+e8
-        o1, o2, *oo = ins.operands
-        if oo:
+        if op == 0xF8:
+            # Only one instruction uses 3 operands which is LD HL,SP+e8
             e8 = ins.operands_raw[0]
             signed = BO.byte_twos_complement(e8)
             self.set_register("HL", self.SP.value + signed)
             self.set_flags_fast(Z=0, N=0, H=BO.add_half_carry(
                 self.SP.value, signed), C=BO.add_full_carry(self.SP.value & 0xFF, e8))
             return
+        
+        o1, o2 = ins.operands[0], ins.operands[1]
+        imm = o2.immediate
+        name1 = o1.name
+        name2 = o2.name
 
         # o1 is the load destionation, ALWAYS
         # o2 is ALWAYS the data to load
-        if o2.name in ["n8", "n16", "a16"]:
-            if o2.name == "n8":
-                data = ins.operands_raw[0]
+        op_len = ins.operand_bytes
+        if op_len > 0:
+            if op_len > 1:
+                data = ins.operands_raw[0] | (ins.operands_raw[1] << 8)
             else:
-                data = BO.concat_bytes(
-                    *ins.operands_raw[:2][::-1])  # little endian
-            w = data if o2.immediate else self.memory.read_at(data)
+                data = ins.operands_raw[0]
+                
+            w = data if imm else self.memory.read_at(data)
         else:
-            r = self.get_register(o2.name)
-            w = r if o2.immediate else self.memory.read_at(r)
+            r = self.get_register(name2)
+            w = r if imm else self.memory.read_at(r)
 
-        # when operand 1 is an address, operand 2 is always a register, hence we use the whole raw operands
+        # when operand 1 is an address, operand 2 is always a register, 
+        # hence we use the whole raw operands
         # in fact it is either SP or A
-        if o1.name == "a16":
-            data = BO.concat_bytes(*ins.operands_raw[:2][::-1])
-            if o2.name == "SP":
+        if name1 == "a16":
+            if name2 == "SP":
                 high, low = self.SP.value >> 8, self.SP.value & 0xFF
                 self.memory.write_to(data + 1, high)  # little endian
                 self.memory.write_to(data, low)
 
-            elif o2.name == "A":
+            elif name2 == "A":
                 self.memory.write_to(data, self.get_register("A"))
 
         else:
             if o1.immediate:
-                self.set_register(o1.name, w)
+                self.set_register(name1, w)
             else:
-                self.memory.write_to(self.get_register(o1.name), w)
+                self.memory.write_to(self.get_register(name1), w)
 
-        self.handle_operand_inc(o1)
-        self.handle_operand_inc(o2)
+        if op == 0x22 or op == 0x2A:
+            self.inc_register("HL")
+        if op == 0x32 or op == 0x3A:
+            self.dec_register("HL")
 
     def exe_INS_LDH(self, ins: GameboyInstruction):
         o1, o2 = ins.operands
@@ -563,13 +578,13 @@ class SM83(CPU):
             new_Z = old_A - adjustment == 0
 
         else:
-            if H or old_A & 0xF > 0x9:
+            if H or (old_A & 0xF) > 0x9:
                 adjustment += 0x6
             if C or old_A > 0x99:
                 adjustment += 0x60
                 self.set_flags_fast(C=True)
             self.set_register('A', old_A + adjustment)
-            new_Z = old_A + adjustment == 0
+            new_Z = (old_A + adjustment) & 0xFF == 0
 
         self.set_flags_fast(H=False, Z=new_Z)
 
@@ -577,8 +592,9 @@ class SM83(CPU):
         # logger.debug("HALT instruction executed.")
         self.HALT = True
 
-    # def exe_INS_STOP(self, ins):
-    #     pass
+    def exe_INS_STOP(self, ins):
+        logger.debug("STOP instruction executed.")
+        pass
 
     # MISC instructions end here
 
@@ -734,24 +750,20 @@ class SM83(CPU):
         else:
             ins = GB_UNPREFIXED_OPCODES_JSON[opcode]
 
+        current_pc = self.PC.value
+
         # operand length
-        ol = ins.byte_count
+        op_len = ins.operand_bytes
 
-        prefixl = 1 if prefixed else 0
-        bc = ins.byte_count - 1 - prefixl
-
-        if bc == 0:
-            operands_raw = None
-        if bc == 1:
-            operands_raw = (self.memory.read_at(self.PC.value),)
-        if bc == 2:
-            operands_raw = (self.memory.read_at(self.PC.value),
-                            self.memory.read_at(self.PC.value + 1))
-
-        ins.operands_raw = operands_raw
+        if op_len == 1:
+            ins.operands_raw[0] = self.memory.read_at(current_pc)
+        if op_len == 2:
+            ins.operands_raw[0] = self.memory.read_at(current_pc)
+            ins.operands_raw[1] = self.memory.read_at(current_pc + 1)
 
         # inc PC
-        self.PC.value = (self.PC.value + ol - 1 - prefixl) & 0xffff
+        self.PC.value = (current_pc + op_len) & 0xffff
+
         return ins
 
     def instruction_cycle(self):
@@ -767,12 +779,13 @@ class SM83(CPU):
 
         self.PC.value = (self.PC.value + 1) & 0xffff
         #
+
         # decode
         ins = self.decode(opcode, prefixed)
         #
 
         # execute
-        func = getattr(self, f"exe_INS_{ins.mnemonic}")
+        func = self.mnemonic_ins_table[ins.mnemonic]
         func(ins)
         #
 

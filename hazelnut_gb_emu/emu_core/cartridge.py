@@ -299,8 +299,8 @@ class CartridgeReader:
         "global_checksum": (0x14E, 0x14F)
     }
 
-    def __init__(self, filename):
-        self.file = open(filename, "rb")
+    def __init__(self, file):
+        self.file = file
 
     def read(self):
         self.content = bytearray(self.file.read())
@@ -319,7 +319,7 @@ class CartridgeReader:
         stripped_title = self.title.replace(b'\x00', b'')
         if stripped_title.isascii():
             return stripped_title.decode("ASCII")
-        return stripped_title
+        return stripped_title.strip()
 
     def handle_licensee(self):
         olc = self.old_licensee_code[0]
@@ -410,7 +410,7 @@ class CartridgeReader:
 def identify():
     import sys
     # read a cartridge and get type data
-    reader = CartridgeReader(sys.argv[1])
+    reader = CartridgeReader(open(sys.argv[1], "rb"))
     c = reader.get_cartridge()
     print(f"""
     Cartridge type: {c.type_name} (0x{c.type:02X})

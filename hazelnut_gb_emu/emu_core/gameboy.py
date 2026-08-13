@@ -3,14 +3,10 @@
 from .sm83 import *
 from .PPU import *
 from .memory import *
-from .sound import *
-
-import colorama
 from .cartridge import Cartridge
 from .auxiliary import BO
 import os
 import threading
-import time
 
 
 pyclock = pygame.time.Clock()
@@ -44,17 +40,18 @@ class Gameboy:
             self, ext_ram=False)
         self.SM83_processor = SM83(self.memctl)
         self.PPU = GbPPU(self.memctl)
-        self.APU = GbAPU(self.memctl, self)
         # 16 bit internal divider register value
         self.cycles = 0
         #
         self.DMA = False
 
         self.debug = False
-
         self.running = True
 
         self.cpu_debt = 0
+        self.serial_timer = 0
+
+        self.pyclock = pygame.time.Clock()
 
     def turn_on_LCD(self):
         self.memctl[0xFF40] = 0x91
@@ -76,7 +73,7 @@ class Gameboy:
         TIMA_en = (TAC >> 2) & 1
         if TIMA_en:
             self.handle_TIMA(old_cycles=self.cycles, elapsed=dots)
-        self.cycles = (self.cycles + dots) 
+        self.cycles = (self.cycles + dots)
         self.handle_DIV()
 
     def CPU_APU_burst(self, clock_cycles):
@@ -101,10 +98,9 @@ class Gameboy:
             cycles_passed += ins_cycles
 
             if self.SM83_processor.HALT:
-                r = clock_cycles - cycles_passed
-                self.tick_timers(r)
-                if self.APU.audio_on():
-                    self.APU.tick_cycles(r)
+                remaining = clock_cycles - cycles_passed
+                self.tick_timers(remaining)
+                self.handle_serial(remaining)
                 self.cpu_debt = 0
                 return
 
@@ -122,6 +118,42 @@ class Gameboy:
         falls = new - old
         for _ in range(falls):
             self.memctl.inc_TIMA()
+
+    def handle_serial(self, elapsed):
+        SC = self.memctl.io_registers[0xFF02]
+        if (SC & 0x81) != 0x81:
+            return
+        old = self.cycles // 0x200
+        new = (self.cycles + elapsed) // 0x200
+        falls = new - old
+        for _ in range(falls):
+            self.shift_SB()
+
+    def shift_SB(self):
+        SB = self.memctl.io_registers[0xFF01]
+        send_bit = SB >> 7 & 1
+        self.send_serial_bit(send_bit)
+        SB = (SB << 1) & 0x7f
+        recvd = self.get_serial_bit()
+        SB = ((SB << 1) & 0xFF) | recvd
+        self.memctl.io_registers[0xFF01] = SB
+        if self.serial_timer + 1 == 8:
+            # request serial interrupt
+            IF = self.memctl.io_registers[0xFF0F]
+            new_IF = BO.set_nth_bit(IF, 3)
+            self.memctl.io_registers[0xFF0F] = new_IF
+            # clear transmission active bit
+            SC = self.memctl.io_registers[0xFF02]
+            SC = BO.res_nth_bit(SC, 7)
+            
+        self.serial_timer = (self.serial_timer + 1) % 8
+
+    def send_serial_bit(self, bit):
+        # stub
+        pass
+
+    def get_serial_bit(self):
+        return 1
 
     def start_DMA(self):
         # logger.debug("starting DMA...")
@@ -161,19 +193,20 @@ class Gameboy:
             # cpu burst then inc ly and handle lyc compare
             self.CPU_APU_burst(456)
             self.PPU.handle_VBLANK()
+            if ly == 153:
+                self.pyclock.tick(59)
             return
 
-        self.PPU.handle_LY_compare()
-
         self.scanline_PPU_modes()
+
+        self.PPU.inc_ly()
+        self.PPU.handle_LY_compare()
 
         # if just finished the last visible scanline
         if ly == GB_LCD_RES[1] - 1:
             # ensure framerate is 60
             #
             self.PPU.enter_VBLANK()
-
-        self.PPU.inc_ly()
 
         # handle real keyboard inputs from the user
         self.handle_inputs()
@@ -231,6 +264,9 @@ class Gameboy:
 
 
 class SessionController:
+    save_path_name = "saves"
+    save_path = os.path.join('.', save_path_name)
+
     def __init__(self, gameboy: Gameboy, cartridge: Cartridge):
         self.gameboy = gameboy
         self.cartridge = cartridge
@@ -285,7 +321,9 @@ class SessionController:
         if ext is not None \
                 and ext.size > 0 and self.cart_has_battery:
             try:
-                f = open(str(self.cartridge.title)+'.save', "rb")
+                name = os.path.join(self.save_path, str(
+                    self.cartridge.title)+'.save')
+                f = open(name, "rb")
             except FileNotFoundError:
                 logger.info(f"No save file found for {self.game_name}")
                 return
@@ -297,12 +335,14 @@ class SessionController:
         ext = self.gameboy.memctl.ext_ram
         if ext is not None \
                 and ext.size > 0 and self.cart_has_battery:
-
-            f = open(self.cartridge.title+'.save', "wb")
+            if not os.path.isdir(self.save_path):
+                os.mkdir(self.save_path)
+            f = open(os.path.join(
+                self.save_path, str(self.cartridge.title) + '.save'), "wb")
             f.write(self.gameboy.memctl.ext_ram.array)
             f.close()
             logger.info(
-                f"Save file generated for {self.game_name} at {os.getcwd()}.")
+                f"Save file generated for {self.game_name} at {os.path.join(os.getcwd(), self.save_path_name)}.")
 
     def draw_A(self):
         s = self.gameboy.screen
@@ -360,13 +400,11 @@ class SessionController:
 
     def display(self):
         self.gameboy.set_display()
-        clock = pygame.time.Clock()
         while self.gameboy.running:
             self.draw_inputs()
             self.draw_cosmetic()
             pygame.event.pump()
             pygame.display.flip()
-            clock.tick(60)
 
     def main(self):
         self.disp_thread = threading.Thread(target=self.display)
