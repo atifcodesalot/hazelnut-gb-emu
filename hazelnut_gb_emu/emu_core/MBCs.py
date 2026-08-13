@@ -22,10 +22,10 @@ class MBC1(MBC):
     def __init__(self, memctl, cartridge: Cartridge):
         super().__init__(memctl, cartridge)
         self.cart_regs = {
-            0x2000: Register("RAM EN", 0, 0xFF, 8),
-            0x4000: Register("ROM BANK NUM", 1, 0x1F, 5),
-            0x6000: Register("RAM BANK/UPPER", 0, 0x03, 2),
-            0x8000: Register("BANK MODE", 0, 0x01, 1)
+            0x2000: 0, # RAM EN
+            0x4000: 1, # ROM BANK NUM
+            0x6000: 0, # RAM BANK/UPPER
+            0x8000: 0  # BANK MODE
         }
 
     def handle_rom_banking(self, address, mode):
@@ -35,9 +35,9 @@ class MBC1(MBC):
         if mode == 0 and bank_i == 0:
             return m.rom.array[address]
 
-        r2 = self.cart_regs[0x6000].value
+        r2 = self.cart_regs[0x6000]
         bank_num = (
-            (r2 << 5) | self.cart_regs[0x4000].value) % self.cart.rom_banks
+            (r2 << 5) | self.cart_regs[0x4000]) % self.cart.rom_banks
         offset = address & 0x3fff  # get the lower 14 bits
         switched_addr_b1 = bank_num * 0x4000 + offset
 
@@ -65,13 +65,13 @@ class MBC1(MBC):
             low_5 = value & 0x1F
             if low_5 == 0:
                 low_5 = 1
-            self.cart_regs[0x4000].value = low_5
+            self.cart_regs[0x4000] = low_5
             return
         if address < 0x6000:
-            self.cart_regs[0x6000].value = value & 0x3
+            self.cart_regs[0x6000] = value & 0x3
             return
         if address < 0x8000:
-            self.cart_regs[0x8000].value = value & 0x1
+            self.cart_regs[0x8000] = value & 0x1
             return
 
     def handle_ram_banking_read(self, address, mode):
@@ -80,7 +80,7 @@ class MBC1(MBC):
 
         if mode == 1:
             if self.cart.ram_banks > 0:
-                bank_num = self.cart_regs[0x6000].value % self.cart.ram_banks
+                bank_num = self.cart_regs[0x6000] % self.cart.ram_banks
             else:
                 bank_num = 0
             switched_addr = 0x2000 * bank_num + offset
@@ -90,11 +90,11 @@ class MBC1(MBC):
 
     def handle_ram_banking_write(self, address, value):
         m = self.memctl
-        mode = self.cart_regs[0x8000].value
+        mode = self.cart_regs[0x8000]
         offset = address & 0x1fff
         if mode == 1:
             if self.cart.ram_banks > 0:
-                bank_num = self.cart_regs[0x6000].value % self.cart.ram_banks
+                bank_num = self.cart_regs[0x6000] % self.cart.ram_banks
             else:
                 bank_num = 0
             switched_addr = 0x2000 * bank_num + offset
@@ -103,7 +103,7 @@ class MBC1(MBC):
             m.ext_ram.write_to(offset, value)
 
     def read(self, address, rom: bool):
-        mode = self.cart_regs[0x8000].value  # get mode
+        mode = self.cart_regs[0x8000] # get mode
         if rom:
             return self.handle_rom_banking(address, mode)
 
@@ -123,8 +123,8 @@ class MBC2(MBC):
         super().__init__(memctl, cartridge)
         self.cart_regs = {
             # technically there is one register
-            0x4000: Register("RAM EN", 0, 0xFF, 8),
-            0x4001: Register("ROM BANK", 0, 0xFF, 8)
+            0x4000: 0, # RAM EN
+            0x4001: 0, # ROM BANK
         }
 
     def handle_ram_read(self, address):
@@ -147,7 +147,7 @@ class MBC2(MBC):
 
         # banked read starts here
         offset = address & 0x3fff
-        reg = self.cart_regs[0x4001].value
+        reg = self.cart_regs[0x4001]
 
         ln = reg & 0xF
         # bank number on the register can't be 0 as usual
@@ -170,7 +170,7 @@ class MBC2(MBC):
 
     def handle_reg_write(self, address, value):
         reg_num = ((address >> 8) & 0xFF) & 1
-        self.cart_regs[0x4000 + reg_num].value = value
+        self.cart_regs[0x4000 + reg_num] = value
         # if bit 8 was clear, control extram enable
         if not reg_num:
             self.memctl.ext_ram_enabled = (value & 0xF == 0xA)
@@ -180,15 +180,15 @@ class MBC3(MBC):
     def __init__(self, memctl, cartridge: Cartridge):
         super().__init__(memctl, cartridge)
         self.cart_regs = {
-            0x2000: Register("RAM/TIMER EN", 0, 0xFF, 8),
-            0x4000: Register("ROM BANK NUM", 1, 0x7F, 7),
-            0x6000: Register("RAM BANK/RTC SEL", 0, 0x0C, 4),
-            0x8000: Register("LATCH CLK", 0, 0x01, 1),
-            0xA008: Register("RTC S", 0, 0xFF, 8),
-            0xA009: Register("RTC M", 0, 0x3B, 6),
-            0xA00A: Register("RTC H", 0, 0x17, 5),
-            0xA00B: Register("RTC DL", 0, 0xFF, 8),
-            0xA00C: Register("RTC DH", 0, 0x7, 3),
+            0x2000: 0, # RAM/TIMER EN
+            0x4000: 1, # ROM BANK NUM
+            0x6000: 0, # RAM BANK/RTC SEL
+            0x8000: 0, # LATCH CLK
+            0xA008: 0, # RTC S
+            0xA009: 0, # RTC M
+            0xA00A: 0, # RTC H
+            0xA00B: 0, # RTC DL
+            0xA00C: 0, # RTC DH
         }
         self.last_sample = 0
         self.seconds = 0
@@ -207,18 +207,18 @@ class MBC3(MBC):
         self.seconds += self.sample_sec_diff()
 
     def sample_seconds_reg(self):
-        self.cart_regs[0xA008].value = self.seconds
+        self.cart_regs[0xA008] = self.seconds
 
     def sample_minutes_reg(self):
-        self.cart_regs[0xA009].value = self.seconds // 60
+        self.cart_regs[0xA009] = self.seconds // 60
 
     def sample_hours_reg(self):
-        self.cart_regs[0xA00A].value = self.seconds // 3600
+        self.cart_regs[0xA00A] = self.seconds // 3600
 
     def sample_days(self):
         days = self.seconds // 86400
-        self.cart_regs[0xA00B].value = days & 0xFF
-        self.cart_regs[0xA00C].value = days >> 8
+        self.cart_regs[0xA00B] = days & 0xFF
+        self.cart_regs[0xA00C] = days >> 8
 
     def handle_rom_banking(self, address):
         m = self.memctl
@@ -228,7 +228,7 @@ class MBC3(MBC):
             # no conversion, bank 0 is never bank switched in mbc3
             return m.rom.array[address]
         # bank 1 handling starts here
-        bank_num = self.cart_regs[0x4000].value
+        bank_num = self.cart_regs[0x4000]
         return m.rom.array[bank_num * 0x4000 + offset]
 
     def handle_rom_write(self, address, value):
@@ -242,13 +242,13 @@ class MBC3(MBC):
             # cant be 0, reset to 1 like mbc1
             if value == 0:
                 value = 1
-            self.cart_regs[0x4000].value = value
+            self.cart_regs[0x4000] = value
             return
         if address < 0x6000:
-            self.cart_regs[0x6000].value = value & 0x0F
+            self.cart_regs[0x6000] = value & 0x0F
             return
         if address < 0x8000:
-            self.cart_regs[0x8000].value = value & 1
+            self.cart_regs[0x8000] = value & 1
             return
 
     def handle_ram_banking_read(self, address, sel):
@@ -265,21 +265,21 @@ class MBC3(MBC):
         self.update_seconds()
         if sel == 0x08:
             self.sample_seconds_reg()
-            return self.cart_regs[0xA008].value
+            return self.cart_regs[0xA008]
         if sel == 0x09:
             self.sample_minutes_reg()
-            return self.cart_regs[0xA009].value
+            return self.cart_regs[0xA009]
         if sel == 0x0A:
             self.sample_hours_reg()
-            return self.cart_regs[0xA00A].value
+            return self.cart_regs[0xA00A]
         if sel == 0x0B or sel == 0x0C:
             self.sample_days()
-            return self.cart_regs[0xA000 + sel].value
+            return self.cart_regs[0xA000 + sel]
 
     def handle_RTC_write(self, sel, value):
         self.update_seconds()
         reg = self.cart_regs[0xA008]
-        diff = value - reg.value
+        diff = value - reg
         if sel == 0x08:
             self.seconds += diff
         if sel == 0x09:
@@ -295,7 +295,7 @@ class MBC3(MBC):
         if rom:
             return self.handle_rom_banking(address)
 
-        sel = self.cart_regs[0x6000].value
+        sel = self.cart_regs[0x6000]
         if sel < 0x04:
             # ram banking starts here
             return self.handle_ram_banking_read(address, sel)
@@ -312,7 +312,7 @@ class MBC3(MBC):
             return
 
         # ram banking, RTC writes start here
-        sel = self.cart_regs[0x6000].value
+        sel = self.cart_regs[0x6000]
         if sel < 0x04:
             # ram banking starts here
             return self.handle_ram_banking_write(address, value, sel)
@@ -320,3 +320,22 @@ class MBC3(MBC):
         if self.RTC_read_enabled:
             self.handle_RTC_write(sel, value)
          # if RTC isn't enabled, write nothing
+         
+         
+
+class MBC5(MBC):
+    def __init__(self, memctl, cartridge):
+        super().__init__(memctl, cartridge)
+        self.cart_regs = {
+            0x2000: 0, # RAM EN
+            0x3000: 0, # ROM 8 
+            0x4000: 0, # ROM 9
+            0x6000: 0 # RAM BANK NUM
+        }
+        
+    def read(self, address, rom: bool):
+        pass
+    
+    def write(self, address, value):
+        pass
+
