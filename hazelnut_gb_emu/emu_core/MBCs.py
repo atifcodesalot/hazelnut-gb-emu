@@ -331,8 +331,6 @@ class MBC5(MBC):
             0x4000: 0,  # ROM 9
             0x6000: 0  # RAM BANK NUM
         }
-        print(self.cart.rom_banks)
-        print(self.cart.ram_banks)
 
     def handle_rom_write(self, address, value):
         if address < 0x2000:
