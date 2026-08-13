@@ -68,12 +68,12 @@ afterwards choose a ROM file to play, simple.
 It is instead instruction stepped, due to this, you may experience bugs every now and then.
 - It is functional enough to run most commercial games.
 - only MBC1, MBC2, MBC3 and MBC5 are implemented for bank switching (MBC6 is next :yum:).
-- It sometimes runs slower than the actual gameboy (60 fps), except if you use PyPy, then it is 60 fps constantly.
+- It sometimes runs slower than the actual gameboy (60 fps), except if you use PyPy, then it runs 60 fps constantly.
 - The APU unit is in development, hence no sound yet.
 - the STOP instruction isn't implemented yet. :poop:
 
 ## Credits and AI usage
-%99 of the code and the full CPU, PPU implementation is written by me, only. Rarely, some functions were refactored, enchanced by AI: no code was generated from scratch.
+%99 of the code and the full CPU, PPU implementations are written by me, only. Rarely, some functions were refactored, enchanced by AI: no code was generated from scratch.
 AI was used extensively, only for; bug hunting, disassembly and optimization problems. 
 
 ## Known bugs
