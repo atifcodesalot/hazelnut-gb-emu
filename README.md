@@ -66,12 +66,11 @@ afterwards choose a ROM file to play, simple.
 
 - This emulator is currently not clock or machine cycle accurate: it does not emulate GameBoy hardware in full accuraccy.
 It is instead instruction stepped, due to this, you may experience bugs every now and then.
-- It is in no way complete, but functional enough to run most commercial games.
+- It is functional enough to run most commercial games.
 - only MBC1, MBC2, MBC3 and MBC5 are implemented for bank switching (MBC6 is next :yum:).
 - It sometimes runs slower than the actual gameboy (60 fps), except if you use PyPy, then it is 60 fps constantly.
-- The APU unit is not implemented yet, hence no sound.
+- The APU unit is in development, hence no sound yet.
 - the STOP instruction isn't implemented yet. :poop:
-- Serial transfer is not implemented yet, resulting in bugs in Alleyway for example.
 
 ## Credits and AI usage
 %99 of the code and the full CPU, PPU implementation is written by me, only. Rarely, some functions were refactored, enchanced by AI: no code was generated from scratch.
