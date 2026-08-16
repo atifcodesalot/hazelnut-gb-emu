@@ -1,4 +1,4 @@
-# Hazelnut :chipmunk: <img src="https://upload.wikimedia.org/wikipedia/commons/f/f2/Nintendo_Game_Boy_Logo.svg?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original" style="height: 1em; vertical-align: middle;" emulator
+# Hazelnut :chipmunk: <img src="https://upload.wikimedia.org/wikipedia/commons/f/f2/Nintendo_Game_Boy_Logo.svg?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original" style="height: 1em; vertical-align: middle;"> emulator
 Hazelnut is a [Game Boy](https://en.wikipedia.org/wiki/Game_Boy) emulator written solo with python and pygame, only for learning and fun.
 
 ![Gameplay showcase](showcases/showcase.gif)
