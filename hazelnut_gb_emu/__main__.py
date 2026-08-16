@@ -1,13 +1,12 @@
 
 
-from .emu_core.gameboy import Gameboy, SessionController
+from .emu_core.gameboy import Gameboy
 from .emu_core.cartridge import *
-from .emu_core import logger
+from .emu_core import logger, IMPLEMENTED_MODES
 import sys
-import cProfile
-import threading
-import time
 import gc
+
+from .session import SessionController
 from pypy_setup import *
 
 
@@ -16,8 +15,6 @@ from tkinter import filedialog, Tk
 
 
 INTERPRETER = sys.implementation.name
-
-IMPLEMENTED_MODES = [0x00, 0x01, 0x02, 0x3, 0x5, 0x6, 0x11, 0x12, 0x13, 0x19, 0x1A, 0x1B]
 
 
 def get_file():
@@ -54,6 +51,7 @@ def init_gb_objects():
 
 
 def run_profiled(target, filename):
+    import cProfile
     profiler = cProfile.Profile()
 
     try:
@@ -67,26 +65,33 @@ def run_profiled(target, filename):
 def main():
     if INTERPRETER != "pypy":
         try_pypy()
+        
     gb, cart = init_gb_objects()
-    controller = SessionController(gameboy=gb, cartridge=cart)
-    controller.check_implementations(
+    session = SessionController(gameboy=gb, cartridge=cart)
+    session.check_implementations(
         cartridge_types=CARTRIDGE_TYPES, implemented=IMPLEMENTED_MODES)
-    try:
+    
+    if len(sys.argv) > 2:
         if sys.argv[1] in ["--benchmark", "-b", "--profile", "-p"]:
             logger.info("Running in benchmark mode... Will run much slower than normal,\
                     but will generate a profile_stats file.")
+            
+            import threading
+            import time
+            
 
             def emu_target(): return run_profiled(
-                controller.emulate,
+                session.emulate,
                 "profile_stats"
             )
 
-            threading.Thread(target=controller.display).start()
+            threading.Thread(target=session.display).start()
             time.sleep(2)
             threading.Thread(target=emu_target).start()
 
-    except IndexError:
-        controller.main()
+    else:
+        session.start()
+        session.consume_events()
 
 
 if __name__ == "__main__":
