@@ -1,5 +1,5 @@
 # Hazelnut :chipmunk: gameboy emulator
-Hazelnut is a gameboy emulator written solo with python and pygame, only for learning and fun.
+Hazelnut is a <img src="https://squarespace-cdn.com" style="height: 1em; vertical-align: middle;"> emulator written solo with python and pygame, only for learning and fun.
 
 ![Gameplay showcase](showcases/showcase.gif)
 
