@@ -4,6 +4,8 @@ import json
 from . import dataclass
 from typing import Optional
 import os
+import pickle
+from . import logger
 
 PATH = os.path.dirname(os.path.abspath(__file__))
 
@@ -51,6 +53,33 @@ class GameboyInstruction:
         return self.__repr__()
 
 
+def cache_instructions(opcodes, prefixed, unprefixed):
+    cache_path = os.path.join(PATH, "instructions.pkl")
+    if os.path.exists(cache_path):
+        # cache already exists
+        return
+    file = open(cache_path, "wb+")
+    pickle.dump((opcodes, prefixed, unprefixed), file)
+    logger.info("caching instruction data...")
+    file.close()
+
+
+def search_for_cache():
+    cache_path = os.path.join(PATH, "instructions.pkl")
+    if os.path.exists(cache_path):
+        logger.info("instruction cache found, using it.")
+        global GB_OPCODES_JSON, \
+            GB_UNPREFIXED_OPCODES_JSON, GB_PREFIXED_OPCODES_JSON
+        file = open(cache_path, "rb")
+        data = pickle.load(file)
+        file.close()
+        GB_OPCODES_JSON = data[0]
+        GB_PREFIXED_OPCODES_JSON = data[1]
+        GB_UNPREFIXED_OPCODES_JSON = data[2]
+        return True
+    return False
+
+
 def init_instructions():
     global GB_OPCODES_JSON, \
         GB_UNPREFIXED_OPCODES_JSON, GB_PREFIXED_OPCODES_JSON
@@ -77,6 +106,13 @@ def init_instructions():
                 immediate=ins_json["immediate"],
             )
 
+def init():
+    if not search_for_cache():
+        logger.info("No instruction cache found.")
+        init_operands()
+        init_instructions()
+        cache_instructions(
+            GB_OPCODES_JSON, GB_PREFIXED_OPCODES_JSON, GB_UNPREFIXED_OPCODES_JSON)
+    
+init()
 
-init_operands()
-init_instructions()

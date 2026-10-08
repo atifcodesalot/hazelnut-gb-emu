@@ -5,6 +5,9 @@ debugging/
 .runtime/
 saves/
 
+# pickle cache files
+*.pkl
+
 hazelnutlog.txt
 profile_stats
 
