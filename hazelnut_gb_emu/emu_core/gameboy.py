@@ -181,7 +181,7 @@ class Gameboy:
             self.PPU.enter_VBLANK()
 
     def powerup(self):
-        self.SM83_processor.set_register('PC', 0x0)
+        self.SM83_processor.PC = 0x0
         self.memctl.boot_enabled = True
         self.running = True
 

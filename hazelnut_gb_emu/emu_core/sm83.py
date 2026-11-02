@@ -6,7 +6,7 @@ from .loader import (GB_PREFIXED_OPCODES_JSON,
 from . import logger
 from .memory import *
 from .auxiliary import BO
-from . import Register
+from dataclasses import dataclass
 
 
 def init_mnemonics():
@@ -20,8 +20,20 @@ def init_mnemonics():
 
 init_mnemonics()
 
+@dataclass
+class GPreg:
+    name: str
+    value: int
+    max_value: int
+    bit_length: int
+    
+    def set_val(self, val):
+        self.value = val % self.max_value
 
-class PairRegister:
+    def __repr__(self):
+        return str(self.value)
+
+class GPregPair:
     def __init__(self, name, hi_reg, low_reg):
         self.name = name
         self.hi = hi_reg
@@ -41,10 +53,9 @@ class PairRegister:
 
     def __repr__(self):
         return str(self.value)
-
-
+    
 class CPU:
-    def __init__(self, memory, general_registers: list[Register], flags, PC, SP=None):
+    def __init__(self, memory, general_registers: list[GPreg], flags, PC, SP):
         self.memory = memory
         self.register_names = list(general_registers.keys()) + ["PC", "SP"]
         self.__dict__.update(general_registers)
@@ -90,10 +101,10 @@ class CPU:
         r.value = (r.value - 1) & r.max_value
 
     def jump_to(self, address):
-        self.set_register("PC", address)
+        self.PC = address & 0xFFFF
 
     def call(self, address):
-        current_PC = self.get_register('PC')
+        current_PC = self.PC
         PC_high, PC_low = current_PC >> 8, current_PC & 0xFF
         self.set_register("SP", self.SP.value - 2)
         # little endian
@@ -110,9 +121,9 @@ class CPU:
 
 class SM83(CPU):
     def __init__(self, memory):
-        def r8bit(name): return Register(
+        def r8bit(name): return GPreg(
             name=name, value=0, max_value=0xFF, bit_length=8)
-        def r16bit(name): return Register(
+        def r16bit(name): return GPreg(
             name=name, value=0, max_value=0xFFFF, bit_length=16)
 
         general_registers = {
@@ -125,11 +136,11 @@ class SM83(CPU):
             'L': r8bit('L'),
         }
 
-        general_registers['BC'] = PairRegister(
+        general_registers['BC'] = GPregPair(
             'BC', general_registers['B'], general_registers['C'])
-        general_registers['DE'] = PairRegister(
+        general_registers['DE'] = GPregPair(
             'DE', general_registers['D'], general_registers['E'])
-        general_registers['HL'] = PairRegister(
+        general_registers['HL'] = GPregPair(
             'HL', general_registers['H'], general_registers['L'])
 
         # flags = {'Z': False, 'N': False, 'H': False, 'C': False, 'IME': False}
@@ -142,8 +153,8 @@ class SM83(CPU):
         ]
         super().__init__(memory,
                          general_registers, flags,
-                         PC=r16bit('PC'),
-                         SP=r16bit('SP'))
+                         PC=0,
+                         SP=r16bit("SP"))
 
         self.pending_interrupt_enable = False
         self.enable_interrupts_now = False
@@ -489,7 +500,7 @@ class SM83(CPU):
     def exe_INS_JR(self, ins: GameboyInstruction):
         e8 = ins.operands_raw[0]
         signed = BO.byte_twos_complement(e8)
-        address = (self.PC.value + signed) % 0x10000
+        address = (self.PC + signed) % 0x10000
         # JR NZ, r8
         if ins.raw == 0x20:
             if not self.flags[0]:
@@ -756,7 +767,7 @@ class SM83(CPU):
         else:
             ins = GB_UNPREFIXED_OPCODES_JSON[opcode]
 
-        current_pc = self.PC.value
+        current_pc = self.PC
 
         # operand length
         op_len = ins.operand_bytes
@@ -768,22 +779,22 @@ class SM83(CPU):
             ins.operands_raw[1] = self.memory.read_at(current_pc + 1)
 
         # inc PC
-        self.PC.value = (current_pc + op_len) & 0xffff
+        self.PC = (current_pc + op_len) & 0xFFFF
 
         return ins
 
     def instruction_cycle(self):
         # fetch
         prefixed = False
-        opcode = self.memory.read_at(self.PC.value)
+        opcode = self.memory.read_at(self.PC)
 
         if opcode == 0xCB:
             # the instruction is prefixed
-            self.PC.value = (self.PC.value + 1) & 0xffff
-            opcode = self.memory.read_at(self.PC.value)
+            self.PC = (self.PC + 1) & 0xffff
+            opcode = self.memory.read_at(self.PC)
             prefixed = True
 
-        self.PC.value = (self.PC.value + 1) & 0xffff
+        self.PC = (self.PC + 1) & 0xffff
         #
 
         # decode
