@@ -67,7 +67,7 @@ def main():
         try_pypy()
         
     gb, cart = init_gb_objects()
-    session = SessionController(gameboy=gb, cartridge=cart)
+    session = SessionController(gameboy=gb, cartridge=cart, gbscaler=2)
     session.check_implementations(
         cartridge_types=CARTRIDGE_TYPES, implemented=IMPLEMENTED_MODES)
     
