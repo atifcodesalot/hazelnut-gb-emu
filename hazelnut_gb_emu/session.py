@@ -49,9 +49,11 @@ class GUIDrawer:
 
         self.Aoff = (dc[0] + sw // 2 + 12*scaler, dc[1] - 12*scaler)
         self.Boff = (dc[0] + sw // 2 - 12*scaler, dc[1] + 12*scaler)
-        
-        self.Atxtoff = (self.Aoff[0] - 3*self.scaler, self.Aoff[1] - 4*self.scaler)
-        self.Btxtoff = (self.Boff[0] - 3*self.scaler, self.Boff[1] - 4*self.scaler)
+
+        self.Atxtoff = (self.Aoff[0] - 3*self.scaler,
+                        self.Aoff[1] - 4*self.scaler)
+        self.Btxtoff = (self.Boff[0] - 3*self.scaler,
+                        self.Boff[1] - 4*self.scaler)
 
         self.Sttxtoff = (
             self.startoff[0] + 2*self.scaler, self.startoff[1] + 2*self.scaler)
@@ -64,9 +66,19 @@ class GUIDrawer:
         btn_font = pygame.sysfont.SysFont("Arial", int(10*scaler))
         self.A_text = btn_font.render('A', True, (255, 255, 255))
         self.B_text = btn_font.render('B', True, (255, 255, 255))
-        ss_font = btn_font = pygame.sysfont.SysFont("Arial", int(10*self.scaler))
+        ss_font = btn_font = pygame.sysfont.SysFont(
+            "Arial", int(10*self.scaler))
         self.st_text = ss_font.render('START', True, (255, 255, 255))
         self.sl_text = ss_font.render('SELECT', True, (255, 255, 255))
+
+        ins_font = btn_font = pygame.sysfont.SysFont(
+            "Arial", int(6*self.scaler))
+        self.control_ins = "Controls: Arrow keys: D-Pad, X/Z: A/B, S: Select, Enter: Start"
+        self.insctl_surf = ins_font.render(
+            self.control_ins, True, (0, 0, 0), (255, 255, 255))
+        w = self.insctl_surf.get_width()
+        h = self.insctl_surf.get_height()
+        self.insctl_off = ((sw - w) // 2, sh - h - 5*self.scaler)
 
     def draw_A(self, gb_inp):
         s = self.screen
@@ -114,8 +126,8 @@ class GUIDrawer:
         self.draw_cosmetic()
 
     def draw_cosmetic(self, *args):
-        # stub
-        pass
+        s = self.screen
+        s.blit(self.insctl_surf, self.insctl_off)
 
 
 # A session controller for the gameboy class
@@ -138,8 +150,8 @@ class SessionController:
         pygame.K_UP: 2,
         pygame.K_DOWN: 3,
 
-        pygame.K_a: 4,       # A
-        pygame.K_b: 5,       # B
+        pygame.K_x: 4,       # A
+        pygame.K_z: 5,       # B
         pygame.K_s: 6,       # Select
         pygame.K_RETURN: 7,  # Start
     }
