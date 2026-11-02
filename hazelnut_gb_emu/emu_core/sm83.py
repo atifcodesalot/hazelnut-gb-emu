@@ -47,7 +47,6 @@ class CPU:
     def __init__(self, memory, general_registers: list[Register], flags, PC, SP=None):
         self.memory = memory
         self.register_names = list(general_registers.keys()) + ["PC", "SP"]
-        self.flag_names = flags.keys()
         self.__dict__.update(general_registers)
         self.flags = flags
         self.PC = PC
@@ -133,7 +132,14 @@ class SM83(CPU):
         general_registers['HL'] = PairRegister(
             'HL', general_registers['H'], general_registers['L'])
 
-        flags = {'Z': False, 'N': False, 'H': False, 'C': False, 'IME': False}
+        # flags = {'Z': False, 'N': False, 'H': False, 'C': False, 'IME': False}
+        flags = [
+            0, # Z
+            0, # N
+            0, # H
+            0, # C
+            0, # IME
+        ]
         super().__init__(memory,
                          general_registers, flags,
                          PC=r16bit('PC'),
@@ -147,19 +153,19 @@ class SM83(CPU):
 
     def set_flags_fast(self, Z=None, N=None, H=None, C=None, IME=None):
         if Z is not None:
-            self.flags['Z'] = Z
+            self.flags[0] = Z
         if N is not None:
-            self.flags['N'] = N
+            self.flags[1] = N
         if H is not None:
-            self.flags['H'] = H
+            self.flags[2] = H
         if C is not None:
-            self.flags['C'] = C
+            self.flags[3] = C
         if IME is not None:
-            self.flags['IME'] = IME
+            self.flags[4] = IME
 
     def flags_register(self):
-        return (self.flags['Z'] << 7) | (self.flags['N'] << 6) |\
-            (self.flags['H'] << 5) | (self.flags['C'] << 4)
+        return (self.flags[0] << 7) | (self.flags[1] << 6) |\
+            (self.flags[2] << 5) | (self.flags[3] << 4)
 
     # Load, copy related instructions start here
     ###
@@ -300,10 +306,10 @@ class SM83(CPU):
         self.accumulate_A(ins, sub=True)
 
     def exe_INS_ADC(self, ins: GameboyInstruction):
-        self.accumulate_A(ins, include_carry=self.flags['C'])
+        self.accumulate_A(ins, include_carry=self.flags[3])
 
     def exe_INS_SBC(self, ins: GameboyInstruction):
-        self.accumulate_A(ins, include_carry=self.flags['C'], sub=True)
+        self.accumulate_A(ins, include_carry=self.flags[3], sub=True)
 
     def exe_INS_INC(self, ins: GameboyInstruction):
         o = ins.operands[0]
@@ -459,22 +465,22 @@ class SM83(CPU):
                 *ins.operands_raw[:2][::-1])  # little endian
         # JP NZ, a16
         if ins.raw == 0xC2:
-            if not self.flags["Z"]:
+            if not self.flags[0]:
                 self.jump_to(address)
         # JP a16, unconditional jump kappa pride
         elif ins.raw == 0xC3:
             self.jump_to(address)
         # JP Z, a16
         elif ins.raw == 0xCA:
-            if self.flags["Z"]:
+            if self.flags[0]:
                 self.jump_to(address)
         # JP NC, a16
         elif ins.raw == 0xD2:
-            if not self.flags["C"]:
+            if not self.flags[3]:
                 self.jump_to(address)
         # JP C, a16
         elif ins.raw == 0xDA:
-            if self.flags["C"]:
+            if self.flags[3]:
                 self.jump_to(address)
         # JP HL
         elif ins.raw == 0xE9:
@@ -486,38 +492,38 @@ class SM83(CPU):
         address = (self.PC.value + signed) % 0x10000
         # JR NZ, r8
         if ins.raw == 0x20:
-            if not self.flags["Z"]:
+            if not self.flags[0]:
                 self.jump_to(address)
         # JR r8, unconditional jump kappa pride
         elif ins.raw == 0x18:
             self.jump_to(address)
         # JR Z, r8
         elif ins.raw == 0x28:
-            if self.flags["Z"]:
+            if self.flags[0]:
                 self.jump_to(address)
         # JR NC, r8
         elif ins.raw == 0x30:
-            if not self.flags["C"]:
+            if not self.flags[3]:
                 self.jump_to(address)
         # JR C, r8
         elif ins.raw == 0x38:
-            if self.flags["C"]:
+            if self.flags[3]:
                 self.jump_to(address)
 
     def exe_INS_RET(self, ins: GameboyInstruction):
         if ins.raw == 0xC9:
             self.return__()
         elif ins.raw == 0xC0:
-            if not self.flags['Z']:
+            if not self.flags[0]:
                 self.return__()
         elif ins.raw == 0xD0:
-            if not self.flags['C']:
+            if not self.flags[3]:
                 self.return__()
         elif ins.raw == 0xC8:
-            if self.flags['Z']:
+            if self.flags[0]:
                 self.return__()
         elif ins.raw == 0xD8:
-            if self.flags['C']:
+            if self.flags[3]:
                 self.return__()
 
     def exe_INS_CALL(self, ins: GameboyInstruction):
@@ -528,19 +534,19 @@ class SM83(CPU):
             self.call(address)
         # CALL NZ, a16
         elif ins.raw == 0xC4:
-            if not self.flags['Z']:
+            if not self.flags[0]:
                 self.call(address)
         # JP NC, a16
         elif ins.raw == 0xD4:
-            if not self.flags['C']:
+            if not self.flags[3]:
                 self.call(address)
         # CALL Z, a16
         elif ins.raw == 0xCC:
-            if self.flags['Z']:
+            if self.flags[0]:
                 self.call(address)
         # CALL C, a16
         elif ins.raw == 0xDC:
-            if self.flags['C']:
+            if self.flags[3]:
                 self.call(address)
 
     # RST: implicit call
@@ -565,9 +571,9 @@ class SM83(CPU):
     def exe_INS_DAA(self, _):
         adjustment = 0
         old_A = self.get_register('A')
-        H = self.flags['H']
-        N = self.flags['N']
-        C = self.flags['C']
+        H = self.flags[2]
+        N = self.flags[1]
+        C = self.flags[3]
 
         if N:
             if H:
@@ -617,7 +623,7 @@ class SM83(CPU):
     # CCF; SCF
 
     def exe_INS_CCF(self, _):
-        cf = self.flags['C']
+        cf = self.flags[3]
         self.set_flags_fast(C=not cf, N=False, H=False)
 
     def exe_INS_SCF(self, _):
@@ -666,7 +672,7 @@ class SM83(CPU):
             if bin_op == BO.rotate_byte_right or bin_op == BO.rotate_byte_left:
                 bit, result = bin_op(byte)
             else:
-                bit, result = bin_op(byte, self.flags['C'])
+                bit, result = bin_op(byte, self.flags[3])
         else:
             bit, result = bin_op(byte)
         if op.immediate:
@@ -681,7 +687,7 @@ class SM83(CPU):
 
     def exe_INS_RLA(self, ins: GameboyInstruction):
         A = self.get_register("A")
-        bit, result = BO.rotate_byte_left_through(A, self.flags['C'])
+        bit, result = BO.rotate_byte_left_through(A, self.flags[3])
         self.set_register("A", result)
         self.set_flags_fast(Z=False, N=False, H=False, C=bool(bit))
 
@@ -700,7 +706,7 @@ class SM83(CPU):
 
     def exe_INS_RRA(self, ins: GameboyInstruction):
         A = self.get_register("A")
-        bit, result = BO.rotate_byte_right_through(A, self.flags['C'])
+        bit, result = BO.rotate_byte_right_through(A, self.flags[3])
         self.set_register("A", result)
         self.set_flags_fast(Z=False, N=False, H=False, C=bool(bit))
 
@@ -790,7 +796,7 @@ class SM83(CPU):
         #
 
         # handle pending interrupts
-        if self.pending_interrupt_enable and not self.flags['IME']:
+        if self.pending_interrupt_enable and not self.flags[4]:
             if not self.enable_interrupts_now:
                 # ensure interrupts are enabled next cycle
                 self.enable_interrupts_now = True
@@ -811,7 +817,7 @@ class SM83(CPU):
 
     def handle_interrupts(self, gb):
         # interrupts are disabled, exit
-        if not self.flags['IME']:
+        if not self.flags[4]:
             return
         IE = self.memory.io_registers[0xFFFF]
         IF = self.memory.io_registers[0xFF0F]
@@ -848,15 +854,3 @@ class SM83(CPU):
         ins = self.instruction_cycle()
         cycles = ins.cycles if ins else 0
         return ins, cycles
-
-    def dump_state_colorama(self, colorama):
-        fg = colorama.Fore.GREEN
-        fr = colorama.Fore.RED
-        fb = colorama.Fore.BLUE
-        Ra = colorama.Style.RESET_ALL
-        register_dict = {k: hex(r.value) for k, r in self.__dict__.items(
-        ) if k in self.register_names}
-        return f"PC: {fg}{hex(self.PC.value)}{Ra}\
-    SP: {colorama.Fore.CYAN}{hex(self.SP.value)}{Ra}\
-    general_registers: {fb}{register_dict}{Ra}\
-    flags: {fr}{self.flags}{Ra}"
