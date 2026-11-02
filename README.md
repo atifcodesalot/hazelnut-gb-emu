@@ -1,14 +1,17 @@
 # Hazelnut :chipmunk: <img src="https://upload.wikimedia.org/wikipedia/commons/f/f2/Nintendo_Game_Boy_Logo.svg?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original" style="height: 1em; vertical-align: middle;"> emulator
 Hazelnut is a [Game Boy](https://en.wikipedia.org/wiki/Game_Boy) emulator written solo with python and pygame, only for learning and fun.
 
-![Gameplay showcase](showcases/showcase.gif)
+<img width="420" height="379" alt="showcase" src="https://github.com/user-attachments/assets/52936142-2c03-49cf-af81-6f85109c6161" />
+
 
 ## Some Screenshots
-![Metroid ss](showcases/metroid.png)
-![Wario land ss](showcases/wario.png)
-![Harvest moon ss](showcases/hmoon.png)
-![Pokemon ss](showcases/magikarp.png)
-![Chessmaster ss](showcases/chessmaster.png)
+<img width="179" height="317" alt="hmoon" src="https://github.com/user-attachments/assets/82d4ee27-fe66-4065-a0b4-ba51a99251d8" />
+<img width="180" height="376" alt="magikarp" src="https://github.com/user-attachments/assets/43f9cc81-8fa7-4d8f-8061-2dc15b1db9e3" />
+<img width="181" height="374" alt="chessmaster" src="https://github.com/user-attachments/assets/d18dc78b-27c9-4f82-bf03-f239c67b41e0" />
+
+<img width="178" height="325" alt="metroid" src="https://github.com/user-attachments/assets/031d25ea-364b-405c-940d-695df845fcbd" />
+<img width="181" height="320" alt="wario" src="https://github.com/user-attachments/assets/b5fd3a24-bde3-4681-a21f-e45fcfd8afc3" />
+
 
 ## Legal notice
 
