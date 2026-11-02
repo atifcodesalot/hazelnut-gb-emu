@@ -1,7 +1,6 @@
 
 from math import log
 from .cartridge import Cartridge
-from . import Register
 import time
 
 

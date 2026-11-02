@@ -3,13 +3,8 @@
 from .memory import GBMemoryController
 from .auxiliary import ByteOperator as BO, string_to_rgb as s2rgb
 import pygame
-from . import logger
+from . import GB_LCD_RES, GB_LCD_OFF, GB_LCD_PALETTE
 
-
-GB_LCD_RES = (160, 144)
-
-GB_LCD_PALETTE = ("#e0f8d0", "#88c070",  "#346856", "#081820")
-GB_LCD_OFF = "#1D0118"
 GB_LCD_PALETTE_rgb = [s2rgb(c) for c in GB_LCD_PALETTE]
 
 

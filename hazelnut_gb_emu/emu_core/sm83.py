@@ -6,7 +6,7 @@ from .loader import (GB_PREFIXED_OPCODES_JSON,
 from . import logger
 from .memory import *
 from .auxiliary import BO
-from . import Register
+from dataclasses import dataclass
 
 
 def init_mnemonics():
@@ -20,8 +20,20 @@ def init_mnemonics():
 
 init_mnemonics()
 
+@dataclass
+class GPreg:
+    name: str
+    value: int
+    max_value: int
+    bit_length: int
+    
+    def set_val(self, val):
+        self.value = val % self.max_value
 
-class PairRegister:
+    def __repr__(self):
+        return str(self.value)
+
+class GPregPair:
     def __init__(self, name, hi_reg, low_reg):
         self.name = name
         self.hi = hi_reg
@@ -41,14 +53,13 @@ class PairRegister:
 
     def __repr__(self):
         return str(self.value)
-
-
+    
 class CPU:
-    def __init__(self, memory, general_registers: list[Register], flags, PC, SP=None):
+    def __init__(self, memory, general_registers: list[GPreg], flags, PC, SP):
         self.memory = memory
         self.register_names = list(general_registers.keys()) + ["PC", "SP"]
-        self.flag_names = flags.keys()
-        self.__dict__.update(general_registers)
+        for regname in general_registers:
+            setattr(self, regname, general_registers[regname])
         self.flags = flags
         self.PC = PC
         self.SP = SP
@@ -69,32 +80,32 @@ class CPU:
 
     def get_register_obj(self, register_name: str):
         # self.register_guard(register_name)
-        return self.__dict__[register_name]
+        return getattr(self, register_name)
 
     def get_register(self, register_name: str):
         # self.register_guard(register_name)
-        return self.__dict__[register_name].value
+        return getattr(self, register_name).value
 
     def set_register(self, register_name: str, value):
         # self.register_guard(register_name)
-        r = self.__dict__[register_name]
+        r = getattr(self, register_name)
         r.value = value & r.max_value
 
     def inc_register(self, register_name: str):
         # self.register_guard(register_name)
-        r = self.__dict__[register_name]
+        r = getattr(self, register_name)
         r.value = (r.value + 1) & r.max_value
 
     def dec_register(self, register_name: str):
         # self.register_guard(register_name)
-        r = self.__dict__[register_name]
+        r = getattr(self, register_name)
         r.value = (r.value - 1) & r.max_value
 
     def jump_to(self, address):
-        self.set_register("PC", address)
+        self.PC = address & 0xFFFF
 
     def call(self, address):
-        current_PC = self.get_register('PC')
+        current_PC = self.PC
         PC_high, PC_low = current_PC >> 8, current_PC & 0xFF
         self.set_register("SP", self.SP.value - 2)
         # little endian
@@ -111,9 +122,9 @@ class CPU:
 
 class SM83(CPU):
     def __init__(self, memory):
-        def r8bit(name): return Register(
+        def r8bit(name): return GPreg(
             name=name, value=0, max_value=0xFF, bit_length=8)
-        def r16bit(name): return Register(
+        def r16bit(name): return GPreg(
             name=name, value=0, max_value=0xFFFF, bit_length=16)
 
         general_registers = {
@@ -126,18 +137,25 @@ class SM83(CPU):
             'L': r8bit('L'),
         }
 
-        general_registers['BC'] = PairRegister(
+        general_registers['BC'] = GPregPair(
             'BC', general_registers['B'], general_registers['C'])
-        general_registers['DE'] = PairRegister(
+        general_registers['DE'] = GPregPair(
             'DE', general_registers['D'], general_registers['E'])
-        general_registers['HL'] = PairRegister(
+        general_registers['HL'] = GPregPair(
             'HL', general_registers['H'], general_registers['L'])
 
-        flags = {'Z': False, 'N': False, 'H': False, 'C': False, 'IME': False}
+        # flags = {'Z': False, 'N': False, 'H': False, 'C': False, 'IME': False}
+        flags = [
+            0, # Z
+            0, # N
+            0, # H
+            0, # C
+            0, # IME
+        ]
         super().__init__(memory,
                          general_registers, flags,
-                         PC=r16bit('PC'),
-                         SP=r16bit('SP'))
+                         PC=0,
+                         SP=r16bit("SP"))
 
         self.pending_interrupt_enable = False
         self.enable_interrupts_now = False
@@ -147,19 +165,19 @@ class SM83(CPU):
 
     def set_flags_fast(self, Z=None, N=None, H=None, C=None, IME=None):
         if Z is not None:
-            self.flags['Z'] = Z
+            self.flags[0] = Z
         if N is not None:
-            self.flags['N'] = N
+            self.flags[1] = N
         if H is not None:
-            self.flags['H'] = H
+            self.flags[2] = H
         if C is not None:
-            self.flags['C'] = C
+            self.flags[3] = C
         if IME is not None:
-            self.flags['IME'] = IME
+            self.flags[4] = IME
 
     def flags_register(self):
-        return (self.flags['Z'] << 7) | (self.flags['N'] << 6) |\
-            (self.flags['H'] << 5) | (self.flags['C'] << 4)
+        return (self.flags[0] << 7) | (self.flags[1] << 6) |\
+            (self.flags[2] << 5) | (self.flags[3] << 4)
 
     # Load, copy related instructions start here
     ###
@@ -206,7 +224,7 @@ class SM83(CPU):
                 self.memory.write_to(data, low)
 
             elif name2 == "A":
-                self.memory.write_to(data, self.get_register("A"))
+                self.memory.write_to(data, self.A.value)
 
         else:
             if o1.immediate:
@@ -223,16 +241,16 @@ class SM83(CPU):
         o1, o2 = ins.operands
         if o1.name == "a8":
             self.memory.write_to(
-                0xFF00 + ins.operands_raw[0], self.get_register('A'))
+                0xFF00 + ins.operands_raw[0], self.A.value)
         elif o1.name == 'C':
-            self.memory.write_to(0xFF00 + self.get_register('C'),
-                                 self.get_register('A'))
+            self.memory.write_to(0xFF00 + self.C.value,
+                                 self.A.value)
         elif o2.name == "a8":
             self.set_register('A', self.memory.read_at(
                 0xFF00 + ins.operands_raw[0]))
         elif o2.name == 'C':
             self.set_register('A', self.memory.read_at(
-                0xFF00 + self.get_register('C')))
+                0xFF00 + self.C.value))
 
     # Load, copy related instructions END here
     ###
@@ -245,7 +263,7 @@ class SM83(CPU):
         # operand 1 is always A
         _, o2 = ins.operands
 
-        current_A = self.get_register("A")
+        current_A = self.A.value
 
         func_half = BO.sub_half_borrow if sub else BO.add_half_carry
         func_full = BO.sub_full_borrow if sub else BO.add_full_carry
@@ -265,7 +283,7 @@ class SM83(CPU):
             self.set_register('A', current_A - operand)
         else:
             self.set_register('A', current_A + operand)
-        current_A = self.get_register("A")
+        current_A = self.A.value
         if include_carry:
             self.set_flags_fast(H=func_half(
                 current_A, 1) or bch, C=func_full(current_A, 1) or bcf)
@@ -274,7 +292,7 @@ class SM83(CPU):
             else:
                 self.inc_register('A')
 
-        self.set_flags_fast(Z=(self.get_register('A') == 0), N=sub)
+        self.set_flags_fast(Z=(self.A.value == 0), N=sub)
 
     def exe_INS_ADD(self, ins: GameboyInstruction):
         o1, o2 = ins.operands
@@ -290,9 +308,9 @@ class SM83(CPU):
         # ADD HL,ss is the only instruction that has a 16 bit operand, and the operand is always a register pair,
         # so we can just check if o1 is HL to determine whether it is that instruction or not
         elif o1.name == "HL":
-            addend = self.get_register("HL")
+            addend = self.HL.value
             summand = self.get_register(o2.name)
-            self.set_register("HL", self.get_register("HL") + summand)
+            self.set_register("HL", self.HL.value + summand)
             self.set_flags_fast(N=False, H=BO.add_half_carry(addend, summand, high_half=True),
                                 C=BO.add_full_carry(addend, summand, bit_width=16))
 
@@ -300,10 +318,10 @@ class SM83(CPU):
         self.accumulate_A(ins, sub=True)
 
     def exe_INS_ADC(self, ins: GameboyInstruction):
-        self.accumulate_A(ins, include_carry=self.flags['C'])
+        self.accumulate_A(ins, include_carry=self.flags[3])
 
     def exe_INS_SBC(self, ins: GameboyInstruction):
-        self.accumulate_A(ins, include_carry=self.flags['C'], sub=True)
+        self.accumulate_A(ins, include_carry=self.flags[3], sub=True)
 
     def exe_INS_INC(self, ins: GameboyInstruction):
         o = ins.operands[0]
@@ -351,7 +369,7 @@ class SM83(CPU):
         else:
             r = self.get_register(o2.name)
             byte = r if o2.immediate else self.memory.read_at(r)
-        A = self.get_register("A")
+        A = self.A.value
         self.set_flags_fast(Z=(A - byte) == 0, N=True,
                             H=BO.sub_half_borrow(A, byte), C=BO.sub_full_borrow(A, byte))
 
@@ -370,7 +388,7 @@ class SM83(CPU):
         else:
             r = self.get_register(o2.name)
             value = r if o2.immediate else self.memory.read_at(r)
-        result = self.get_register('A') & value
+        result = self.A.value & value
         self.set_register('A', result)
         self.set_flags_fast(Z=result == 0, N=False, H=True, C=False)
 
@@ -382,7 +400,7 @@ class SM83(CPU):
         else:
             r = self.get_register(o2.name)
             value = r if o2.immediate else self.memory.read_at(r)
-        result = self.get_register('A') | value
+        result = self.A.value | value
         self.set_register('A', result)
         self.set_flags_fast(Z=result == 0, N=False, H=False, C=False)
 
@@ -394,12 +412,12 @@ class SM83(CPU):
         else:
             r = self.get_register(o2.name)
             value = r if o2.immediate else self.memory.read_at(r)
-        result = self.get_register('A') ^ value
+        result = self.A.value ^ value
         self.set_register('A', result)
         self.set_flags_fast(Z=result == 0, N=False, H=False, C=False)
 
     def exe_INS_CPL(self, _: GameboyInstruction):
-        result = 0xFF ^ self.get_register("A")
+        result = 0xFF ^ self.A.value
         self.set_register("A", result)
         self.set_flags_fast(N=1, H=1)
 
@@ -459,65 +477,65 @@ class SM83(CPU):
                 *ins.operands_raw[:2][::-1])  # little endian
         # JP NZ, a16
         if ins.raw == 0xC2:
-            if not self.flags["Z"]:
+            if not self.flags[0]:
                 self.jump_to(address)
         # JP a16, unconditional jump kappa pride
         elif ins.raw == 0xC3:
             self.jump_to(address)
         # JP Z, a16
         elif ins.raw == 0xCA:
-            if self.flags["Z"]:
+            if self.flags[0]:
                 self.jump_to(address)
         # JP NC, a16
         elif ins.raw == 0xD2:
-            if not self.flags["C"]:
+            if not self.flags[3]:
                 self.jump_to(address)
         # JP C, a16
         elif ins.raw == 0xDA:
-            if self.flags["C"]:
+            if self.flags[3]:
                 self.jump_to(address)
         # JP HL
         elif ins.raw == 0xE9:
-            self.jump_to(self.get_register("HL"))
+            self.jump_to(self.HL.value)
 
     def exe_INS_JR(self, ins: GameboyInstruction):
         e8 = ins.operands_raw[0]
         signed = BO.byte_twos_complement(e8)
-        address = (self.PC.value + signed) % 0x10000
+        address = (self.PC + signed) % 0x10000
         # JR NZ, r8
         if ins.raw == 0x20:
-            if not self.flags["Z"]:
+            if not self.flags[0]:
                 self.jump_to(address)
         # JR r8, unconditional jump kappa pride
         elif ins.raw == 0x18:
             self.jump_to(address)
         # JR Z, r8
         elif ins.raw == 0x28:
-            if self.flags["Z"]:
+            if self.flags[0]:
                 self.jump_to(address)
         # JR NC, r8
         elif ins.raw == 0x30:
-            if not self.flags["C"]:
+            if not self.flags[3]:
                 self.jump_to(address)
         # JR C, r8
         elif ins.raw == 0x38:
-            if self.flags["C"]:
+            if self.flags[3]:
                 self.jump_to(address)
 
     def exe_INS_RET(self, ins: GameboyInstruction):
         if ins.raw == 0xC9:
             self.return__()
         elif ins.raw == 0xC0:
-            if not self.flags['Z']:
+            if not self.flags[0]:
                 self.return__()
         elif ins.raw == 0xD0:
-            if not self.flags['C']:
+            if not self.flags[3]:
                 self.return__()
         elif ins.raw == 0xC8:
-            if self.flags['Z']:
+            if self.flags[0]:
                 self.return__()
         elif ins.raw == 0xD8:
-            if self.flags['C']:
+            if self.flags[3]:
                 self.return__()
 
     def exe_INS_CALL(self, ins: GameboyInstruction):
@@ -528,19 +546,19 @@ class SM83(CPU):
             self.call(address)
         # CALL NZ, a16
         elif ins.raw == 0xC4:
-            if not self.flags['Z']:
+            if not self.flags[0]:
                 self.call(address)
         # JP NC, a16
         elif ins.raw == 0xD4:
-            if not self.flags['C']:
+            if not self.flags[3]:
                 self.call(address)
         # CALL Z, a16
         elif ins.raw == 0xCC:
-            if self.flags['Z']:
+            if self.flags[0]:
                 self.call(address)
         # CALL C, a16
         elif ins.raw == 0xDC:
-            if self.flags['C']:
+            if self.flags[3]:
                 self.call(address)
 
     # RST: implicit call
@@ -564,10 +582,10 @@ class SM83(CPU):
 
     def exe_INS_DAA(self, _):
         adjustment = 0
-        old_A = self.get_register('A')
-        H = self.flags['H']
-        N = self.flags['N']
-        C = self.flags['C']
+        old_A = self.A.value
+        H = self.flags[2]
+        N = self.flags[1]
+        C = self.flags[3]
 
         if N:
             if H:
@@ -617,7 +635,7 @@ class SM83(CPU):
     # CCF; SCF
 
     def exe_INS_CCF(self, _):
-        cf = self.flags['C']
+        cf = self.flags[3]
         self.set_flags_fast(C=not cf, N=False, H=False)
 
     def exe_INS_SCF(self, _):
@@ -666,7 +684,7 @@ class SM83(CPU):
             if bin_op == BO.rotate_byte_right or bin_op == BO.rotate_byte_left:
                 bit, result = bin_op(byte)
             else:
-                bit, result = bin_op(byte, self.flags['C'])
+                bit, result = bin_op(byte, self.flags[3])
         else:
             bit, result = bin_op(byte)
         if op.immediate:
@@ -680,8 +698,8 @@ class SM83(CPU):
             ins, BO.rotate_byte_left_through, rotate=True)
 
     def exe_INS_RLA(self, ins: GameboyInstruction):
-        A = self.get_register("A")
-        bit, result = BO.rotate_byte_left_through(A, self.flags['C'])
+        A = self.A.value
+        bit, result = BO.rotate_byte_left_through(A, self.flags[3])
         self.set_register("A", result)
         self.set_flags_fast(Z=False, N=False, H=False, C=bool(bit))
 
@@ -689,7 +707,7 @@ class SM83(CPU):
         self.shift_rotate_to_carry(ins, BO.rotate_byte_left, rotate=True)
 
     def exe_INS_RLCA(self, ins: GameboyInstruction):
-        A = self.get_register("A")
+        A = self.A.value
         bit, result = BO.rotate_byte_left(A)
         self.set_register("A", result)
         self.set_flags_fast(Z=False, N=False, H=False, C=bool(bit))
@@ -699,8 +717,8 @@ class SM83(CPU):
             ins, BO.rotate_byte_right_through, rotate=True)
 
     def exe_INS_RRA(self, ins: GameboyInstruction):
-        A = self.get_register("A")
-        bit, result = BO.rotate_byte_right_through(A, self.flags['C'])
+        A = self.A.value
+        bit, result = BO.rotate_byte_right_through(A, self.flags[3])
         self.set_register("A", result)
         self.set_flags_fast(Z=False, N=False, H=False, C=bool(bit))
 
@@ -708,7 +726,7 @@ class SM83(CPU):
         self.shift_rotate_to_carry(ins, BO.rotate_byte_right, rotate=True)
 
     def exe_INS_RRCA(self, ins: GameboyInstruction):
-        A = self.get_register("A")
+        A = self.A.value
         bit, result = BO.rotate_byte_right(A)
         self.set_register("A", result)
         self.set_flags_fast(Z=False, N=False, H=False, C=bit)
@@ -750,7 +768,7 @@ class SM83(CPU):
         else:
             ins = GB_UNPREFIXED_OPCODES_JSON[opcode]
 
-        current_pc = self.PC.value
+        current_pc = self.PC
 
         # operand length
         op_len = ins.operand_bytes
@@ -762,22 +780,22 @@ class SM83(CPU):
             ins.operands_raw[1] = self.memory.read_at(current_pc + 1)
 
         # inc PC
-        self.PC.value = (current_pc + op_len) & 0xffff
+        self.PC = (current_pc + op_len) & 0xFFFF
 
         return ins
 
     def instruction_cycle(self):
         # fetch
         prefixed = False
-        opcode = self.memory.read_at(self.PC.value)
+        opcode = self.memory.read_at(self.PC)
 
         if opcode == 0xCB:
             # the instruction is prefixed
-            self.PC.value = (self.PC.value + 1) & 0xffff
-            opcode = self.memory.read_at(self.PC.value)
+            self.PC = (self.PC + 1) & 0xffff
+            opcode = self.memory.read_at(self.PC)
             prefixed = True
 
-        self.PC.value = (self.PC.value + 1) & 0xffff
+        self.PC = (self.PC + 1) & 0xffff
         #
 
         # decode
@@ -790,7 +808,7 @@ class SM83(CPU):
         #
 
         # handle pending interrupts
-        if self.pending_interrupt_enable and not self.flags['IME']:
+        if self.pending_interrupt_enable and not self.flags[4]:
             if not self.enable_interrupts_now:
                 # ensure interrupts are enabled next cycle
                 self.enable_interrupts_now = True
@@ -811,7 +829,7 @@ class SM83(CPU):
 
     def handle_interrupts(self, gb):
         # interrupts are disabled, exit
-        if not self.flags['IME']:
+        if not self.flags[4]:
             return
         IE = self.memory.io_registers[0xFFFF]
         IF = self.memory.io_registers[0xFF0F]
@@ -848,15 +866,3 @@ class SM83(CPU):
         ins = self.instruction_cycle()
         cycles = ins.cycles if ins else 0
         return ins, cycles
-
-    def dump_state_colorama(self, colorama):
-        fg = colorama.Fore.GREEN
-        fr = colorama.Fore.RED
-        fb = colorama.Fore.BLUE
-        Ra = colorama.Style.RESET_ALL
-        register_dict = {k: hex(r.value) for k, r in self.__dict__.items(
-        ) if k in self.register_names}
-        return f"PC: {fg}{hex(self.PC.value)}{Ra}\
-    SP: {colorama.Fore.CYAN}{hex(self.SP.value)}{Ra}\
-    general_registers: {fb}{register_dict}{Ra}\
-    flags: {fr}{self.flags}{Ra}"
