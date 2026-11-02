@@ -40,11 +40,11 @@ class GUIDrawer:
         )
 
         sw, sh = screen.get_size()
-        self.selectoff = sw//2 - 22*scaler, dc[1] + 50*scaler
+        self.selectoff = sw//2 - 27*scaler, dc[1] + 50*scaler
         self.startoff = sw//2 + 2*scaler, dc[1] + 50*scaler
         self.select_start = (
-            (6, pygame.Rect(*self.selectoff, 20*scaler, 8*scaler)),  # Select
-            (7, pygame.Rect(*self.startoff, 20*scaler, 8*scaler)),  # Start
+            (6, pygame.Rect(*self.selectoff, 25*scaler, 10*scaler)),  # Select
+            (7, pygame.Rect(*self.startoff, 25*scaler, 10*scaler)),  # Start
         )
 
         self.Aoff = (dc[0] + sw // 2 + 12*scaler, dc[1] - 12*scaler)
@@ -61,10 +61,10 @@ class GUIDrawer:
         self.pressed_color = "#1C77FF"
 
         pygame.font.init()
-        btn_font = pygame.sysfont.SysFont("Arial", 10*scaler)
+        btn_font = pygame.sysfont.SysFont("Arial", int(10*scaler))
         self.A_text = btn_font.render('A', True, (255, 255, 255))
         self.B_text = btn_font.render('B', True, (255, 255, 255))
-        ss_font = btn_font = pygame.sysfont.SysFont("Arial", 5*self.scaler)
+        ss_font = btn_font = pygame.sysfont.SysFont("Arial", int(10*self.scaler))
         self.st_text = ss_font.render('START', True, (255, 255, 255))
         self.sl_text = ss_font.render('SELECT', True, (255, 255, 255))
 
@@ -91,9 +91,6 @@ class GUIDrawer:
 
     def draw_start_select(self, gb_inp):
         s = self.screen
-
-        s.blit(self.st_text, self.Sttxtoff)
-        s.blit(self.sl_text, self.Sltxtoff)
 
         for bit, rect in self.select_start:
             pressed = not BO.get_nth_bit(gb_inp, bit)
@@ -226,9 +223,12 @@ class SessionController:
             input_state = self.gameboy.input_state
             self.GUI.draw_gb_inputs(input_state)
             self.GUI.draw_cosmetic()
-            scaled = pygame.transform.scale_by(
-                self.gameboy.PPU.pgdisplay, self.gbscaler)
-            self.screen.blit(scaled, self.gboff)
+            if self.gbscaler > 1:
+                scaled = pygame.transform.scale_by(
+                    self.gameboy.PPU.pgdisplay, self.gbscaler)
+                self.screen.blit(scaled, self.gboff)
+            else:
+                self.screen.blit(self.gameboy.PPU.pgdisplay, self.gboff)
             pygame.display.flip()
 
     def handle_gb_input_event(self, event):
