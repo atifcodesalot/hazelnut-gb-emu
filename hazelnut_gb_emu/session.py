@@ -11,30 +11,60 @@ import threading
 import time
 
 
-
-## GUI drawer class for drawing buttons, and more stuff in the future
+# GUI drawer class for drawing buttons, and more stuff in the future
 # TODO: refactor the button init
 class GUIDrawer:
-    def __init__(self, screen):
+    def __init__(self, screen, gbres, gboff, scaler):
         self.screen = screen
+        self.gbres = gbres
+        self.gboff = gboff
+        self.scaler = scaler
+        self.gui_start = (gboff[0]*2*scaler, gboff[1] +
+                          gbres[1] + gboff[0]*2*scaler)
+        self.dpad_center = (
+            self.gui_start[0] + 30*scaler, self.gui_start[1] + 30*scaler)
+        dc = self.dpad_center
+
+        dpads = 10 * scaler
+        dpadl = 20 * scaler
+
         self.dpad = (
-            pygame.Rect(40+5, 250-30, 20, 10),  # Right
-            pygame.Rect(10+5, 250-30, 20, 10),  # Left
-            pygame.Rect(30+5, 230-30, 10, 20),  # Up
-            pygame.Rect(30+5, 260-30, 10, 20),  # Down
+            pygame.Rect(dc[0]+dpads*0.5, dc[1]-dpads *
+                        0.5, dpadl, dpads),  # Right
+            pygame.Rect(dc[0]-dpads*0.5-dpadl, dc[1] -
+                        dpads*0.5, dpadl, dpads),  # Left
+            pygame.Rect(dc[0]-dpads*0.5, dc[1]-dpadl -
+                        dpads*0.5, dpads, dpadl),  # Up
+            pygame.Rect(dc[0]-dpads*0.5, dc[1]+dpads *
+                        0.5, dpads, dpadl),  # Down
         )
 
+        sw, sh = screen.get_size()
+        self.selectoff = sw//2 - 22*scaler, dc[1] + 50*scaler
+        self.startoff = sw//2 + 2*scaler, dc[1] + 50*scaler
         self.select_start = (
-            (6, pygame.Rect(45+5, 300-30, 35, 15)),  # Select
-            (7, pygame.Rect(85+5, 300-30, 35, 15)),  # Start
+            (6, pygame.Rect(*self.selectoff, 20*scaler, 8*scaler)),  # Select
+            (7, pygame.Rect(*self.startoff, 20*scaler, 8*scaler)),  # Start
         )
-        self.pressed_color = "#1C77FF"
+
+        self.Aoff = (dc[0] + sw // 2 + 12*scaler, dc[1] - 12*scaler)
+        self.Boff = (dc[0] + sw // 2 - 12*scaler, dc[1] + 12*scaler)
         
+        self.Atxtoff = (self.Aoff[0] - 3*self.scaler, self.Aoff[1] - 4*self.scaler)
+        self.Btxtoff = (self.Boff[0] - 3*self.scaler, self.Boff[1] - 4*self.scaler)
+
+        self.Sttxtoff = (
+            self.startoff[0] + 2*self.scaler, self.startoff[1] + 2*self.scaler)
+        self.Sltxtoff = (
+            self.selectoff[0] + 2*self.scaler, self.selectoff[1] + 2*self.scaler)
+
+        self.pressed_color = "#1C77FF"
+
         pygame.font.init()
-        btn_font = pygame.sysfont.SysFont("Arial", 18)
+        btn_font = pygame.sysfont.SysFont("Arial", 10*scaler)
         self.A_text = btn_font.render('A', True, (255, 255, 255))
         self.B_text = btn_font.render('B', True, (255, 255, 255))
-        ss_font = btn_font = pygame.sysfont.SysFont("Arial", 8)
+        ss_font = btn_font = pygame.sysfont.SysFont("Arial", 5*self.scaler)
         self.st_text = ss_font.render('START', True, (255, 255, 255))
         self.sl_text = ss_font.render('SELECT', True, (255, 255, 255))
 
@@ -42,15 +72,15 @@ class GUIDrawer:
         s = self.screen
         A_press = not BO.get_nth_bit(gb_inp, 4)
         A_col = (255, 255, 255) if not A_press else self.pressed_color
-        pygame.draw.circle(s, A_col, (135, 210), 12, 2)
-        s.blit(self.A_text, (129, 200))
+        pygame.draw.circle(s, A_col, self.Aoff, 10*self.scaler, 2)
+        s.blit(self.A_text, self.Atxtoff)
 
     def draw_B(self, gb_inp):
         s = self.screen
         B_press = not BO.get_nth_bit(gb_inp, 5)
         B_col = (255, 255, 255) if not B_press else self.pressed_color
-        pygame.draw.circle(s, B_col, (105, 230), 12, 2)
-        s.blit(self.B_text, (99, 220))
+        pygame.draw.circle(s, B_col, self.Boff, 10*self.scaler, 2)
+        s.blit(self.B_text, self.Btxtoff)
 
     def draw_dpad(self, gb_inp):
         for bit, rect in enumerate(self.dpad):
@@ -62,8 +92,8 @@ class GUIDrawer:
     def draw_start_select(self, gb_inp):
         s = self.screen
 
-        s.blit(self.st_text, (92, 275))
-        s.blit(self.sl_text, (52, 275))
+        s.blit(self.st_text, self.Sttxtoff)
+        s.blit(self.sl_text, self.Sltxtoff)
 
         for bit, rect in self.select_start:
             pressed = not BO.get_nth_bit(gb_inp, bit)
@@ -78,6 +108,7 @@ class GUIDrawer:
             )
 
     def draw_gb_inputs(self, gb_input_state):
+        pygame.draw.circle(self.screen, (255, 255, 255), self.dpad_center, 3)
         self.draw_A(gb_input_state)
         self.draw_B(gb_input_state)
         self.draw_dpad(gb_input_state)
@@ -116,8 +147,12 @@ class SessionController:
         pygame.K_RETURN: 7,  # Start
     }
 
-    def __init__(self, gameboy: Gameboy, cartridge: Cartridge):
+    def __init__(self, gameboy: Gameboy, cartridge: Cartridge, gbscaler=1):
         self.gameboy = gameboy
+        self.gbscaler = gbscaler
+        gbres = GB_LCD_RES
+        self.gbres = [gbres[0] * gbscaler, gbres[1] * gbscaler]
+        self.gboff = (5, 10)
         self.cartridge = cartridge
         self.game_name = cartridge.title
         self.gameboy.memctl.configure_bank_switching(cartridge)
@@ -127,9 +162,10 @@ class SessionController:
                      len(self.gameboy.memctl.ext_ram.array))
 
         self.cart_has_battery = self.determine_cart_battery()
-        
+
         self.set_display()
-        self.GUI = GUIDrawer(self.screen)
+        self.GUI = GUIDrawer(self.screen, self.gbres,
+                             self.gboff, self.gbscaler)
 
     def determine_cart_battery(self):
         return "BATTERY" in self.cartridge.type_name
@@ -145,8 +181,9 @@ class SessionController:
             input("IF you want to continue nevertheless, press any button.")
 
     def set_display(self):
-        gw, gh = GB_LCD_RES
-        self.screen = pygame.display.set_mode(size=(gw + 10, gh + 200))
+        gw, gh = self.gbres
+        self.screen = pygame.display.set_mode(
+            size=(gw + 10, gh + 150*self.gbscaler))
 
     def emulate(self):
         self.gameboy.insert_cartridge(self.cartridge)
@@ -189,7 +226,9 @@ class SessionController:
             input_state = self.gameboy.input_state
             self.GUI.draw_gb_inputs(input_state)
             self.GUI.draw_cosmetic()
-            self.screen.blit(self.gameboy.PPU.pgdisplay, (5, 10))
+            scaled = pygame.transform.scale_by(
+                self.gameboy.PPU.pgdisplay, self.gbscaler)
+            self.screen.blit(scaled, self.gboff)
             pygame.display.flip()
 
     def handle_gb_input_event(self, event):
