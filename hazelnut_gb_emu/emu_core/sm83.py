@@ -866,3 +866,10 @@ class SM83(CPU):
         ins = self.instruction_cycle()
         cycles = ins.cycles if ins else 0
         return ins, cycles
+
+
+
+class CgbSM83(SM83):
+    def __init__(self, memory):
+        super().__init__(memory)
+        self.double = False

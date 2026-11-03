@@ -38,11 +38,6 @@ class GbPPU:
     def get_color_palette(self, palette_reg):
         return [(palette_reg >> s) & 0b11 for s in range(0, 8, 2)]
 
-    def get_shade(self, palette_reg, shade_bits):
-        ti = shade_bits * 2
-        mask = (1 << ti) * 3
-        return (palette_reg & mask) >> ti
-
     def get_static_tile(self, lcdc, px, py, map_start):
         lcdc_4 = lcdc >> 4 & 1
         index = self.vram.array[map_start + (py >> 3) * 32 + (px >> 3)]
@@ -266,7 +261,6 @@ class GbPPU:
         _, (_, _), (ly, _), lcdc = ctx
         self.enter_OAM()
         lcdc_2 = lcdc >> 2 & 1
-        self.mode = 2
         for i in range(0, 160, 4):
             sr = self.memctl.OAM[i: i + 4]
             sprite_height = 16 if lcdc_2 else 8
@@ -345,3 +339,10 @@ class GbPPU:
         # set mode to 0
         self.enter_HBLANK()
         self.dots = 0
+
+
+
+class CgbPPU(GbPPU):
+    def __init__(self, memctl):
+        super().__init__(memctl)
+    

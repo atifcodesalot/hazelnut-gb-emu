@@ -4,7 +4,6 @@ from .memory import *
 from .cartridge import Cartridge
 from .auxiliary import BO
 
-
 pyclock = pygame.time.Clock()
 
 
@@ -15,13 +14,13 @@ pyclock = pygame.time.Clock()
 # Real input to Joypad handling, pygame display etc.
 #
 
+
 class Gameboy:
     def __init__(self):
         self.screen = None
         self.input_state = 255
-        self.TIMA_hertz = [256*4, 16, 64, 256]
-        self.memctl = GBMemoryController(
-            self, ext_ram=False)
+        self.TIMA_hertz = [256 * 4, 16, 64, 256]
+        self.memctl = GBMemoryController(self, ext_ram=False)
         self.SM83_processor = SM83(self.memctl)
         self.PPU = GbPPU(self.memctl)
         # 16 bit internal divider register value
@@ -53,10 +52,10 @@ class Gameboy:
         TIMA_en = (TAC >> 2) & 1
         if TIMA_en:
             self.handle_TIMA(old_cycles=self.cycles, elapsed=dots)
-        self.cycles = (self.cycles + dots)
+        self.cycles = self.cycles + dots
         self.handle_DIV()
 
-    def CPU_APU_burst(self, clock_cycles):
+    def CPU_burst(self, clock_cycles):
         if self.SM83_processor.HALT:
             if not self.handle_cpu_halt():
                 self.tick_timers(clock_cycles)
@@ -81,7 +80,7 @@ class Gameboy:
         self.cpu_debt = cycles_passed - clock_cycles
 
     def handle_DIV(self):
-        self.memctl.io_registers[0xFF04] = (self.cycles >> 8) & 0xff
+        self.memctl.io_registers[0xFF04] = (self.cycles >> 8) & 0xFF
 
     def handle_TIMA(self, old_cycles, elapsed):
         TAC = self.memctl.io_registers[0xFF07]
@@ -106,7 +105,7 @@ class Gameboy:
         SB = self.memctl.io_registers[0xFF01]
         send_bit = SB >> 7 & 1
         self.send_serial_bit(send_bit)
-        SB = (SB << 1) & 0x7f
+        SB = (SB << 1) & 0x7F
         recvd = self.get_serial_bit()
         SB = ((SB << 1) & 0xFF) | recvd
         self.memctl.io_registers[0xFF01] = SB
@@ -144,12 +143,12 @@ class Gameboy:
     def scanline_PPU_modes(self):
         # timer tick are inside cpu burst calls
         self.PPU.OAM_scan(self.PPU.get_context())
-        self.CPU_APU_burst(80 - self.cpu_debt)
+        self.CPU_burst(80 - self.cpu_debt)
         # recall because CPU burst may change the context
         self.PPU.drawing_mode(self.PPU.get_context())
-        self.CPU_APU_burst(172 - self.cpu_debt)
+        self.CPU_burst(172 - self.cpu_debt)
         self.PPU.HBLANK_mode()
-        self.CPU_APU_burst(204 - self.cpu_debt)
+        self.CPU_burst(204 - self.cpu_debt)
 
     def tick_PPU_modes_basis(self):
         lcdc = self.memctl.io_registers[0xFF40]
@@ -157,14 +156,14 @@ class Gameboy:
         # clear the lcd if PPU is disabled
         if not lcdc >> 7 & 1:
             self.PPU.disable()
-            self.CPU_APU_burst(456)
+            self.CPU(456)
             return
 
         ly = self.memctl.io_registers[0xFF44]
 
         if self.PPU.is_VBLANK_scan(ly):
             # cpu burst then inc ly and handle lyc compare
-            self.CPU_APU_burst(456)
+            self.CPU(456)
             self.PPU.handle_VBLANK()
             return
 
@@ -195,3 +194,21 @@ class Gameboy:
         _if = self.memctl.io_registers[0xFF0F]
         ie = self.memctl.io_registers[0xFFFF]
         return _if & ie
+
+
+class GameboyColor(Gameboy):
+    def __init__(self):
+        super().__init__()
+        self.double_speed_mode = False
+        self.memctl = CgbMemoryController(self, ext_ram=False)
+        
+    def scanline_PPU_modes(self):
+        # double ticks fed into the CPU if double mode
+        m = 2 if self.double_speed_mode else 1
+        self.PPU.OAM_scan(self.PPU.get_context())
+        self.CPU_burst(m*(80 - self.cpu_debt))
+        self.PPU.drawing_mode(self.PPU.get_context())
+        self.CPU_burst(m*(172 - self.cpu_debt))
+        self.PPU.HBLANK_mode()
+        self.CPU_burst(m*(204 - self.cpu_debt))
+
