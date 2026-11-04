@@ -1,14 +1,17 @@
-
-
 from .emu_core.gameboy import Gameboy
-from .emu_core.cartridge import Cartridge
+from .emu_core.cartridge import CartridgeReader, CARTRIDGE_TYPES
 from .emu_core.PPU import GB_LCD_RES
 from .emu_core.auxiliary import BO
 from .emu_core import logger
+from .emu_core import IMPLEMENTED_MODES
+
+from tkinter import filedialog, Tk
 import pygame
-import os
 import threading
 import time
+import sys
+import gc
+import os
 
 
 # GUI drawer class for drawing buttons, and more stuff in the future
@@ -19,85 +22,95 @@ class GUIDrawer:
         self.gbres = gbres
         self.gboff = gboff
         self.scaler = scaler
-        self.gui_start = (gboff[0]*2*scaler, gboff[1] +
-                          gbres[1] + gboff[0]*2*scaler)
+        self.gui_start = (
+            gboff[0] * 2 * scaler,
+            gboff[1] + gbres[1] + gboff[0] * 2 * scaler,
+        )
         self.dpad_center = (
-            self.gui_start[0] + 30*scaler, self.gui_start[1] + 30*scaler)
+            self.gui_start[0] + 30 * scaler,
+            self.gui_start[1] + 30 * scaler,
+        )
         dc = self.dpad_center
 
         dpads = 10 * scaler
         dpadl = 20 * scaler
 
         self.dpad = (
-            pygame.Rect(dc[0]+dpads*0.5, dc[1]-dpads *
-                        0.5, dpadl, dpads),  # Right
-            pygame.Rect(dc[0]-dpads*0.5-dpadl, dc[1] -
-                        dpads*0.5, dpadl, dpads),  # Left
-            pygame.Rect(dc[0]-dpads*0.5, dc[1]-dpadl -
-                        dpads*0.5, dpads, dpadl),  # Up
-            pygame.Rect(dc[0]-dpads*0.5, dc[1]+dpads *
-                        0.5, dpads, dpadl),  # Down
+            pygame.Rect(
+                dc[0] + dpads * 0.5, dc[1] - dpads * 0.5, dpadl, dpads
+            ),  # Right
+            pygame.Rect(
+                dc[0] - dpads * 0.5 - dpadl, dc[1] - dpads * 0.5, dpadl, dpads
+            ),  # Left
+            pygame.Rect(
+                dc[0] - dpads * 0.5, dc[1] - dpadl - dpads * 0.5, dpads, dpadl
+            ),  # Up
+            pygame.Rect(dc[0] - dpads * 0.5, dc[1] + dpads * 0.5, dpads, dpadl),  # Down
         )
 
         sw, sh = screen.get_size()
-        self.selectoff = sw//2 - 27*scaler, dc[1] + 50*scaler
-        self.startoff = sw//2 + 2*scaler, dc[1] + 50*scaler
+        self.selectoff = sw // 2 - 27 * scaler, dc[1] + 50 * scaler
+        self.startoff = sw // 2 + 2 * scaler, dc[1] + 50 * scaler
         self.select_start = (
-            (6, pygame.Rect(*self.selectoff, 25*scaler, 10*scaler)),  # Select
-            (7, pygame.Rect(*self.startoff, 25*scaler, 10*scaler)),  # Start
+            (6, pygame.Rect(*self.selectoff, 25 * scaler, 10 * scaler)),  # Select
+            (7, pygame.Rect(*self.startoff, 25 * scaler, 10 * scaler)),  # Start
         )
 
-        self.Aoff = (dc[0] + sw // 2 + 12*scaler, dc[1] - 12*scaler)
-        self.Boff = (dc[0] + sw // 2 - 12*scaler, dc[1] + 12*scaler)
+        self.Aoff = (dc[0] + sw // 2 + 12 * scaler, dc[1] - 12 * scaler)
+        self.Boff = (dc[0] + sw // 2 - 12 * scaler, dc[1] + 12 * scaler)
 
-        self.Atxtoff = (self.Aoff[0] - 3*self.scaler,
-                        self.Aoff[1] - 4*self.scaler)
-        self.Btxtoff = (self.Boff[0] - 3*self.scaler,
-                        self.Boff[1] - 4*self.scaler)
+        self.Atxtoff = (self.Aoff[0] - 3 * self.scaler, self.Aoff[1] - 4 * self.scaler)
+        self.Btxtoff = (self.Boff[0] - 3 * self.scaler, self.Boff[1] - 4 * self.scaler)
 
         self.Sttxtoff = (
-            self.startoff[0] + 2*self.scaler, self.startoff[1] + 2*self.scaler)
+            self.startoff[0] + 2 * self.scaler,
+            self.startoff[1] + 2 * self.scaler,
+        )
         self.Sltxtoff = (
-            self.selectoff[0] + 2*self.scaler, self.selectoff[1] + 2*self.scaler)
+            self.selectoff[0] + 2 * self.scaler,
+            self.selectoff[1] + 2 * self.scaler,
+        )
 
         self.pressed_color = "#1C77FF"
 
         pygame.font.init()
-        btn_font = pygame.sysfont.SysFont("Arial", int(10*scaler))
-        self.A_text = btn_font.render('A', True, (255, 255, 255))
-        self.B_text = btn_font.render('B', True, (255, 255, 255))
-        ss_font = btn_font = pygame.sysfont.SysFont(
-            "Arial", int(10*self.scaler))
-        self.st_text = ss_font.render('START', True, (255, 255, 255))
-        self.sl_text = ss_font.render('SELECT', True, (255, 255, 255))
+        btn_font = pygame.sysfont.SysFont("Arial", int(10 * scaler))
+        self.A_text = btn_font.render("A", True, (255, 255, 255))
+        self.B_text = btn_font.render("B", True, (255, 255, 255))
+        ss_font = btn_font = pygame.sysfont.SysFont("Arial", int(10 * self.scaler))
+        self.st_text = ss_font.render("START", True, (255, 255, 255))
+        self.sl_text = ss_font.render("SELECT", True, (255, 255, 255))
 
-        ins_font = btn_font = pygame.sysfont.SysFont(
-            "Arial", int(6*self.scaler))
-        self.control_ins1 = "Controls: Arrow keys: D-Pad, X/Z: A/B, S: Select, Enter: Start"
-        self.control_ins2 =  "R: reset emulation"
+        ins_font = btn_font = pygame.sysfont.SysFont("Arial", int(6 * self.scaler))
+        self.control_ins1 = (
+            "Controls: Arrow keys: D-Pad, X/Z: A/B, S: Select, Enter: Start"
+        )
+        self.control_ins2 = "R: reset emulation"
         self.insctl1_surf = ins_font.render(
-            self.control_ins1, True, (0, 0, 0), (255, 255, 255))
+            self.control_ins1, True, (0, 0, 0), (255, 255, 255)
+        )
         self.insctl2_surf = ins_font.render(
-            self.control_ins2, True, (0, 0, 0), (255, 255, 255))
+            self.control_ins2, True, (0, 0, 0), (255, 255, 255)
+        )
         w1 = self.insctl1_surf.get_width()
         h1 = self.insctl1_surf.get_height()
-        self.insctl1_off = ((sw - w1) // 2, sh - h1 - 15*self.scaler)
+        self.insctl1_off = ((sw - w1) // 2, sh - h1 - 15 * self.scaler)
         w2 = self.insctl2_surf.get_width()
         h2 = self.insctl2_surf.get_height()
-        self.insctl2_off = ((sw - w2) // 2, sh - h2 - 5*self.scaler)
+        self.insctl2_off = ((sw - w2) // 2, sh - h2 - 5 * self.scaler)
 
     def draw_A(self, gb_inp):
         s = self.screen
         A_press = not BO.get_nth_bit(gb_inp, 4)
         A_col = (255, 255, 255) if not A_press else self.pressed_color
-        pygame.draw.circle(s, A_col, self.Aoff, 10*self.scaler, 2)
+        pygame.draw.circle(s, A_col, self.Aoff, 10 * self.scaler, 2)
         s.blit(self.A_text, self.Atxtoff)
 
     def draw_B(self, gb_inp):
         s = self.screen
         B_press = not BO.get_nth_bit(gb_inp, 5)
         B_col = (255, 255, 255) if not B_press else self.pressed_color
-        pygame.draw.circle(s, B_col, self.Boff, 10*self.scaler, 2)
+        pygame.draw.circle(s, B_col, self.Boff, 10 * self.scaler, 2)
         s.blit(self.B_text, self.Btxtoff)
 
     def draw_dpad(self, gb_inp):
@@ -147,60 +160,73 @@ class GUIDrawer:
 # Session controller checks the current implementations as well
 # Manages saving and loading external ram data
 
+
 class SessionController:
     save_path_name = "saves"
-    save_path = os.path.join('.', save_path_name)
+    save_path = os.path.join(".", save_path_name)
 
     keys_gb_inputs = {
         pygame.K_RIGHT: 0,
         pygame.K_LEFT: 1,
         pygame.K_UP: 2,
         pygame.K_DOWN: 3,
-
-        pygame.K_x: 4,       # A
-        pygame.K_z: 5,       # B
-        pygame.K_s: 6,       # Select
+        pygame.K_x: 4,  # A
+        pygame.K_z: 5,  # B
+        pygame.K_s: 6,  # Select
         pygame.K_RETURN: 7,  # Start
     }
 
-    def __init__(self, gameboy: Gameboy, cartridge: Cartridge, gbscaler=1):
-        self.gameboy = gameboy
+    def __init__(self, gbscaler=1):
+        self.init_gameboy()
+        self.init_cart()
+        self.check_implementations(
+                cartridge_types=CARTRIDGE_TYPES, implemented=IMPLEMENTED_MODES)
+        
         self.gbscaler = gbscaler
         gbres = GB_LCD_RES
         self.gbres = [gbres[0] * gbscaler, gbres[1] * gbscaler]
         self.gboff = (5, 10)
-        self.cartridge = cartridge
-        self.game_name = cartridge.title
+        self.game_name = self.cartridge.title
         self.gameboy.insert_cartridge(self.cartridge)
-        logger.debug("Extended ROM size: %d bytes" %
-                     self.gameboy.memctl.rom.size)
-        logger.debug("External RAM size: %d bytes" %
-                     len(self.gameboy.memctl.ext_ram.array))
-
+        logger.debug("Extended ROM size: %d bytes" % self.gameboy.memctl.rom.size)
+        logger.debug(
+            "External RAM size: %d bytes" % len(self.gameboy.memctl.ext_ram.array)
+        )
         self.cart_has_battery = self.determine_cart_battery()
-
+        
         self.set_display()
-        self.GUI = GUIDrawer(self.screen, self.gbres,
-                             self.gboff, self.gbscaler)
+        self.GUI = GUIDrawer(self.screen, self.gbres, self.gboff, self.gbscaler)
         self.gonna_reset_gb = False
+        
+    def init_gameboy(self):
+        self.gameboy = Gameboy()
+    
+    def init_cart(self):
+        file = self.get_rom_file()
+        if file is None:
+            sys.exit("Bye bye!")
+        reader = CartridgeReader(file)
+        self.cartridge = reader.get_cartridge()
 
     def determine_cart_battery(self):
         return "BATTERY" in self.cartridge.type_name
 
     def check_implementations(self, cartridge_types, implemented):
         if self.cartridge.type not in implemented:
-            logger.info(
-                f"\n\nThis game ({self.game_name}) uses\
+            logger.info(f"\n\nThis game ({self.game_name}) uses\
             {self.cartridge.type_name},\ which isn't implemented in the emulator yet.")
-            logger.info("The emulator currently supports cartridges that are: " + ', '.join(
-                [cartridge_types[impl] for impl in implemented]) + "\n")
+            logger.info(
+                "The emulator currently supports cartridges that are: "
+                + ", ".join([cartridge_types[impl] for impl in implemented])
+                + "\n"
+            )
 
             input("IF you want to continue nevertheless, press any button.")
 
     def set_display(self):
         gw, gh = self.gbres
-        self.screen = pygame.display.set_mode(
-            size=(gw + 10, gh + 150*self.gbscaler))
+        self.screen = pygame.display.set_mode(size=(gw + 10, gh + 150 * self.gbscaler))
+        pygame.display.set_caption(f"{__package__}: {self.game_name}")
 
     def emulate(self):
         self.try_loading_save()
@@ -211,7 +237,7 @@ class SessionController:
                 self.gonna_reset_gb = False
             self.gameboy.scanline_step()
         self.save()
-        
+
     def reset_gb(self):
         self.gameboy.reset()
         self.gameboy.insert_cartridge(self.cartridge)
@@ -219,31 +245,30 @@ class SessionController:
 
     def try_loading_save(self):
         ext = self.gameboy.memctl.ext_ram
-        if ext is not None \
-                and ext.size > 0 and self.cart_has_battery:
+        if ext is not None and ext.size > 0 and self.cart_has_battery:
             try:
-                name = os.path.join(self.save_path, str(
-                    self.cartridge.title)+'.save')
+                name = os.path.join(self.save_path, str(self.cartridge.title) + ".save")
                 f = open(name, "rb")
             except FileNotFoundError:
                 logger.info(f"No save file found for {self.game_name}")
                 return
             data = f.read(ext.size)
-            ext.array[:len(data)] = bytearray(data)
+            ext.array[: len(data)] = bytearray(data)
             logger.info(f"Save file {f.name} loaded for {self.game_name}")
 
     def save(self):
         ext = self.gameboy.memctl.ext_ram
-        if ext is not None \
-                and ext.size > 0 and self.cart_has_battery:
+        if ext is not None and ext.size > 0 and self.cart_has_battery:
             if not os.path.isdir(self.save_path):
                 os.mkdir(self.save_path)
-            f = open(os.path.join(
-                self.save_path, str(self.cartridge.title) + '.save'), "wb")
+            f = open(
+                os.path.join(self.save_path, str(self.cartridge.title) + ".save"), "wb"
+            )
             f.write(self.gameboy.memctl.ext_ram.array)
             f.close()
             logger.info(
-                f"Save file generated for {self.game_name} at {os.path.join(os.getcwd(), self.save_path_name)}.")
+                f"Save file generated for {self.game_name} at {os.path.join(os.getcwd(), self.save_path_name)}."
+            )
 
     def display(self):
         while self.gameboy.running:
@@ -252,7 +277,8 @@ class SessionController:
             self.GUI.draw_cosmetic()
             if self.gbscaler > 1:
                 scaled = pygame.transform.scale_by(
-                    self.gameboy.PPU.pgdisplay, self.gbscaler)
+                    self.gameboy.PPU.pgdisplay, self.gbscaler
+                )
                 self.screen.blit(scaled, self.gboff)
             else:
                 self.screen.blit(self.gameboy.PPU.pgdisplay, self.gboff)
@@ -267,10 +293,12 @@ class SessionController:
             return
         if is_pressed:
             gb.input_state = BO.res_nth_bit(
-                gb.input_state, self.keys_gb_inputs[event.key])
+                gb.input_state, self.keys_gb_inputs[event.key]
+            )
         else:
             gb.input_state = BO.set_nth_bit(
-                gb.input_state, self.keys_gb_inputs[event.key])
+                gb.input_state, self.keys_gb_inputs[event.key]
+            )
         gb.memctl.input_state = gb.input_state
 
     def consume_events(self):
@@ -282,6 +310,30 @@ class SessionController:
                     gb.running = False
                 elif event.type in [pygame.KEYDOWN, pygame.KEYUP]:
                     self.handle_gb_input_event(event)
+
+    @staticmethod
+    def get_rom_file():
+        filetypes = [
+            ("Gameboy files", "*.gb .GB"),
+            ("ROM files", "*.rom"),
+            ("Binary files,", "*.bin"),
+        ]
+        title = "Choose a ROM file"
+        dir_ = "."
+
+        root = Tk()
+        root.withdraw()
+
+        try:
+            return filedialog.askopenfile(
+                mode="rb", filetypes=filetypes, title=title, initialdir=dir_
+            )
+        finally:
+            # make sure to destroy and kill,
+            # the tk object in this thread
+            root.destroy()
+            del root
+            gc.collect()
 
     def start(self):
         self.disp_thread = threading.Thread(target=self.display)
