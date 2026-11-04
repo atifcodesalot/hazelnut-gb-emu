@@ -9,13 +9,13 @@ from .MBCs import MBC1, MBC2, MBC3, MBC5
 class RAM:
     def __init__(self, addressable_bits):
         self.size = pow(2, addressable_bits)
-        self.initialize()
+        self.initarr()
         
     def resize(self, new_addr_bits):
         self.size = pow(2, new_addr_bits)
-        self.initialize()
+        self.initarr()
 
-    def initialize(self):
+    def initarr(self):
         self.array = bytearray(self.size)
 
     def address_range_guard(self, i):
@@ -42,6 +42,9 @@ class RAM:
     def dec_byte_at(self, i):
         # self.address_range_guard(i)
         self.array[i] = (self.array[i] - 1) % 256
+        
+    def reset(self):
+        self.initarr()
 
 
 class ROM(RAM):
@@ -395,3 +398,22 @@ class GBMemoryController:
 
     def __setitem__(self, key, value):
         self.write_to(key, value)
+        
+    def reset(self):
+        self.ext_ram_enabled = False
+        self.bank_switching = None
+        self.mbc = None
+        self.disable_boot_rom()
+        
+        # reset memory units
+        self.rom = ROM(addressable_bits=15)  # 32KB
+        self.ram = RAM(addressable_bits=13)  # 8KB
+        self.vram = VRAM(addressable_bits=13)  # 8KB
+        self.ext_ram = RAM(addressable_bits=13)
+        self.hram = RAM(addressable_bits=7)  # 127B
+        self.OAM = bytearray(160)
+        #
+        
+        # reset io registers
+        for addr in self.io_registers:
+            self.io_registers[addr] = 0

@@ -4,7 +4,6 @@ from .memory import *
 from .cartridge import Cartridge
 from .auxiliary import BO
 
-
 pyclock = pygame.time.Clock()
 
 
@@ -15,13 +14,13 @@ pyclock = pygame.time.Clock()
 # Real input to Joypad handling, pygame display etc.
 #
 
+
 class Gameboy:
     def __init__(self):
         self.screen = None
         self.input_state = 255
-        self.TIMA_hertz = [256*4, 16, 64, 256]
-        self.memctl = GBMemoryController(
-            self, ext_ram=False)
+        self.TIMA_hertz = [256 * 4, 16, 64, 256]
+        self.memctl = GBMemoryController(self, ext_ram=False)
         self.SM83_processor = SM83(self.memctl)
         self.PPU = GbPPU(self.memctl)
         # 16 bit internal divider register value
@@ -53,7 +52,7 @@ class Gameboy:
         TIMA_en = (TAC >> 2) & 1
         if TIMA_en:
             self.handle_TIMA(old_cycles=self.cycles, elapsed=dots)
-        self.cycles = (self.cycles + dots)
+        self.cycles = self.cycles + dots
         self.handle_DIV()
 
     def CPU_APU_burst(self, clock_cycles):
@@ -81,7 +80,7 @@ class Gameboy:
         self.cpu_debt = cycles_passed - clock_cycles
 
     def handle_DIV(self):
-        self.memctl.io_registers[0xFF04] = (self.cycles >> 8) & 0xff
+        self.memctl.io_registers[0xFF04] = (self.cycles >> 8) & 0xFF
 
     def handle_TIMA(self, old_cycles, elapsed):
         TAC = self.memctl.io_registers[0xFF07]
@@ -106,7 +105,7 @@ class Gameboy:
         SB = self.memctl.io_registers[0xFF01]
         send_bit = SB >> 7 & 1
         self.send_serial_bit(send_bit)
-        SB = (SB << 1) & 0x7f
+        SB = (SB << 1) & 0x7F
         recvd = self.get_serial_bit()
         SB = ((SB << 1) & 0xFF) | recvd
         self.memctl.io_registers[0xFF01] = SB
@@ -189,9 +188,22 @@ class Gameboy:
         self.tick_PPU_modes_basis()
 
     def insert_cartridge(self, cartridge: Cartridge):
+        self.memctl.configure_bank_switching(cartridge)
         self.memctl.rom.burn_from(cartridge=cartridge)
 
     def interrupt_pending(self):
         _if = self.memctl.io_registers[0xFF0F]
         ie = self.memctl.io_registers[0xFFFF]
         return _if & ie
+
+    def reset(self):
+        self.SM83_processor.reset()
+        self.memctl.reset()
+        self.PPU.reset()
+
+        self.input_state = 255
+
+        self.cpu_debt = 0
+        self.serial_timer = 0
+
+        self.cycles = 0

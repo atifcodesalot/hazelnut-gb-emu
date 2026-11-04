@@ -339,3 +339,22 @@ class GbPPU:
         # set mode to 0
         self.enter_HBLANK()
         self.dots = 0
+        
+    def reset(self):
+        self.disable()
+        
+        # point vram to cleared vram
+        self.vram = self.memctl.vram
+        #
+        
+        # clear caches and palettes
+        self.sprites.clear()
+        self.sprite_rows.clear()
+        
+        self.bg_palette.clear()
+        self.obj0_palette.clear()
+        self.obj1_palette.clear()
+        self.sp_winner_cache.clear()
+        
+        self.window_internal_counter = 0
+        

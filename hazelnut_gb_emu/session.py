@@ -164,7 +164,7 @@ class SessionController:
         self.gboff = (5, 10)
         self.cartridge = cartridge
         self.game_name = cartridge.title
-        self.gameboy.memctl.configure_bank_switching(cartridge)
+        self.gameboy.insert_cartridge(self.cartridge)
         logger.debug("Extended ROM size: %d bytes" %
                      self.gameboy.memctl.rom.size)
         logger.debug("External RAM size: %d bytes" %
@@ -175,6 +175,7 @@ class SessionController:
         self.set_display()
         self.GUI = GUIDrawer(self.screen, self.gbres,
                              self.gboff, self.gbscaler)
+        self.gonna_reset_gb = False
 
     def determine_cart_battery(self):
         return "BATTERY" in self.cartridge.type_name
@@ -195,12 +196,20 @@ class SessionController:
             size=(gw + 10, gh + 150*self.gbscaler))
 
     def emulate(self):
-        self.gameboy.insert_cartridge(self.cartridge)
         self.try_loading_save()
         self.gameboy.powerup()
         while self.gameboy.running:
+            if self.gonna_reset_gb:
+                self.reset_gb()
+                self.gonna_reset_gb = False
             self.gameboy.scanline_step()
         self.save()
+        
+    def reset_gb(self):
+        self.gameboy.reset()
+        logger.debug(f"state after reset: CPU: {self.gameboy.SM83_processor.state_snap()}")
+        self.gameboy.insert_cartridge(self.cartridge)
+        self.gameboy.powerup()
 
     def try_loading_save(self):
         ext = self.gameboy.memctl.ext_ram
@@ -247,6 +256,8 @@ class SessionController:
         gb = self.gameboy
         is_pressed = event.type == pygame.KEYDOWN
         if event.key not in self.keys_gb_inputs:
+            if event.key == pygame.K_r:
+                self.gonna_reset_gb = True
             return
         if is_pressed:
             gb.input_state = BO.res_nth_bit(
