@@ -176,6 +176,8 @@ class MBC2(MBC):
 
 
 class MBC3(MBC):
+    # TODO: complete rtc register implementation
+    # and rumble motors
     def __init__(self, memctl, cartridge: Cartridge):
         super().__init__(memctl, cartridge)
         self.cart_regs = {
