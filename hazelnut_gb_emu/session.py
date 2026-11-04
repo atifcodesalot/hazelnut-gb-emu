@@ -207,7 +207,6 @@ class SessionController:
         
     def reset_gb(self):
         self.gameboy.reset()
-        logger.debug(f"state after reset: CPU: {self.gameboy.SM83_processor.state_snap()}")
         self.gameboy.insert_cartridge(self.cartridge)
         self.gameboy.powerup()
 
