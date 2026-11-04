@@ -1,7 +1,8 @@
-
-
-from .loader import (GB_PREFIXED_OPCODES_JSON,
-                     GB_UNPREFIXED_OPCODES_JSON, GameboyInstruction)
+from .loader import (
+    GB_PREFIXED_OPCODES_JSON,
+    GB_UNPREFIXED_OPCODES_JSON,
+    GameboyInstruction,
+)
 
 from . import logger
 from .memory import *
@@ -11,14 +12,17 @@ from dataclasses import dataclass
 
 def init_mnemonics():
     global MNEMONICS
-    MNEMONICS = [ins.mnemonic for ins in GB_PREFIXED_OPCODES_JSON] + \
-                    [ins.mnemonic for ins in GB_UNPREFIXED_OPCODES_JSON]
+    MNEMONICS = [ins.mnemonic for ins in GB_PREFIXED_OPCODES_JSON] + [
+        ins.mnemonic for ins in GB_UNPREFIXED_OPCODES_JSON
+    ]
 
-    MNEMONICS = frozenset([m for m in MNEMONICS if not (
-        m.startswith('ILLEGAL') or m == "PREFIX")])
+    MNEMONICS = frozenset(
+        [m for m in MNEMONICS if not (m.startswith("ILLEGAL") or m == "PREFIX")]
+    )
 
 
 init_mnemonics()
+
 
 @dataclass
 class GPreg:
@@ -26,12 +30,13 @@ class GPreg:
     value: int
     max_value: int
     bit_length: int
-    
+
     def set_val(self, val):
         self.value = val % self.max_value
 
     def __repr__(self):
         return str(self.value)
+
 
 class GPregPair:
     def __init__(self, name, hi_reg, low_reg):
@@ -53,17 +58,17 @@ class GPregPair:
 
     def __repr__(self):
         return str(self.value)
-    
+
+
 class CPU:
     def __init__(self, memory, general_registers: list[GPreg], flags, PC, SP):
         self.memory = memory
-        self.register_names = list(general_registers.keys()) + ["PC", "SP"]
+        self.register_names = list(general_registers.keys()) + ["SP"]
         for regname in general_registers:
             setattr(self, regname, general_registers[regname])
         self.flags = flags
         self.PC = PC
         self.SP = SP
-        self.machine_cycles = 0
         self.HALT = False
 
     # very fast, can be used for every register fetching and writing
@@ -115,53 +120,57 @@ class CPU:
 
     def return__(self):
         self.set_register("SP", self.SP.value + 2)
-        stack_top = BO.concat_bytes(high=self.memory.read_at(
-            self.SP.value - 1), low=self.memory.read_at(self.SP.value - 2))
+        stack_top = BO.concat_bytes(
+            high=self.memory.read_at(self.SP.value - 1),
+            low=self.memory.read_at(self.SP.value - 2),
+        )
         self.jump_to(stack_top)
 
 
 class SM83(CPU):
     def __init__(self, memory):
-        def r8bit(name): return GPreg(
-            name=name, value=0, max_value=0xFF, bit_length=8)
-        def r16bit(name): return GPreg(
-            name=name, value=0, max_value=0xFFFF, bit_length=16)
+        def r8bit(name):
+            return GPreg(name=name, value=0, max_value=0xFF, bit_length=8)
+
+        def r16bit(name):
+            return GPreg(name=name, value=0, max_value=0xFFFF, bit_length=16)
 
         general_registers = {
-            'A': r8bit('A'),
-            'B': r8bit('B'),
-            'C': r8bit('C'),
-            'D': r8bit('D'),
-            'E': r8bit('E'),
-            'H': r8bit('H'),
-            'L': r8bit('L'),
+            "A": r8bit("A"),
+            "B": r8bit("B"),
+            "C": r8bit("C"),
+            "D": r8bit("D"),
+            "E": r8bit("E"),
+            "H": r8bit("H"),
+            "L": r8bit("L"),
         }
 
-        general_registers['BC'] = GPregPair(
-            'BC', general_registers['B'], general_registers['C'])
-        general_registers['DE'] = GPregPair(
-            'DE', general_registers['D'], general_registers['E'])
-        general_registers['HL'] = GPregPair(
-            'HL', general_registers['H'], general_registers['L'])
+        general_registers["BC"] = GPregPair(
+            "BC", general_registers["B"], general_registers["C"]
+        )
+        general_registers["DE"] = GPregPair(
+            "DE", general_registers["D"], general_registers["E"]
+        )
+        general_registers["HL"] = GPregPair(
+            "HL", general_registers["H"], general_registers["L"]
+        )
 
         # flags = {'Z': False, 'N': False, 'H': False, 'C': False, 'IME': False}
         flags = [
-            0, # Z
-            0, # N
-            0, # H
-            0, # C
-            0, # IME
+            0,  # Z
+            0,  # N
+            0,  # H
+            0,  # C
+            0,  # IME
         ]
-        super().__init__(memory,
-                         general_registers, flags,
-                         PC=0,
-                         SP=r16bit("SP"))
+        super().__init__(memory, general_registers, flags, PC=0, SP=r16bit("SP"))
 
         self.pending_interrupt_enable = False
         self.enable_interrupts_now = False
 
         self.mnemonic_ins_table = dict(
-            (m, getattr(self, f"exe_INS_{m}")) for m in MNEMONICS)
+            (m, getattr(self, f"exe_INS_{m}")) for m in MNEMONICS
+        )
 
     def set_flags_fast(self, Z=None, N=None, H=None, C=None, IME=None):
         if Z is not None:
@@ -176,13 +185,17 @@ class SM83(CPU):
             self.flags[4] = IME
 
     def flags_register(self):
-        return (self.flags[0] << 7) | (self.flags[1] << 6) |\
-            (self.flags[2] << 5) | (self.flags[3] << 4)
+        return (
+            (self.flags[0] << 7)
+            | (self.flags[1] << 6)
+            | (self.flags[2] << 5)
+            | (self.flags[3] << 4)
+        )
 
     # Load, copy related instructions start here
     ###
     # LD; LDH
-            
+
     def exe_INS_LD(self, ins: GameboyInstruction):
         op = ins.raw
         # at max 3 operands at a LD instruction
@@ -191,10 +204,14 @@ class SM83(CPU):
             e8 = ins.operands_raw[0]
             signed = BO.byte_twos_complement(e8)
             self.set_register("HL", self.SP.value + signed)
-            self.set_flags_fast(Z=0, N=0, H=BO.add_half_carry(
-                self.SP.value, signed), C=BO.add_full_carry(self.SP.value & 0xFF, e8))
+            self.set_flags_fast(
+                Z=0,
+                N=0,
+                H=BO.add_half_carry(self.SP.value, signed),
+                C=BO.add_full_carry(self.SP.value & 0xFF, e8),
+            )
             return
-        
+
         o1, o2 = ins.operands[0], ins.operands[1]
         imm = o2.immediate
         name1 = o1.name
@@ -208,13 +225,13 @@ class SM83(CPU):
                 data = ins.operands_raw[0] | (ins.operands_raw[1] << 8)
             else:
                 data = ins.operands_raw[0]
-                
+
             w = data if imm else self.memory.read_at(data)
         else:
             r = self.get_register(name2)
             w = r if imm else self.memory.read_at(r)
 
-        # when operand 1 is an address, operand 2 is always a register, 
+        # when operand 1 is an address, operand 2 is always a register,
         # hence we use the whole raw operands
         # in fact it is either SP or A
         if name1 == "a16":
@@ -240,17 +257,13 @@ class SM83(CPU):
     def exe_INS_LDH(self, ins: GameboyInstruction):
         o1, o2 = ins.operands
         if o1.name == "a8":
-            self.memory.write_to(
-                0xFF00 + ins.operands_raw[0], self.A.value)
-        elif o1.name == 'C':
-            self.memory.write_to(0xFF00 + self.C.value,
-                                 self.A.value)
+            self.memory.write_to(0xFF00 + ins.operands_raw[0], self.A.value)
+        elif o1.name == "C":
+            self.memory.write_to(0xFF00 + self.C.value, self.A.value)
         elif o2.name == "a8":
-            self.set_register('A', self.memory.read_at(
-                0xFF00 + ins.operands_raw[0]))
-        elif o2.name == 'C':
-            self.set_register('A', self.memory.read_at(
-                0xFF00 + self.C.value))
+            self.set_register("A", self.memory.read_at(0xFF00 + ins.operands_raw[0]))
+        elif o2.name == "C":
+            self.set_register("A", self.memory.read_at(0xFF00 + self.C.value))
 
     # Load, copy related instructions END here
     ###
@@ -268,29 +281,29 @@ class SM83(CPU):
         func_half = BO.sub_half_borrow if sub else BO.add_half_carry
         func_full = BO.sub_full_borrow if sub else BO.add_full_carry
 
-        if o2.name == 'n8':
+        if o2.name == "n8":
             operand = ins.operands_raw[0]
         else:
             r = self.get_register(o2.name)
             operand = r if o2.immediate else self.memory.read_at(r)
 
-        bch = func_half(
-            current_A, operand)
+        bch = func_half(current_A, operand)
         bcf = func_full(current_A, operand)
         self.set_flags_fast(H=bch, C=bcf)
 
         if sub:
-            self.set_register('A', current_A - operand)
+            self.set_register("A", current_A - operand)
         else:
-            self.set_register('A', current_A + operand)
+            self.set_register("A", current_A + operand)
         current_A = self.A.value
         if include_carry:
-            self.set_flags_fast(H=func_half(
-                current_A, 1) or bch, C=func_full(current_A, 1) or bcf)
+            self.set_flags_fast(
+                H=func_half(current_A, 1) or bch, C=func_full(current_A, 1) or bcf
+            )
             if sub:
-                self.dec_register('A')
+                self.dec_register("A")
             else:
-                self.inc_register('A')
+                self.inc_register("A")
 
         self.set_flags_fast(Z=(self.A.value == 0), N=sub)
 
@@ -300,10 +313,14 @@ class SM83(CPU):
         if o1.name == "SP":
             e8 = ins.operands_raw[0]
             signed = BO.byte_twos_complement(e8)
-            self.set_flags_fast(Z=False, N=False, H=BO.add_half_carry(
-                self.SP.value, signed), C=BO.add_full_carry(self.SP.value & 0xFF, e8))
+            self.set_flags_fast(
+                Z=False,
+                N=False,
+                H=BO.add_half_carry(self.SP.value, signed),
+                C=BO.add_full_carry(self.SP.value & 0xFF, e8),
+            )
             self.set_register("SP", self.SP.value + signed)
-        elif o1.name == 'A':
+        elif o1.name == "A":
             self.accumulate_A(ins)
         # ADD HL,ss is the only instruction that has a 16 bit operand, and the operand is always a register pair,
         # so we can just check if o1 is HL to determine whether it is that instruction or not
@@ -311,8 +328,11 @@ class SM83(CPU):
             addend = self.HL.value
             summand = self.get_register(o2.name)
             self.set_register("HL", self.HL.value + summand)
-            self.set_flags_fast(N=False, H=BO.add_half_carry(addend, summand, high_half=True),
-                                C=BO.add_full_carry(addend, summand, bit_width=16))
+            self.set_flags_fast(
+                N=False,
+                H=BO.add_half_carry(addend, summand, high_half=True),
+                C=BO.add_full_carry(addend, summand, bit_width=16),
+            )
 
     def exe_INS_SUB(self, ins: GameboyInstruction):
         self.accumulate_A(ins, sub=True)
@@ -329,15 +349,22 @@ class SM83(CPU):
         register = self.get_register_obj(rname)
         update_flags = not o.immediate or register.bit_length == 8
         if update_flags:
-            pr_value = self.get_register(
-                rname) if o.immediate else self.memory.read_at(self.get_register(rname))
+            pr_value = (
+                self.get_register(rname)
+                if o.immediate
+                else self.memory.read_at(self.get_register(rname))
+            )
             self.set_flags_fast(H=BO.add_half_carry(pr_value, 1))
-        self.inc_register(rname) if o.immediate else self.memory.inc_byte_at(
-            self.get_register(rname))
+        (
+            self.inc_register(rname)
+            if o.immediate
+            else self.memory.inc_byte_at(self.get_register(rname))
+        )
         if update_flags:
             if not o.immediate:
-                self.set_flags_fast(Z=self.memory.read_at(
-                    self.get_register(rname)) == 0, N=False)
+                self.set_flags_fast(
+                    Z=self.memory.read_at(self.get_register(rname)) == 0, N=False
+                )
             else:
                 self.set_flags_fast(Z=self.get_register(rname) == 0, N=False)
 
@@ -347,16 +374,22 @@ class SM83(CPU):
         register = self.get_register_obj(rname)
         update_flags = not o.immediate or register.bit_length == 8
         if update_flags:
-            pr_value = self.get_register(
-                rname) if o.immediate else self.memory.read_at(self.get_register(rname))
-            self.set_flags_fast(
-                H=BO.sub_half_borrow(pr_value, 1))
-        self.dec_register(rname) if o.immediate else self.memory.dec_byte_at(
-            self.get_register(rname))
+            pr_value = (
+                self.get_register(rname)
+                if o.immediate
+                else self.memory.read_at(self.get_register(rname))
+            )
+            self.set_flags_fast(H=BO.sub_half_borrow(pr_value, 1))
+        (
+            self.dec_register(rname)
+            if o.immediate
+            else self.memory.dec_byte_at(self.get_register(rname))
+        )
         if update_flags:
             if not o.immediate:
-                self.set_flags_fast(Z=self.memory.read_at(
-                    self.get_register(rname)) == 0, N=True)
+                self.set_flags_fast(
+                    Z=self.memory.read_at(self.get_register(rname)) == 0, N=True
+                )
             else:
                 self.set_flags_fast(Z=self.get_register(rname) == 0, N=True)
 
@@ -370,8 +403,12 @@ class SM83(CPU):
             r = self.get_register(o2.name)
             byte = r if o2.immediate else self.memory.read_at(r)
         A = self.A.value
-        self.set_flags_fast(Z=(A - byte) == 0, N=True,
-                            H=BO.sub_half_borrow(A, byte), C=BO.sub_full_borrow(A, byte))
+        self.set_flags_fast(
+            Z=(A - byte) == 0,
+            N=True,
+            H=BO.sub_half_borrow(A, byte),
+            C=BO.sub_full_borrow(A, byte),
+        )
 
     # arithmetic related instructions END here
     ###
@@ -389,7 +426,7 @@ class SM83(CPU):
             r = self.get_register(o2.name)
             value = r if o2.immediate else self.memory.read_at(r)
         result = self.A.value & value
-        self.set_register('A', result)
+        self.set_register("A", result)
         self.set_flags_fast(Z=result == 0, N=False, H=True, C=False)
 
     def exe_INS_OR(self, ins: GameboyInstruction):
@@ -401,7 +438,7 @@ class SM83(CPU):
             r = self.get_register(o2.name)
             value = r if o2.immediate else self.memory.read_at(r)
         result = self.A.value | value
-        self.set_register('A', result)
+        self.set_register("A", result)
         self.set_flags_fast(Z=result == 0, N=False, H=False, C=False)
 
     def exe_INS_XOR(self, ins: GameboyInstruction):
@@ -413,7 +450,7 @@ class SM83(CPU):
             r = self.get_register(o2.name)
             value = r if o2.immediate else self.memory.read_at(r)
         result = self.A.value ^ value
-        self.set_register('A', result)
+        self.set_register("A", result)
         self.set_flags_fast(Z=result == 0, N=False, H=False, C=False)
 
     def exe_INS_CPL(self, _: GameboyInstruction):
@@ -430,12 +467,16 @@ class SM83(CPU):
             self.set_register("SP", self.SP.value + 2)
             self.set_register(highreg, self.memory.read_at(self.SP.value - 1))
             if not flag:
-                self.set_register(
-                    lowreg, self.memory.read_at(self.SP.value - 2))
+                self.set_register(lowreg, self.memory.read_at(self.SP.value - 2))
             else:
                 b = self.memory.read_at(self.SP.value - 2)
-                self.set_flags_fast(Z=bool(b >> 7 & 1), N=bool(
-                    b >> 6 & 1), H=bool(b >> 5 & 1), C=bool(b >> 4 & 1))
+                self.set_flags_fast(
+                    Z=bool(b >> 7 & 1),
+                    N=bool(b >> 6 & 1),
+                    H=bool(b >> 5 & 1),
+                    C=bool(b >> 4 & 1),
+                )
+
         if ins.raw == 0xC1:
             pop("B", "C")
         elif ins.raw == 0xD1:
@@ -449,13 +490,14 @@ class SM83(CPU):
         def push(highreg, lowreg, flag=False):
             self.set_register("SP", self.SP.value - 2)
             self.memory.write_to(
-                self.SP.value + 1, self.get_register(highreg))  # little endian
+                self.SP.value + 1, self.get_register(highreg)
+            )  # little endian
             if not flag:
-                self.memory.write_to(
-                    self.SP.value, self.get_register(lowreg))
+                self.memory.write_to(self.SP.value, self.get_register(lowreg))
             else:
                 flags_reg = self.flags_register()
                 self.memory.write_to(self.SP.value, flags_reg)
+
         if ins.raw == 0xC5:
             push("B", "C")
         elif ins.raw == 0xD5:
@@ -464,6 +506,7 @@ class SM83(CPU):
             push("H", "L")
         elif ins.raw == 0xF5:
             push("A", None, flag=True)
+
     # Stack related instructions END here
     ###
 
@@ -473,8 +516,7 @@ class SM83(CPU):
 
     def exe_INS_JP(self, ins: GameboyInstruction):
         if ins.byte_count > 1:
-            address = BO.concat_bytes(
-                *ins.operands_raw[:2][::-1])  # little endian
+            address = BO.concat_bytes(*ins.operands_raw[:2][::-1])  # little endian
         # JP NZ, a16
         if ins.raw == 0xC2:
             if not self.flags[0]:
@@ -592,7 +634,7 @@ class SM83(CPU):
                 adjustment += 0x6
             if C:
                 adjustment += 0x60
-            self.set_register('A', old_A - adjustment)
+            self.set_register("A", old_A - adjustment)
             new_Z = old_A - adjustment == 0
 
         else:
@@ -601,7 +643,7 @@ class SM83(CPU):
             if C or old_A > 0x99:
                 adjustment += 0x60
                 self.set_flags_fast(C=True)
-            self.set_register('A', old_A + adjustment)
+            self.set_register("A", old_A + adjustment)
             new_Z = (old_A + adjustment) & 0xFF == 0
 
         self.set_flags_fast(H=False, Z=new_Z)
@@ -651,15 +693,17 @@ class SM83(CPU):
     def exe_INS_BIT(self, ins: GameboyInstruction):
         o1, o2 = ins.operands
         r = self.get_register(o2.name)
-        byte = r if o2.immediate else self.memory.read_at(
-            self.get_register(o2.name))
+        byte = r if o2.immediate else self.memory.read_at(self.get_register(o2.name))
         bit = bool(BO.get_nth_bit(byte, int(o1.name)))
         self.set_flags_fast(Z=not bit, N=False, H=True)
 
     def exe_INS_RES(self, ins: GameboyInstruction):
         o1, o2 = ins.operands
-        byte = self.get_register(o2.name) if o2.immediate else self.memory.read_at(
-            self.get_register(o2.name))
+        byte = (
+            self.get_register(o2.name)
+            if o2.immediate
+            else self.memory.read_at(self.get_register(o2.name))
+        )
         result = BO.res_nth_bit(byte, int(o1.name))
         if o2.immediate:
             self.set_register(o2.name, result)
@@ -668,8 +712,11 @@ class SM83(CPU):
 
     def exe_INS_SET(self, ins: GameboyInstruction):
         o1, o2 = ins.operands
-        byte = self.get_register(o2.name) if o2.immediate else self.memory.read_at(
-            self.get_register(o2.name))
+        byte = (
+            self.get_register(o2.name)
+            if o2.immediate
+            else self.memory.read_at(self.get_register(o2.name))
+        )
         result = BO.set_nth_bit(byte, int(o1.name))
         if o2.immediate:
             self.set_register(o2.name, result)
@@ -678,8 +725,11 @@ class SM83(CPU):
 
     def shift_rotate_to_carry(self, ins, bin_op, rotate=False):
         op = ins.operands[0]
-        byte = self.get_register(op.name) if op.immediate else self.memory.read_at(
-            self.get_register(op.name))
+        byte = (
+            self.get_register(op.name)
+            if op.immediate
+            else self.memory.read_at(self.get_register(op.name))
+        )
         if rotate:
             if bin_op == BO.rotate_byte_right or bin_op == BO.rotate_byte_left:
                 bit, result = bin_op(byte)
@@ -694,8 +744,7 @@ class SM83(CPU):
         self.set_flags_fast(Z=result == 0, N=False, H=False, C=bool(bit))
 
     def exe_INS_RL(self, ins: GameboyInstruction):
-        self.shift_rotate_to_carry(
-            ins, BO.rotate_byte_left_through, rotate=True)
+        self.shift_rotate_to_carry(ins, BO.rotate_byte_left_through, rotate=True)
 
     def exe_INS_RLA(self, ins: GameboyInstruction):
         A = self.A.value
@@ -713,8 +762,7 @@ class SM83(CPU):
         self.set_flags_fast(Z=False, N=False, H=False, C=bool(bit))
 
     def exe_INS_RR(self, ins: GameboyInstruction):
-        self.shift_rotate_to_carry(
-            ins, BO.rotate_byte_right_through, rotate=True)
+        self.shift_rotate_to_carry(ins, BO.rotate_byte_right_through, rotate=True)
 
     def exe_INS_RRA(self, ins: GameboyInstruction):
         A = self.A.value
@@ -742,8 +790,11 @@ class SM83(CPU):
 
     def exe_INS_SWAP(self, ins: GameboyInstruction):
         op = ins.operands[0]
-        byte = self.get_register(op.name) if op.immediate else self.memory.read_at(
-            self.get_register(op.name))
+        byte = (
+            self.get_register(op.name)
+            if op.immediate
+            else self.memory.read_at(self.get_register(op.name))
+        )
         result = BO.swap_nibbles(byte)
         if op.immediate:
             self.set_register(op.name, result)
@@ -757,7 +808,8 @@ class SM83(CPU):
     def __getattr__(self, name):
         if name.startswith("exe_INS_"):
             raise NotImplementedError(
-                f"Instruction {name} not implemented yet, if it exists.")
+                f"Instruction {name} not implemented yet, if it exists."
+            )
         else:
             raise AttributeError(f"{name} is not a valid attribute of CPU.")
 
@@ -791,11 +843,11 @@ class SM83(CPU):
 
         if opcode == 0xCB:
             # the instruction is prefixed
-            self.PC = (self.PC + 1) & 0xffff
+            self.PC = (self.PC + 1) & 0xFFFF
             opcode = self.memory.read_at(self.PC)
             prefixed = True
 
-        self.PC = (self.PC + 1) & 0xffff
+        self.PC = (self.PC + 1) & 0xFFFF
         #
 
         # decode
@@ -866,3 +918,27 @@ class SM83(CPU):
         ins = self.instruction_cycle()
         cycles = ins.cycles if ins else 0
         return ins, cycles
+
+    def reset(self):
+        self.pending_interrupt_enable = False
+        self.enable_interrupts_now = False
+
+        self.PC = 0
+        for regname in self.register_names:
+            self.set_register(regname, 0)
+
+        self.set_flags_fast(Z=0, N=0, H=0, C=0, IME=0)
+        
+        self.HALT = False
+        
+    def state_snap(self):
+        state_dict = {
+            "PC": self.PC,
+            "SP": self.SP.value,
+            "registers": {regname: self.get_register(regname) for regname in self.register_names},
+            "flags": self.flags.copy(),
+            "HALT": self.HALT,
+            "pending_interrupt_enable": self.pending_interrupt_enable,
+            "enable_interrupts_now": self.enable_interrupts_now,
+        }
+        return state_dict
