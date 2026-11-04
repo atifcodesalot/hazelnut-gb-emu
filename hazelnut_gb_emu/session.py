@@ -73,12 +73,18 @@ class GUIDrawer:
 
         ins_font = btn_font = pygame.sysfont.SysFont(
             "Arial", int(6*self.scaler))
-        self.control_ins = "Controls: Arrow keys: D-Pad, X/Z: A/B, S: Select, Enter: Start"
-        self.insctl_surf = ins_font.render(
-            self.control_ins, True, (0, 0, 0), (255, 255, 255))
-        w = self.insctl_surf.get_width()
-        h = self.insctl_surf.get_height()
-        self.insctl_off = ((sw - w) // 2, sh - h - 5*self.scaler)
+        self.control_ins1 = "Controls: Arrow keys: D-Pad, X/Z: A/B, S: Select, Enter: Start"
+        self.control_ins2 =  "R: reset emulation"
+        self.insctl1_surf = ins_font.render(
+            self.control_ins1, True, (0, 0, 0), (255, 255, 255))
+        self.insctl2_surf = ins_font.render(
+            self.control_ins2, True, (0, 0, 0), (255, 255, 255))
+        w1 = self.insctl1_surf.get_width()
+        h1 = self.insctl1_surf.get_height()
+        self.insctl1_off = ((sw - w1) // 2, sh - h1 - 15*self.scaler)
+        w2 = self.insctl2_surf.get_width()
+        h2 = self.insctl2_surf.get_height()
+        self.insctl2_off = ((sw - w2) // 2, sh - h2 - 5*self.scaler)
 
     def draw_A(self, gb_inp):
         s = self.screen
@@ -127,7 +133,8 @@ class GUIDrawer:
 
     def draw_cosmetic(self, *args):
         s = self.screen
-        s.blit(self.insctl_surf, self.insctl_off)
+        s.blit(self.insctl1_surf, self.insctl1_off)
+        s.blit(self.insctl2_surf, self.insctl2_off)
 
 
 # A session controller for the gameboy class
