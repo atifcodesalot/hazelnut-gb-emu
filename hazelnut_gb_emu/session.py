@@ -85,7 +85,7 @@ class GUIDrawer:
         self.control_ins1 = (
             "Controls: Arrow keys: D-Pad, X/Z: A/B, S: Select, Enter: Start"
         )
-        self.control_ins2 = "R: reset emulation"
+        self.control_ins2 = "R: reset emulation, ESC: exit and select new rom"
         self.insctl1_surf = ins_font.render(
             self.control_ins1, True, (0, 0, 0), (255, 255, 255)
         )
@@ -204,7 +204,7 @@ class SessionController:
     def init_cart(self):
         file = self.get_rom_file()
         if file is None:
-            sys.exit("Bye bye!")
+            sys.exit("exiting dialog...")
         reader = CartridgeReader(file)
         self.cartridge = reader.get_cartridge()
 
@@ -290,6 +290,8 @@ class SessionController:
         if event.key not in self.keys_gb_inputs:
             if event.key == pygame.K_r:
                 self.gonna_reset_gb = True
+            elif event.key == pygame.K_ESCAPE:
+                self.gameboy.running = False
             return
         if is_pressed:
             gb.input_state = BO.res_nth_bit(
@@ -310,6 +312,7 @@ class SessionController:
                     gb.running = False
                 elif event.type in [pygame.KEYDOWN, pygame.KEYUP]:
                     self.handle_gb_input_event(event)
+        self.end()
 
     @staticmethod
     def get_rom_file():
@@ -340,3 +343,12 @@ class SessionController:
         self.emu_thread = threading.Thread(target=self.emulate)
         self.disp_thread.start()
         self.emu_thread.start()
+        self.consume_events()
+        
+    def end(self):
+        while self.emu_thread.is_alive() or \
+            self.disp_thread.is_alive():
+                time.sleep(0.0001)
+                continue
+        pygame.display.quit()
+        del self

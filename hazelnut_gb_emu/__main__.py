@@ -23,9 +23,11 @@ def run_profiled(target, filename):
 
 def main():
     if RUNTIME != "pypy":
-        try_pypy()
+        try:
+            try_pypy()
+        except subprocess.CalledProcessError:
+            sys.exit("Bye bye!")
 
-    session = SessionController(gbscaler=2)
 
     if len(sys.argv) > 2:
         if sys.argv[1] in ["--benchmark", "-b", "--profile", "-p"]:
@@ -43,8 +45,9 @@ def main():
             threading.Thread(target=emu_target).start()
 
     else:
-        session.start()
-        session.consume_events()
+        while True:
+            session = SessionController(gbscaler=2)
+            session.start()
 
 
 if __name__ == "__main__":
