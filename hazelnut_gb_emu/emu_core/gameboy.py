@@ -188,12 +188,25 @@ class Gameboy:
         self.tick_PPU_modes_basis()
 
     def insert_cartridge(self, cartridge: Cartridge):
+        self.memctl.configure_bank_switching(cartridge)
         self.memctl.rom.burn_from(cartridge=cartridge)
 
     def interrupt_pending(self):
         _if = self.memctl.io_registers[0xFF0F]
         ie = self.memctl.io_registers[0xFFFF]
         return _if & ie
+
+    def reset(self):
+        self.SM83_processor.reset()
+        self.memctl.reset()
+        self.PPU.reset()
+
+        self.input_state = 255
+
+        self.cpu_debt = 0
+        self.serial_timer = 0
+
+        self.cycles = 0
 
 
 class GameboyColor(Gameboy):
