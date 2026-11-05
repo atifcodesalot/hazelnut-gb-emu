@@ -10,8 +10,6 @@ class RAM:
     def __init__(self, addressable_bits):
         self.size = pow(2, addressable_bits)
         self.initarr()
-        
-        self.initialize()
 
     def resize(self, new_addr_bits):
         self.size = pow(2, new_addr_bits)
