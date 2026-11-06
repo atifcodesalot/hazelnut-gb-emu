@@ -184,7 +184,7 @@ class GbPPU:
     def drawing_mode(self, ctx):
         # todo: please refactor this function
         self.enter_drawing_mode()
-        st_palette_reg, (scx, scy), (ly, _), lcdc = ctx
+        st_palette_reg, (scx, scy), (SCAN_y, _), lcdc = ctx
         self.bg_palette = self.get_color_palette(st_palette_reg)
         self.obj0_palette = self.get_color_palette(
             self.memctl.io_registers[0xFF48])
@@ -192,25 +192,26 @@ class GbPPU:
             self.memctl.io_registers[0xFF49])
         wy, wx = self.memctl.io_registers[0xFF4A], self.memctl.io_registers[0xFF4B]
 
-        bgy = (ly + scy) & 0xff
-        lwy = ly - wy
+        bgy = (SCAN_y + scy) & 0xff
+        lwy = SCAN_y - wy
         map_start_bg = 0x1C00 if lcdc >> 3 & 1 else 0x1800
         map_start_window = 0x1C00 if lcdc >> 6 & 1 else 0x1800
 
         window_was_visible = False
-        row_n = GB_LCD_RES[0] * ly
+        row_n = GB_LCD_RES[0] * SCAN_y
         static_enable = lcdc & 1
 
-        for x in range(GB_LCD_RES[0]):
+        
+        for SCAN_x in range(GB_LCD_RES[0]):
             # compute local background and window pixel coordinates
-            lwx = x - wx + 7
-            bgx = (scx + x) & 0xff
+            lwx = SCAN_x - wx + 7
+            bgx = (scx + SCAN_x) & 0xff
             bg_offset = bgx % 8
             w_offset = lwx % 8
             #
 
             # if new bg row needs to be fetched
-            if x == 0 or bg_offset == 0:
+            if SCAN_x == 0 or bg_offset == 0:
                 BG_pixels = self.get_BG_pixels(
                     lcdc, bgx, bgy, map_start_bg)
 
@@ -236,15 +237,15 @@ class GbPPU:
 
             # call sprite pixel function only if there are sprites
             # and if lcdc NOW enables objects
-            if self.sp_winner_cache[x] and (lcdc >> 1) & 1:
-                sp_px, sr = self.sp_winner_cache[x]
+            if self.sp_winner_cache[SCAN_x] and (lcdc >> 1) & 1:
+                sp_px, sr = self.sp_winner_cache[SCAN_x]
             else:
                 sp_px = sr = None
 
             shade = self.mix(st_pixel, sp_px, sr)
 
             # set final shade on buffer
-            self.buffer[row_n + x] = shade
+            self.buffer[row_n + SCAN_x] = shade
 
         if window_was_visible:
             self.window_internal_counter += 1
