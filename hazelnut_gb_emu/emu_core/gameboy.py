@@ -174,10 +174,13 @@ class Gameboy:
 
         # if just finished the last visible scanline
         if ly == GB_LCD_RES[1] - 1:
-            # ensure framerate is 60
-            self.pyclock.tick(59)
-            #
-            self.PPU.enter_VBLANK()
+            self.frame_end()
+        
+    def frame_end(self):
+        # ensure framerate is 60
+        self.pyclock.tick(59)
+        #
+        self.PPU.enter_VBLANK()
 
     def powerup(self):
         self.SM83_processor.PC = 0x0
@@ -259,4 +262,8 @@ class GameboyColor(Gameboy):
         self.CPU_burst(((172 << self.double_mode) - self.cpu_debt))
         self.PPU.HBLANK_mode()
         self.CPU_burst(((204 << self.double_mode) - self.cpu_debt))
+        
+    def frame_end(self):
+        super().frame_end()
+        self.PPU.flip()
 
