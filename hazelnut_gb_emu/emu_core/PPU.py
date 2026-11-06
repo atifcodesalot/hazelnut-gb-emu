@@ -30,9 +30,6 @@ class GbPPU:
         self.sp_winner_cache = []
 
     def init_surf(self):
-        self.pgdisplay = pygame.image.frombuffer(self.buffer, GB_LCD_RES, "P")
-        for i in range(4):
-            self.pgdisplay.set_palette_at(i, GB_LCD_PALETTE_rgb[i])
         self.buffer = memoryview(
             bytearray(
                 [
@@ -42,7 +39,10 @@ class GbPPU:
                 * GB_LCD_RES[1]
             )
         )
-
+        self.pgdisplay = pygame.image.frombuffer(self.buffer, GB_LCD_RES, "P")
+        for i in range(4):
+            self.pgdisplay.set_palette_at(i, GB_LCD_PALETTE_rgb[i])
+        
     def get_color_palette(self, palette_reg):
         return [(palette_reg >> s) & 0b11 for s in range(0, 8, 2)]
 
