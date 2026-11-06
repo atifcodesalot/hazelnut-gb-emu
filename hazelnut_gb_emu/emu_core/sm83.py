@@ -948,4 +948,12 @@ class SM83(CPU):
 class CgbSM83(SM83):
     def __init__(self, memory):
         super().__init__(memory)
-        self.double = False
+        self.double = 0
+        self.STOP_EXED = False
+        self.gameboy = self.memory.gameboy
+        
+        
+    def exe_INS_STOP(self, ins):
+        super().exe_INS_STOP(ins)
+        self.STOP_EXED = True
+        self.gameboy.check_speed_switch()
