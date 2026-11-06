@@ -47,12 +47,6 @@ class GbPPU:
         final_offset = tile_offset + (py % 8) * 2
         return self.vram.get_block_at(final_offset, 2)
 
-    def get_tile_row_BG(self, lcdc, px, py, bgm_start):
-        return self.get_static_tile(lcdc, px, py, bgm_start)
-
-    def get_tile_row_WINDOW(self, lcdc, px, py, wm_start):
-        return self.get_static_tile(lcdc, px, py, wm_start)
-
     # takes relative pixels pos
     def get_pixel_row(self, ti, rpy):
         row = self.vram.get_block_at(ti * 16 + 2 * rpy, 2)
@@ -171,7 +165,7 @@ class GbPPU:
         return final_shade
 
     def get_BG_pixels(self, lcdc, bgx, bgy, map_start_bg):
-        BG_row = self.get_tile_row_BG(
+        BG_row = self.get_static_tile(
             lcdc, bgx, bgy, map_start_bg)
         return [
             (((BG_row[1] >> bit) & 1) << 1) | ((BG_row[0] >> bit) & 1)
@@ -179,7 +173,7 @@ class GbPPU:
         ]
 
     def get_W_pixels(self, lcdc, lwx, map_start_window):
-        W_row = self.get_tile_row_WINDOW(
+        W_row = self.get_static_tile(
             lcdc, lwx, self.window_internal_counter, map_start_window)
         return [
             (((W_row[1] >> bit) & 1) << 1) | (
