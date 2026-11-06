@@ -210,18 +210,53 @@ class Gameboy:
 
 
 class GameboyColor(Gameboy):
+    SWITCH_CYCLES = 8200
+    
     def __init__(self):
         super().__init__()
-        self.double_speed_mode = False
+        self.speed_mode = 0
+        # update components
         self.memctl = CgbMemoryController(self, ext_ram=False)
+        self.PPU = CgbPPU(self.memctl)
+        self.SM83_processor = CgbSM83(self.memctl)
+        #
+        self.switcing_mode = False
+        self.switch_cycles = None
+        
+    def check_speed_switch(self):
+        spdkey1 = self.memctl.io_registers[0xFF4D]
+        written = spdkey1 >> 7 & 1
+        armed = spdkey1 & 1
+        # if the "switch" is armed
+        # and the CPU executed a stop, 
+        # overwrite the current mode
+        if armed and self.SM83_processor.STOP_EXED:
+            self.SM83_processor.STOP_EXED = False
+            self.speed_mode = written
+            self.switcing_mode = True
+            self.switch_cycles = self.SWITCH_CYCLES
+            # disarm the switch
+            self.memctl.io_registers[0xFF4D] &= BO.res_nth_bit(spdkey1, 0)
+            
+    def CPU_burst(self, clock_cycles):
+        if self.switcing_mode:
+            while clock_cycles != 0:
+                clock_cycles -= 1
+                self.switch_cycles -= 1
+                if self.switch_cycles == 0:
+                    self.switcing_mode =  False
+                    break
+            else:
+                # mode switching waiting did not end this call
+                return
+        return super().CPU_burst(clock_cycles)
         
     def scanline_PPU_modes(self):
         # double ticks fed into the CPU if double mode
-        m = 2 if self.double_speed_mode else 1
         self.PPU.OAM_scan(self.PPU.get_context())
-        self.CPU_burst(m*(80 - self.cpu_debt))
+        self.CPU_burst((80 << self.double_mode) - self.cpu_debt)
         self.PPU.drawing_mode(self.PPU.get_context())
-        self.CPU_burst(m*(172 - self.cpu_debt))
+        self.CPU_burst(((172 << self.double_mode) - self.cpu_debt))
         self.PPU.HBLANK_mode()
-        self.CPU_burst(m*(204 - self.cpu_debt))
+        self.CPU_burst(((204 << self.double_mode) - self.cpu_debt))
 
