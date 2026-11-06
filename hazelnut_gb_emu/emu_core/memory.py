@@ -225,6 +225,9 @@ class GBMemoryController:
         if a < 0x8000:
             # Boot ROM overlays 0x0000-0x00FF while enabled
             if a <= self.bootmax and self.boot_enabled:
+                # take the boot hole into account
+                if 0x0100 < a < 0x01FF:
+                    return self.rom.array[a]
                 # or boot_rom[a] if bytearray
                 return self.boot_rom.array[a]
             if self.bank_switching is not None:
@@ -475,6 +478,9 @@ class CgbMemoryController(GBMemoryController):
         if a < 0x8000:
             # Boot ROM overlays 0x0000-0x00FF while enabled
             if a <= self.bootmax and self.boot_enabled:
+                # take the boot hole into account
+                if 0x0100 < a < 0x01FF:
+                    return self.rom.array[a]
                 # or boot_rom[a] if bytearray
                 return self.boot_rom.array[a]
             if self.bank_switching is not None:
