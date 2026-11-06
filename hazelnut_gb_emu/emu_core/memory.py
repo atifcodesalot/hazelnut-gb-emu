@@ -1,7 +1,6 @@
 from .auxiliary import BO
 from .cartridge import Cartridge
-from . import DMG_BOOTSEQ
-from . import DMG_BOOTSEQ
+from . import DMG_BOOTSEQ, CGB_BOOTSEQ
 import math
 from .MBCs import MBC1, MBC2, MBC3, MBC5
 
@@ -69,8 +68,12 @@ class ROM(RAM):
 class GBbootROM(ROM):
     def __init__(self):
         super().__init__(addressable_bits=8)
-        self.array = DMG_BOOTSEQ
         self.array = DMG_BOOTSEQ.copy()
+        
+class CGBbootROM(ROM):
+    def __init__(self):
+        super().__init__(addressable_bits=11)
+        self.array = CGB_BOOTSEQ.copy()
 
 
 class VRAM(RAM):
@@ -78,7 +81,7 @@ class VRAM(RAM):
 
 
 class GBMemoryController:
-    def __init__(self, gameboy, ext_ram=False, bank_switching=None):
+    def __init__(self, gameboy, ext_ram=False, bank_switching=None, boot=GBbootROM):
         self.gameboy = gameboy
         self.TIMA_hertz_bit_index = [int(math.log(i)) for i in self.gameboy.TIMA_hertz]
         self.input_state = gameboy.input_state
@@ -87,7 +90,8 @@ class GBMemoryController:
         self.bank_switching = bank_switching
 
         self.boot_enabled = True
-        self.boot_rom = GBbootROM()
+        self.boot_rom = boot()
+        self.bootmax = 0x00FF
         self.rom = ROM(addressable_bits=15)  # 32KB
         self.ram = RAM(addressable_bits=13)  # 8KB
         self.vram = VRAM(addressable_bits=13)  # 8KB
@@ -220,7 +224,7 @@ class GBMemoryController:
         # --- ROM / Boot ROM overlay (hottest path: instruction fetch) ---
         if a < 0x8000:
             # Boot ROM overlays 0x0000-0x00FF while enabled
-            if a <= 0x00FF and self.boot_enabled:
+            if a <= self.bootmax and self.boot_enabled:
                 # or boot_rom[a] if bytearray
                 return self.boot_rom.array[a]
             if self.bank_switching is not None:
@@ -415,10 +419,12 @@ class GBMemoryController:
 
 class CgbMemoryController(GBMemoryController):
     def __init__(self, gameboy, ext_ram=False, bank_switching=None):
-        super().__init__(gameboy, ext_ram, bank_switching)
+        super().__init__(gameboy, ext_ram, bank_switching, boot=CGBbootROM)
         # 128 byte palette ram
         self.obj_palette_ram = RAM(addressable_bits=6)
         self.bg_palette_ram = RAM(addressable_bits=6)
+        
+        self.bootmax = 0x08FF
 
         self.ram = RAM(addressable_bits=15)  # 32KB with additional 6 banks
         self.ram_bank = 0
@@ -468,7 +474,7 @@ class CgbMemoryController(GBMemoryController):
         # --- ROM / Boot ROM overlay (hottest path: instruction fetch) ---
         if a < 0x8000:
             # Boot ROM overlays 0x0000-0x00FF while enabled
-            if a <= 0x00FF and self.boot_enabled:
+            if a <= self.bootmax and self.boot_enabled:
                 # or boot_rom[a] if bytearray
                 return self.boot_rom.array[a]
             if self.bank_switching is not None:
