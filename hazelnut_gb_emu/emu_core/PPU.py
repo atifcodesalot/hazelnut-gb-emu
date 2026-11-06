@@ -174,7 +174,7 @@ class GbPPU:
                 final_shade = sp_plt[sp_px]
         return final_shade
 
-    def get_BG_pixels(self, lcdc, bgx, bgy, map_start_bg, attr):
+    def get_BG_pixels(self, lcdc, bgx, bgy, map_start_bg):
         BG_row = self.get_static_tile(lcdc, bgx, bgy, map_start_bg)
         return [
             (((BG_row[1] >> bit) & 1) << 1) | ((BG_row[0] >> bit) & 1)
