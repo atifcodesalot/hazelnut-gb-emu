@@ -42,7 +42,7 @@ class RAM:
     def dec_byte_at(self, i):
         # self.address_range_guard(i)
         self.array[i] = (self.array[i] - 1) % 256
-        
+
     def reset(self):
         self.initarr()
 
@@ -392,13 +392,13 @@ class GBMemoryController:
 
     def __setitem__(self, key, value):
         self.write_to(key, value)
-        
+
     def reset(self):
         self.ext_ram_enabled = False
         self.bank_switching = None
         self.mbc = None
         self.disable_boot_rom()
-        
+
         # reset memory units
         self.rom = ROM(addressable_bits=15)  # 32KB
         self.ram = RAM(addressable_bits=13)  # 8KB
@@ -407,7 +407,7 @@ class GBMemoryController:
         self.hram = RAM(addressable_bits=7)  # 127B
         self.OAM = bytearray(160)
         #
-        
+
         # reset io registers
         for addr in self.io_registers:
             self.io_registers[addr] = 0
@@ -417,18 +417,27 @@ class CgbMemoryController(GBMemoryController):
     def __init__(self, gameboy, ext_ram=False, bank_switching=None):
         super().__init__(gameboy, ext_ram, bank_switching)
         # 128 byte palette ram
-        self.palette_ram = RAM(addressable_bits=7)
+        self.obj_palette_ram = RAM(addressable_bits=6)
+        self.bg_palette_ram = RAM(addressable_bits=6)
+
         self.ram = RAM(addressable_bits=15)  # 32KB with additional 6 banks
         self.ram_bank = 0
         self.vram = VRAM(addressable_bits=14)  # 16KB with additional bank
         self.vram_bank = 0
 
+        self.init_gbc_regs()
+
+    def init_gbc_regs(self):
         # CPU mode select
         self.io_registers[0xFF4C] = 0
         self.io_registers[0xFF4D] = 0
 
         # VRAM bank select register
         self.io_registers[0xFF4F] = 0
+        
+        # VRAM DMA SRC hi, low registers
+        self.io_registers[0xFF51] = 0
+        self.io_registers[0xFF52] = 0
 
         # VRAM DMA DEST hi, low registers
         self.io_registers[0xFF54] = 0
@@ -436,12 +445,23 @@ class CgbMemoryController(GBMemoryController):
 
         # VRAM DMA control register
         self.io_registers[0xFF55] = 0
+        
+        # infrared comm port
+        self.io_registers[0xFF56] = 0
+
+        # palette access registers
+        for i in range(4):
+            self.io_registers[0xFF68 + i] = 0
 
         # Object priority mode
         self.io_registers[0xFF6C] = 0
 
         # WRAM bank select register
         self.io_registers[0xFF70] = 0
+
+        # Undocumented, unknown registers
+        for i in range(4):
+            self.io_registers[0xFF72 + i] = 0
 
     def read_at(self, loc) -> int:
         a = loc
@@ -461,7 +481,7 @@ class CgbMemoryController(GBMemoryController):
 
         # --- VRAM ---
         if a < 0xA000:
-            # keep switching into account
+            # take switching into account
             return self.vram.array[self.vram_bank << 13 | (a - 0x8000)]
 
         # --- External RAM ---
@@ -473,7 +493,7 @@ class CgbMemoryController(GBMemoryController):
 
         # --- WRAM (C000-DFFF) ---
         if a < 0xE000:
-            # keep switching into account
+            # take switching into account
             return self.ram.array[a - 0xD000 + self.ram_bank * 0x1000]
 
         # --- Echo RAM (E000-FDFF) mirror WRAM ---
@@ -561,6 +581,31 @@ class CgbMemoryController(GBMemoryController):
                 self.io_registers[0xFF70] = v
                 # update wram bank
                 self.ram_bank = v & 7
+
+            if a == 0xFF6B:
+                # obj palette data write
+                self.io_registers[0xFF6B] = v
+                obpi = self.io_registers[0xFF6A]
+                self.bg_palette_ram[obpi & 0x3F] = v
+                # auto increment
+                self.io_registers[0xFF6A] += obpi >> 7 & 1
+
+            if a == 0xFF6A:
+                # obj palette inxex data write
+                self.io_registers[0xFF6A] = v
+
+            if a == 0xFF69:
+                # bg palette data write
+                self.io_registers[0xFF69] = v
+                bgpi = self.io_registers[0xFF68]
+                self.bg_palette_ram[bgpi & 0x3F] = v
+                # auto increment
+                self.io_registers[0xFF68] += bgpi >> 7 & 1
+
+            if a == 0xFF68:
+                # bg palette inxex data write
+                self.io_registers[0xFF68] = v
+
             if a == 0xFF50:
                 # Any nonzero write disables boot ROM
                 self.disable_boot_rom()
