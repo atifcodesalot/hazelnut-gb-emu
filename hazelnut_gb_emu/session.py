@@ -1,4 +1,4 @@
-from .emu_core.gameboy import Gameboy
+from .emu_core.gameboy import Gameboy, GameboyColor
 from .emu_core.cartridge import CartridgeReader, CARTRIDGE_TYPES
 from .emu_core.PPU import GB_LCD_RES
 from .emu_core.auxiliary import BO
@@ -176,8 +176,8 @@ class SessionController:
         pygame.K_RETURN: 7,  # Start
     }
 
-    def __init__(self, gbscaler=1):
-        self.init_gameboy()
+    def __init__(self, gbscaler=1, color=False):
+        self.init_gameboy(color=color)
         self.init_cart()
         self.check_implementations(
                 cartridge_types=CARTRIDGE_TYPES, implemented=IMPLEMENTED_MODES)
@@ -198,8 +198,11 @@ class SessionController:
         self.GUI = GUIDrawer(self.screen, self.gbres, self.gboff, self.gbscaler)
         self.gonna_reset_gb = False
         
-    def init_gameboy(self):
-        self.gameboy = Gameboy()
+    def init_gameboy(self, color=False):
+        if color:
+            self.gameboy = GameboyColor()
+        else:
+            self.gameboy = Gameboy()
     
     def init_cart(self):
         file = self.get_rom_file()

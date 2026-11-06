@@ -582,4 +582,5 @@ class CgbPPU(GbPPU):
         self.dots += 172
 
     def flip(self):
+        print("flip called!")
         self.proxy.write(bytes(self.buffer))

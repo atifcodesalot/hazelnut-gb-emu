@@ -46,7 +46,7 @@ def main():
 
     else:
         while True:
-            session = SessionController(gbscaler=2)
+            session = SessionController(gbscaler=2, color=True)
             session.start()
 
 

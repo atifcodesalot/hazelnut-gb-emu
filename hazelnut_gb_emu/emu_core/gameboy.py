@@ -155,6 +155,7 @@ class Gameboy:
 
         # clear the lcd if PPU is disabled
         if not lcdc >> 7 & 1:
+            print("lcdc msb is 0")
             self.PPU.disable()
             self.CPU_burst(456)
             return
@@ -257,13 +258,14 @@ class GameboyColor(Gameboy):
     def scanline_PPU_modes(self):
         # double ticks fed into the CPU if double mode
         self.PPU.OAM_scan(self.PPU.get_context())
-        self.CPU_burst((80 << self.double_mode) - self.cpu_debt)
+        self.CPU_burst((80 << self.speed_mode) - self.cpu_debt)
         self.PPU.drawing_mode(self.PPU.get_context())
-        self.CPU_burst(((172 << self.double_mode) - self.cpu_debt))
+        self.CPU_burst((172 << self.speed_mode) - self.cpu_debt)
         self.PPU.HBLANK_mode()
-        self.CPU_burst(((204 << self.double_mode) - self.cpu_debt))
+        self.CPU_burst((204 << self.speed_mode) - self.cpu_debt)
         
     def frame_end(self):
+        print("frame end called")
         super().frame_end()
         self.PPU.flip()
 
