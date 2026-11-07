@@ -179,6 +179,7 @@ class SessionController:
     def __init__(self, gbscaler=1, color=False):
         self.init_gameboy(color=color)
         self.init_cart()
+        self.game_name = self.cartridge.title
         self.check_implementations(
                 cartridge_types=CARTRIDGE_TYPES, implemented=IMPLEMENTED_MODES)
         
@@ -186,7 +187,6 @@ class SessionController:
         gbres = GB_LCD_RES
         self.gbres = [gbres[0] * gbscaler, gbres[1] * gbscaler]
         self.gboff = (5, 10)
-        self.game_name = self.cartridge.title
         self.gameboy.insert_cartridge(self.cartridge)
         logger.debug("Extended ROM size: %d bytes" % self.gameboy.memctl.rom.size)
         logger.debug(
@@ -321,6 +321,7 @@ class SessionController:
     def get_rom_file():
         filetypes = [
             ("Gameboy files", "*.gb .GB"),
+            ("Gameboy color files", "*.gbc .GBC"),
             ("ROM files", "*.rom"),
             ("Binary files,", "*.bin"),
         ]
