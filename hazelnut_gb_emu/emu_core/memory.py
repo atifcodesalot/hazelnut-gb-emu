@@ -155,9 +155,10 @@ class GBMemoryController:
             self.mbc = MBC3(self, cartridge)
 
         # MBC5 without rumble motor
-        elif cartridge.type in [0x19, 0x1A, 0x1B]:
+        elif cartridge.type in [0x19, 0x1A, 0x1B, 0x1E]:
             self.bank_switching = True
             self.mbc = MBC5(self, cartridge)
+            
 
     def hex_dump(self, start, end):
         for i in range(start, end + 1):
@@ -431,7 +432,8 @@ class CgbMemoryController(GBMemoryController):
         self.bootmax = 0x08FF
 
         self.ram = RAM(addressable_bits=15)  # 32KB with additional 6 banks
-        self.ram_bank = 0
+        #can't be 0
+        self.ram_bank = 1
         self.vram = VRAM(addressable_bits=14)  # 16KB with additional bank
         self.vram_bank = 0
 
@@ -535,6 +537,16 @@ class CgbMemoryController(GBMemoryController):
 
             if a == 0xFF02:
                 return 0
+            
+            if a == 0xFF6B:
+                # obj palette data read
+                obpi = self.io_registers[0xFF6A]
+                self.obj_palette_ram.array[obpi & 0x3F]
+
+            if a == 0xFF69:
+                # bg palette data read
+                bgpi = self.io_registers[0xFF68]
+                return self.bg_palette_ram.array[bgpi & 0x3F]
 
             return self.io_registers.get(a, 0xFF)
 
@@ -563,6 +575,7 @@ class CgbMemoryController(GBMemoryController):
         # --- VRAM ---
         if a < 0xA000:
             self.vram.write_to(self.vram_bank << 13 | (a - 0x8000), v)
+            return
 
         # --- External RAM ---
         if a < 0xC000:
