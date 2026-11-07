@@ -28,7 +28,7 @@ class Gameboy:
         # 16 bit internal divider register value
         self.cycles = 0
         #
-        self.DMA = False
+
 
         self.debug = False
         self.running = True
@@ -70,7 +70,7 @@ class Gameboy:
         cycles_passed = 0
         while cycles_passed < clock_cycles:
             ins, ins_cycles = self.SM83_processor.tick_one_ins(self)
-            
+
             self.tick_timers(ins_cycles)
             self.handle_serial(ins_cycles)
             cycles_passed += ins_cycles
@@ -132,10 +132,9 @@ class Gameboy:
     def get_serial_bit(self):
         return 1
 
-    def start_DMA(self):
-        # logger.debug("starting DMA...")
+    def start_OAM_DMA(self):
+        # logger.debug("starting OAM DMA...")
         m = self.memctl
-        self.DMA = True
         source = (m.io_registers[0xFF46]) * 0x100
         # copy 160 bytes to OAM
         for i in range(0xA0):
@@ -231,6 +230,48 @@ class GameboyColor(Gameboy):
         self.switcing_mode = False
         self.switch_cycles = None
 
+        self.HBLANK_DMA = False
+        self.HBLANK_DMA_cost = None
+
+    def start_HDMA(self):
+        hdmactl = self.memctl.io_registers[0xFF55]
+        mode = hdmactl >> 7 & 1
+        if not mode:
+            # General purpose DMA
+            self.start_GPDMA(hdmactl)
+        else:
+            # hblank DMA
+            self.start_HBLANK_DMA(hdmactl)
+
+    def start_HBLANK_DMA(self, hdmactl):
+        self.memctl.hdma_len = (hdmactl & 0x7F) + 1
+        self.memctl.hdma_counter = 0
+        self.HBLANK_DMA = True
+
+    def handle_HBLANK_DMA(self):
+        m = self.memctl
+        m.HDMA_copy()
+        m.hdma_counter += 1
+        if m.hdma_counter == m.hdma_len:
+            self.HBLANK_DMA = False
+
+    def start_GPDMA(self, hdmactl):   
+        # in bytes 
+        copylen = ((hdmactl & 0x7F) + 1) * 16
+        
+        m = self.memctl
+        _io = m.io_registers
+        hdma_src = (_io[0xFF51] << 8 | _io[0xFF52]) & 0xFFF0
+        hdma_dest = _io[0xFF53] << 8 | _io[0xFF54]
+        hdma_dest = (hdma_dest & 0x1fff) >> 4
+        vramstart = (0x2000 * m.vram_bank + hdma_dest * 16)
+        
+        chunk = m.get_block_at(hdma_src, copylen)
+        self.memctl.vram.array[vramstart: vramstart + copylen] = chunk
+        # tick timers
+        DMA_time = (hdmactl & 0x7F) * (32 << self.speed_mode)
+        self.tick_timers(DMA_time)
+
     def check_speed_switch(self) -> bool:
         spdkey1 = self.memctl.io_registers[0xFF4D]
         armed = spdkey1 & 1
@@ -298,7 +339,15 @@ class GameboyColor(Gameboy):
         self.PPU.drawing_mode(self.PPU.get_context())
         self.CPU_burst((172 << self.speed_mode) - self.cpu_debt)
         self.PPU.HBLANK_mode()
-        self.CPU_burst((204 << self.speed_mode) - self.cpu_debt)
+        if self.HBLANK_DMA:
+            self.handle_HBLANK_DMA()
+            # the cpu sleeps 34 or 68 clock cycles if hblank DMA happens
+            DMA_time = 204 - (32 << self.speed_mode) - 4
+            self.tick_timers(DMA_time)
+            hblank_cpu_burst = (204 - DMA_time) << self.speed_mode
+        else:
+            hblank_cpu_burst = 204 << self.speed_mode
+        self.CPU_burst(hblank_cpu_burst - self.cpu_debt)
 
     def frame_end(self):
         super().frame_end()

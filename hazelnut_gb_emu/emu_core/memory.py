@@ -150,7 +150,7 @@ class GBMemoryController:
             self.bank_switching = True
             self.mbc = MBC2(self, cartridge)
         # MBC3 without RTC
-        elif cartridge.type in [0x11, 0x12, 0x13]:
+        elif cartridge.type in [0x10, 0x11, 0x12, 0x13]:
             self.bank_switching = True
             self.mbc = MBC3(self, cartridge)
 
@@ -158,7 +158,6 @@ class GBMemoryController:
         elif cartridge.type in [0x19, 0x1A, 0x1B, 0x1E]:
             self.bank_switching = True
             self.mbc = MBC5(self, cartridge)
-            
 
     def hex_dump(self, start, end):
         for i in range(start, end + 1):
@@ -348,7 +347,7 @@ class GBMemoryController:
 
             if a == 0xFF46:
                 self.io_registers[a] = v
-                self.gameboy.start_DMA()
+                self.gameboy.start_OAM_DMA()
                 return
 
             if a == 0xFF00:
@@ -432,10 +431,13 @@ class CgbMemoryController(GBMemoryController):
         self.bootmax = 0x08FF
 
         self.ram = RAM(addressable_bits=15)  # 32KB with additional 6 banks
-        #can't be 0
+        # can't be 0
         self.ram_bank = 1
         self.vram = VRAM(addressable_bits=14)  # 16KB with additional bank
         self.vram_bank = 0
+
+        self.hdma_counter = None
+        self.hdma_len = None
 
         self.init_gbc_regs()
 
@@ -537,7 +539,7 @@ class CgbMemoryController(GBMemoryController):
 
             if a == 0xFF02:
                 return 0
-            
+
             if a == 0xFF6B:
                 # obj palette data read
                 obpi = self.io_registers[0xFF6A]
@@ -637,6 +639,10 @@ class CgbMemoryController(GBMemoryController):
             if a == 0xFF68:
                 # bg palette inxex data write
                 self.io_registers[0xFF68] = v
+                
+            if a == 0xFF55:
+                self.io_registers[0xFF55] = v
+                self.gameboy.start_HDMA()
 
             if a == 0xFF50:
                 # Any nonzero write disables boot ROM
@@ -650,7 +656,7 @@ class CgbMemoryController(GBMemoryController):
 
             if a == 0xFF46:
                 self.io_registers[a] = v
-                self.gameboy.start_DMA()
+                self.gameboy.start_OAM_DMA()
                 return
 
             if a == 0xFF4F:
@@ -688,3 +694,16 @@ class CgbMemoryController(GBMemoryController):
 
         # --- IE (FFFF) ---
         self.io_registers[0xFFFF] = v
+        
+        
+    
+    # one 16 byte copy of HDMA
+    def HDMA_copy(self):
+        _io = self.io_registers
+        hdma_src = _io[0xFF51] << 8 | _io[0xFF52] 
+        hdma_dest = _io[0xFF53] << 8 | _io[0xFF54]
+        hdma_dest = (hdma_dest & 0x1fff) >> 4
+        
+        copy = self.get_block_at(hdma_src + 16*self.hdma_counter, 16)
+        vramstart = (0x2000 * self.vram_bank + hdma_dest * 16)
+        self.vram[vramstart:16] = copy
