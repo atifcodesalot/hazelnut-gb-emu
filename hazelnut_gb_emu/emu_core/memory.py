@@ -598,7 +598,7 @@ class CgbMemoryController(GBMemoryController):
                 # obj palette data write
                 self.io_registers[0xFF6B] = v
                 obpi = self.io_registers[0xFF6A]
-                self.bg_palette_ram.write_to(obpi & 0x3F, v)
+                self.obj_palette_ram.write_to(obpi & 0x3F, v)
                 # auto increment
                 self.io_registers[0xFF6A] += obpi >> 7 & 1
 
