@@ -543,7 +543,7 @@ class CgbMemoryController(GBMemoryController):
             if a == 0xFF6B:
                 # obj palette data read
                 obpi = self.io_registers[0xFF6A]
-                self.obj_palette_ram.array[obpi & 0x3F]
+                return self.obj_palette_ram.array[obpi & 0x3F]
 
             if a == 0xFF69:
                 # bg palette data read
