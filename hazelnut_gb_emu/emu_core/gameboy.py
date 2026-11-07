@@ -4,6 +4,8 @@ from .memory import *
 from .cartridge import Cartridge
 from .auxiliary import BO
 
+import time
+
 pyclock = pygame.time.Clock()
 
 
@@ -47,6 +49,11 @@ class Gameboy:
             self.awake()
             return True
 
+    def handle_halt_burst(self, clock_cycles):
+        self.tick_timers(clock_cycles)
+        self.handle_serial(clock_cycles)
+        self.cpu_debt = 0
+
     def tick_timers(self, dots):
         TAC = self.memctl.io_registers[0xFF07]
         TIMA_en = (TAC >> 2) & 1
@@ -58,24 +65,22 @@ class Gameboy:
     def CPU_burst(self, clock_cycles):
         if self.SM83_processor.HALT:
             if not self.handle_cpu_halt():
-                self.tick_timers(clock_cycles)
-                self.handle_serial(clock_cycles)
-                self.cpu_debt = 0
+                self.handle_halt_burst(clock_cycles)
                 return
         cycles_passed = 0
         while cycles_passed < clock_cycles:
             ins, ins_cycles = self.SM83_processor.tick_one_ins(self)
+            
             self.tick_timers(ins_cycles)
             self.handle_serial(ins_cycles)
             cycles_passed += ins_cycles
 
             if self.SM83_processor.HALT:
                 remaining = clock_cycles - cycles_passed
-                self.tick_timers(remaining)
-                self.handle_serial(remaining)
-                self.cpu_debt = 0
+                self.handle_halt_burst(remaining)
                 return
-
+            elif self.SM83_processor.STOP_EXED:
+                pass
         # get debt
         self.cpu_debt = cycles_passed - clock_cycles
 
@@ -175,7 +180,7 @@ class Gameboy:
         # if just finished the last visible scanline
         if ly == GB_LCD_RES[1] - 1:
             self.frame_end()
-        
+
     def frame_end(self):
         # ensure framerate is 60
         self.pyclock.tick(59)
@@ -214,7 +219,7 @@ class Gameboy:
 
 class GameboyColor(Gameboy):
     SWITCH_CYCLES = 8200
-    
+
     def __init__(self):
         super().__init__()
         self.speed_mode = 0
@@ -225,35 +230,67 @@ class GameboyColor(Gameboy):
         #
         self.switcing_mode = False
         self.switch_cycles = None
-        
-    def check_speed_switch(self):
+
+    def check_speed_switch(self) -> bool:
         spdkey1 = self.memctl.io_registers[0xFF4D]
-        written = spdkey1 >> 7 & 1
         armed = spdkey1 & 1
         # if the "switch" is armed
-        # and the CPU executed a stop, 
+        # and the CPU executed a stop,
         # overwrite the current mode
         if armed and self.SM83_processor.STOP_EXED:
-            self.SM83_processor.STOP_EXED = False
-            self.speed_mode = written
-            self.switcing_mode = True
-            self.switch_cycles = self.SWITCH_CYCLES
-            # disarm the switch
-            self.memctl.io_registers[0xFF4D] &= BO.res_nth_bit(spdkey1, 0)
-            
+            self.switch_mode_start(spdkey1)
+        return armed
+
+    def switch_mode_start(self, spdkey1):
+        self.SM83_processor.STOP_EXED = False
+        self.switcing_mode = True
+        self.switch_cycles = self.SWITCH_CYCLES
+        # disarm the switch
+        self.memctl.io_registers[0xFF4D] &= BO.res_nth_bit(spdkey1, 0)
+
+    def switch_mode_end(self):
+        # toggle speed mode
+        self.speed_mode ^= 1
+        spdkey1 = self.memctl.io_registers[0xFF4D]
+        self.memctl.io_registers[0xFF4D] = BO.put_nth_bit(spdkey1, 7, self.speed_mode)
+        self.switcing_mode = False
+        self.switch_cycles = 0
+
     def CPU_burst(self, clock_cycles):
+        # logging_file = open("cpu_log.txt", "a")
         if self.switcing_mode:
-            while clock_cycles != 0:
-                clock_cycles -= 1
-                self.switch_cycles -= 1
-                if self.switch_cycles == 0:
-                    self.switcing_mode =  False
-                    break
+            if clock_cycles >= self.switch_cycles:
+                clock_cycles -= self.switch_cycles
+                self.switch_mode_end()
             else:
-                # mode switching waiting did not end this call
+                self.switch_cycles -= clock_cycles
                 return
-        return super().CPU_burst(clock_cycles)
-        
+        if self.SM83_processor.HALT:
+            if not self.handle_cpu_halt():
+                self.handle_halt_burst(clock_cycles)
+                return
+        cycles_passed = 0
+        while cycles_passed < clock_cycles:
+            ins, ins_cycles = self.SM83_processor.tick_one_ins(self)
+            self.tick_timers(ins_cycles)
+            self.handle_serial(ins_cycles)
+            cycles_passed += ins_cycles
+            # if self.SM83_processor.PC > 0x0150 and not self.memctl.boot_enabled:
+            #     log = str(ins) +  str(self.SM83_processor.state_snap())
+            #     logging_file.write(log + "\n")
+            if self.SM83_processor.HALT:
+                remaining = clock_cycles - cycles_passed
+                self.handle_halt_burst(remaining)
+                return
+            elif self.SM83_processor.STOP_EXED:
+                remaining = clock_cycles - cycles_passed
+                if self.check_speed_switch():
+                    self.switch_cycles -= remaining
+                    self.cpu_debt = 0
+                    return
+        # get debt
+        self.cpu_debt = cycles_passed - clock_cycles
+
     def scanline_PPU_modes(self):
         # double ticks fed into the CPU if double mode
         self.PPU.OAM_scan(self.PPU.get_context())
@@ -262,8 +299,7 @@ class GameboyColor(Gameboy):
         self.CPU_burst((172 << self.speed_mode) - self.cpu_debt)
         self.PPU.HBLANK_mode()
         self.CPU_burst((204 << self.speed_mode) - self.cpu_debt)
-        
+
     def frame_end(self):
         super().frame_end()
         self.PPU.flip()
-
