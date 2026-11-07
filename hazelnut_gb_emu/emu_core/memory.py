@@ -69,7 +69,8 @@ class GBbootROM(ROM):
     def __init__(self):
         super().__init__(addressable_bits=8)
         self.array = DMG_BOOTSEQ.copy()
-        
+
+
 class CGBbootROM(ROM):
     def __init__(self):
         super().__init__(addressable_bits=11)
@@ -426,7 +427,7 @@ class CgbMemoryController(GBMemoryController):
         # 128 byte palette ram
         self.obj_palette_ram = RAM(addressable_bits=6)
         self.bg_palette_ram = RAM(addressable_bits=6)
-        
+
         self.bootmax = 0x08FF
 
         self.ram = RAM(addressable_bits=15)  # 32KB with additional 6 banks
@@ -443,7 +444,7 @@ class CgbMemoryController(GBMemoryController):
 
         # VRAM bank select register
         self.io_registers[0xFF4F] = 0
-        
+
         # VRAM DMA SRC hi, low registers
         self.io_registers[0xFF51] = 0
         self.io_registers[0xFF52] = 0
@@ -454,7 +455,7 @@ class CgbMemoryController(GBMemoryController):
 
         # VRAM DMA control register
         self.io_registers[0xFF55] = 0
-        
+
         # infrared comm port
         self.io_registers[0xFF56] = 0
 
@@ -505,7 +506,10 @@ class CgbMemoryController(GBMemoryController):
 
         # --- WRAM (C000-DFFF) ---
         if a < 0xE000:
+            if a < 0xD000:
+                return self.ram.array[a - 0xC000]
             # take switching into account
+            # if the address is higher than D000
             return self.ram.array[a - 0xD000 + self.ram_bank * 0x1000]
 
         # --- Echo RAM (E000-FDFF) mirror WRAM ---
@@ -568,8 +572,10 @@ class CgbMemoryController(GBMemoryController):
 
         # --- WRAM (C000-DFFF) ---
         if a < 0xE000:
-            self.ram.write_to(a - 0xD000 + self.ram_bank * 0x1000, v)
-            return
+            if a < 0xD000:
+                return self.ram.write_to(a - 0xC000, v)
+            # wram bank switching
+            return self.ram.write_to(a - 0xD000 + self.ram_bank * 0x1000, v)
 
         # --- Echo RAM (E000-FDFF) ---
         if a < 0xFE00:
@@ -592,7 +598,8 @@ class CgbMemoryController(GBMemoryController):
             if a == 0xFF70:
                 self.io_registers[0xFF70] = v
                 # update wram bank
-                self.ram_bank = v & 7
+                # 0 writes also point to bank 1
+                self.ram_bank = v & 7 if v & 7 != 0 else 1
 
             if a == 0xFF6B:
                 # obj palette data write
