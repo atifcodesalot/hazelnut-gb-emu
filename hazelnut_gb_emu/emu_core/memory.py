@@ -700,10 +700,10 @@ class CgbMemoryController(GBMemoryController):
     # one 16 byte copy of HDMA
     def HDMA_copy(self):
         _io = self.io_registers
-        hdma_src = _io[0xFF51] << 8 | _io[0xFF52] 
+        hdma_src = (_io[0xFF51] << 8 | _io[0xFF52]) & 0xFFF0
         hdma_dest = _io[0xFF53] << 8 | _io[0xFF54]
         hdma_dest = (hdma_dest & 0x1fff) >> 4
         
         copy = self.get_block_at(hdma_src + 16*self.hdma_counter, 16)
-        vramstart = (0x2000 * self.vram_bank + hdma_dest * 16)
-        self.vram[vramstart:16] = copy
+        vramstart = 0x2000 * self.vram_bank + hdma_dest * 16
+        self.vram.array[vramstart: vramstart+16] = copy
