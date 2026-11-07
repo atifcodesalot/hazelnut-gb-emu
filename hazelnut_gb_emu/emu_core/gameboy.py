@@ -257,7 +257,8 @@ class GameboyColor(Gameboy):
 
     def start_GPDMA(self, hdmactl):   
         # in bytes 
-        copylen = ((hdmactl & 0x7F) + 1) * 16
+        blocks = (hdmactl & 0x7F) + 1
+        copylen = blocks * 16
         
         m = self.memctl
         _io = m.io_registers
@@ -269,7 +270,7 @@ class GameboyColor(Gameboy):
         chunk = m.get_block_at(hdma_src, copylen)
         self.memctl.vram.array[vramstart: vramstart + copylen] = chunk
         # tick timers
-        DMA_time = (hdmactl & 0x7F) * (32 << self.speed_mode)
+        DMA_time = blocks * (32 << self.speed_mode)
         self.tick_timers(DMA_time)
 
     def check_speed_switch(self) -> bool:
