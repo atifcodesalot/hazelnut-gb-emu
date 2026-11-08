@@ -332,7 +332,10 @@ class CartridgeReader:
         olc = self.old_licensee_code[0]
         # new licensee code is encoded in ascii
         if olc == 0x33:
-            nlc = int(self.new_licensee_code.decode('ascii'), 16)
+            try:
+                nlc = int(self.new_licensee_code.decode('ascii'), 16)
+            except:
+                nlc = -1
             licensee = NEW_LICENSEE_CODES.get(nlc, "Unknown")
         else:
             licensee = OLD_LICENSEE_CODES.get(olc, "Unknown")
