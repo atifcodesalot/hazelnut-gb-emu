@@ -29,7 +29,6 @@ class Gameboy:
         self.cycles = 0
         #
 
-
         self.debug = False
         self.running = True
 
@@ -232,6 +231,8 @@ class GameboyColor(Gameboy):
 
         self.HBLANK_DMA = False
         self.HBLANK_DMA_cost = None
+        
+        self.DMG_compat = False
 
     def start_HDMA(self):
         # clear bit 7 to indicate ongoing transfer
@@ -254,21 +255,21 @@ class GameboyColor(Gameboy):
         if self.memctl.io_registers[0xFF55] == 0xFF:
             self.HBLANK_DMA = False
 
-    def start_GPDMA(self, hdmactl):   
-        # in bytes 
+    def start_GPDMA(self, hdmactl):
+        # in bytes
         blocks = (hdmactl & 0x7F) + 1
         copylen = blocks * 16
-        
+
         m = self.memctl
         _io = m.io_registers
         hdma_src = (_io[0xFF51] << 8 | _io[0xFF52]) & 0xFFF0
         hdma_dest = _io[0xFF53] << 8 | _io[0xFF54]
         hdma_dest = ((hdma_dest & 0x1FFF) >> 4) << 4
-    
+
         vramstart = 0x2000 * m.vram_bank + hdma_dest
-        
+
         chunk = m.get_block_at(hdma_src, copylen)
-        self.memctl.vram.array[vramstart: vramstart + copylen] = chunk
+        self.memctl.vram.array[vramstart : vramstart + copylen] = chunk
         # tick timers
         DMA_time = blocks * (32 << self.speed_mode)
         self.tick_timers(DMA_time)
@@ -299,6 +300,9 @@ class GameboyColor(Gameboy):
         self.switch_cycles = 0
 
     def CPU_burst(self, clock_cycles):
+        if self.DMG_compat:
+            return super().CPU_burst(clock_cycles)
+
         # logging_file = open("cpu_log.txt", "a")
         if self.switcing_mode:
             if clock_cycles >= self.switch_cycles:
@@ -317,7 +321,7 @@ class GameboyColor(Gameboy):
             self.tick_timers(ins_cycles)
             self.handle_serial(ins_cycles)
             cycles_passed += ins_cycles
-            # if self.SM83_processor.PC > 0x0150 and not self.memctl.boot_enabled:
+            # if self.SM83_processor.PC > 0x6000 and not self.memctl.boot_enabled:
             #     log = str(ins) +  str(self.SM83_processor.state_snap())
             #     logging_file.write(log + "\n")
             if self.SM83_processor.HALT:
@@ -334,6 +338,8 @@ class GameboyColor(Gameboy):
         self.cpu_debt = cycles_passed - clock_cycles
 
     def scanline_PPU_modes(self):
+        if self.DMG_compat:
+            return super().scanline_PPU_modes()
         # double ticks fed into the CPU if double mode
         self.PPU.OAM_scan(self.PPU.get_context())
         self.CPU_burst((80 << self.speed_mode) - self.cpu_debt)
@@ -353,13 +359,22 @@ class GameboyColor(Gameboy):
     def frame_end(self):
         super().frame_end()
         self.PPU.flip()
-        
-        
+
+    def start_DMG_compat_mode(self):
+        logger.info("now running on DMG compatibility mode.")
+        self.DMG_compat = True
+        self.PPU.DMG_compat = True
+        self.memctl.DMG_compat = True
+
     def reset(self):
         super().reset()
-        
+
         self.speed_mode = 0
         self.switcing_mode = False
         self.switch_cycles = None
         self.HBLANK_DMA = False
         self.HBLANK_DMA_cost = None
+        
+        self.DMG_compat = False
+        self.PPU.DMG_compat = False
+        self.memctl.DMG_compat = False

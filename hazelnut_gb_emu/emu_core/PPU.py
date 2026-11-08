@@ -6,6 +6,13 @@ from . import GB_LCD_RES, GB_LCD_OFF, GB_LCD_PALETTE
 GB_LCD_PALETTE_rgb = [s2rgb(c) for c in GB_LCD_PALETTE]
 
 
+# PPU code for hazelnut-gb-emu
+
+# this module is intentionally non-modular
+# to save from function call overheads
+#
+
+
 class GbPPU:
     def __init__(self, memctl: GBMemoryController):
         self.memctl = memctl
@@ -23,9 +30,11 @@ class GbPPU:
 
         self.window_internal_counter = 0
 
+        # for cacheing per scanline
         self.bg_palette = []
         self.obj0_palette = []
         self.obj1_palette = []
+        ##
 
         self.sp_winner_cache = []
 
@@ -42,7 +51,7 @@ class GbPPU:
         self.pgdisplay = pygame.image.frombuffer(self.buffer, GB_LCD_RES, "P")
         for i in range(4):
             self.pgdisplay.set_palette_at(i, GB_LCD_PALETTE_rgb[i])
-        
+
     def get_color_palette(self, palette_reg):
         return [(palette_reg >> s) & 0b11 for s in range(0, 8, 2)]
 
@@ -58,13 +67,8 @@ class GbPPU:
         final_offset = tile_offset + (py % 8) * 2
         return self.vram.get_block_at(final_offset, 2)
 
-    # takes relative pixels pos
-    def get_pixel_row(self, ti, rpy):
-        row = self.vram.get_block_at(ti * 16 + 2 * rpy, 2)
-        return row
-
     def get_context(self):
-        # palette register
+        # return PPU related context
         palette_reg = self.memctl.io_registers[0xFF47]
         scx = self.memctl.io_registers[0xFF43]
         scy = self.memctl.io_registers[0xFF42]
@@ -161,7 +165,7 @@ class GbPPU:
                 # if bg is also none, meaning bg and window is disabled (lcdc bit 0 is False)
                 final_shade = self.bg_palette[0]
             return final_shade
-        # if there is a sprite pixel
+        # if there is a non-transparent sprite pixel
         sp_plt = self.obj1_palette if (sp_obj[3] >> 4 & 1) else self.obj0_palette
         obj_priority = sp_obj[3] >> 7 & 1
         # if priority bit is 0, then obj has priority over bg or window pxels
@@ -296,7 +300,7 @@ class GbPPU:
                     ti += 1
                     rpy -= 8
 
-            row = self.get_pixel_row(ti, rpy)
+            row = self.vram.get_block_at(ti * 16 + 2 * rpy, 2)
 
             self.sprite_rows.append(
                 [BO.get_pixel_2bpp(row[0], row[1], i) for i in range(8)]
@@ -366,11 +370,13 @@ class GbPPU:
 
 
 class CgbPPU(GbPPU):
-    def __init__(self, memctl: CgbMemoryController):
+    def __init__(self, memctl: CgbMemoryController, DMG_compat=False):
         super().__init__(memctl)
 
         self.obj_palette_ram = self.memctl.obj_palette_ram
         self.bg_palette_ram = self.memctl.bg_palette_ram
+
+        self.DMG_compat = DMG_compat
 
     def init_surf(self):
         self.rgb555_masks = (0x001F, 0x03E0, 0x7C00, 0x0000)
@@ -386,11 +392,11 @@ class CgbPPU(GbPPU):
         win_attr_off = map_start_win + 0x2000
         self.bg_attrs = self.vram.get_block_at(bg_attr_off + tmy * 32, 32)
         winy = self.window_internal_counter
-        self.win_attrs = self.vram.get_block_at(
-            win_attr_off +  (winy >> 3) * 32, 32
-        )
+        self.win_attrs = self.vram.get_block_at(win_attr_off + (winy >> 3) * 32, 32)
 
     def get_static_tile(self, lcdc, px, py, map_start, attr):
+        if self.DMG_compat:
+            return GbPPU.get_static_tile(self, lcdc, px, py, map_start)
         lcdc_4 = lcdc >> 4 & 1
         index = self.vram.array[map_start + (py >> 3) * 32 + (px >> 3)]
         offset = 0x0000 if lcdc_4 else 0x1000
@@ -416,7 +422,7 @@ class CgbPPU(GbPPU):
         BG_row = self.get_static_tile(lcdc, bgx, bgy, map_start, attr)
         xflip = attr >> 5 & 1
         # account for tile x flip
-        if xflip:
+        if not self.DMG_compat and xflip:
             return [
                 (((BG_row[1] >> bit) & 1) << 1) | ((BG_row[0] >> bit) & 1)
                 for bit in range(8)
@@ -426,11 +432,7 @@ class CgbPPU(GbPPU):
                 (((BG_row[1] >> bit) & 1) << 1) | ((BG_row[0] >> bit) & 1)
                 for bit in range(7, -1, -1)
             ]
-            
-    def get_pixel_row(self, ti, rpy, bank):
-        row = self.vram.get_block_at(bank*0x2000 + ti * 16 + 2 * rpy, 2)
-        return row
-    
+
     def cache_sprite_rows(self, sprite_height, py):
         for sr in self.sprites:
             sy = sr[0] - 16
@@ -450,7 +452,9 @@ class CgbPPU(GbPPU):
                     ti += 1
                     rpy -= 8
 
-            row = self.get_pixel_row(ti, rpy, info >> 3 & 1)
+            # no vram banks in DMG
+            bank = 0 if self.DMG_compat else info >> 3 & 1
+            row = self.vram.get_block_at(bank * 0x2000 + ti * 16 + 2 * rpy, 2)
 
             self.sprite_rows.append(
                 [BO.get_pixel_2bpp(row[0], row[1], i) for i in range(8)]
@@ -471,6 +475,7 @@ class CgbPPU(GbPPU):
         # sort based on x coordinates if OPRI LSB is 1
         self.sprites = self.sprites[:10]
         if self.memctl.io_registers[0xFF6C] & 1:
+            # if in compat mode
             self.sprites = sorted(self.sprites, key=lambda sr: sr[1])
         # else: gbc sorts based on memory location
         # so already sorted for gbc
@@ -495,7 +500,8 @@ class CgbPPU(GbPPU):
             return st_pal[st_px * 2 + 1], st_pal[st_px * 2]
 
     def drawing_mode(self, ctx):
-        # todo: please refactor this function
+        if self.DMG_compat:
+            return self.drawing_mode_legacy(ctx)
         self.enter_drawing_mode()
         _, (scx, scy), (SCAN_y, _), lcdc = ctx
         map_start_bg = 0x1C00 if lcdc >> 3 & 1 else 0x1800
@@ -506,6 +512,8 @@ class CgbPPU(GbPPU):
 
         bgy = (SCAN_y + scy) & 0xFF
         lwy = SCAN_y - wy
+
+        lcdc_0 = lcdc & 1
 
         window_was_visible = False
         row_n = GB_LCD_RES[0] * SCAN_y
@@ -568,18 +576,123 @@ class CgbPPU(GbPPU):
             else:
                 sp_px = sr = sp_pal = None
 
-            lcdc_0 = lcdc & 1
+            color = self.mix(st_pixel, sp_px, sr, st_pal, sp_pal, st_pri, lcdc_0)
 
-            shade = self.mix(st_pixel, sp_px, sr, st_pal, sp_pal, st_pri, lcdc_0)
-
-            # set final shade on buffer
-            self.buffer[(row_n + SCAN_x) * 2] = shade[1]
-            self.buffer[(row_n + SCAN_x) * 2 + 1] = shade[0]
+            # set final color on buffer
+            self.buffer[(row_n + SCAN_x) * 2] = color[1]
+            self.buffer[(row_n + SCAN_x) * 2 + 1] = color[0]
 
         if window_was_visible:
             self.window_internal_counter += 1
 
         self.dots += 172
+
+    def drawing_mode_legacy(self, ctx):
+        self.enter_drawing_mode()
+        st_palette_reg, (scx, scy), (SCAN_y, _), lcdc = ctx
+        GbPPU.get_palettes(self, st_palette_reg)
+
+        wy, wx = self.memctl.io_registers[0xFF4A], self.memctl.io_registers[0xFF4B]
+
+        bgy = (SCAN_y + scy) & 0xFF
+        lwy = SCAN_y - wy
+        map_start_bg = 0x1C00 if lcdc >> 3 & 1 else 0x1800
+        map_start_window = 0x1C00 if lcdc >> 6 & 1 else 0x1800
+
+        window_was_visible = False
+        row_n = GB_LCD_RES[0] * SCAN_y
+        static_enable = lcdc & 1
+
+        for SCAN_x in range(GB_LCD_RES[0]):
+            # compute local background and window pixel coordinates
+            lwx = SCAN_x - wx + 7
+            bgx = (scx + SCAN_x) & 0xFF
+            bg_offset = bgx % 8
+            w_offset = lwx % 8
+            #
+
+            # if new bg row needs to be fetched
+            if SCAN_x == 0 or bg_offset == 0:
+                BG_pixels = BG_pixels = self.get_static_pixels(
+                    lcdc, bgx, bgy, map_start_bg, -1
+                )
+
+            # get background pixel from offset
+            BG_pixel = BG_pixels[bg_offset]
+
+            window_active = (lcdc >> 5 & 1) and lwy >= 0 and lwx >= 0 and static_enable
+            if window_active:
+                first_window_pixel = not window_was_visible
+                window_was_visible = True
+                # if new window row needs to be fetched
+                if w_offset == 0 or first_window_pixel:
+                    W_pixels = self.get_static_pixels(
+                        lcdc,
+                        lwx,
+                        self.window_internal_counter,
+                        map_start_window,
+                        -1,
+                    )
+
+                W_pixel = W_pixels[w_offset]
+
+            # either BG or Window pixel
+            if static_enable:
+                st_pixel = BG_pixel if not window_active else W_pixel
+            else:
+                st_pixel = None
+
+            if self.sp_winner_cache[SCAN_x] and (lcdc >> 1) & 1:
+                sp_px, sr = self.sp_winner_cache[SCAN_x]
+            else:
+                sp_px = sr = None
+
+            color = self.mix_legacy(st_pixel, sp_px, sr)
+
+            # set final color on buffer
+            self.buffer[(row_n + SCAN_x) * 2] = color[1]
+            self.buffer[(row_n + SCAN_x) * 2 + 1] = color[0]
+
+        if window_was_visible:
+            self.window_internal_counter += 1
+
+        self.dots += 172
+
+    def mix_legacy(self, st_px, sp_px, sp_obj):
+        if sp_obj is None or sp_px == 0:
+            if st_px:
+                shade = self.bg_palette[st_px]
+            else:
+                shade = self.bg_palette[0]
+
+            color = (
+                self.bg_palette_ram.array[shade * 2 + 1],
+                self.bg_palette_ram.array[shade * 2],
+            )
+            return color
+        sp_plt = self.obj1_palette if (sp_obj[3] >> 4 & 1) else self.obj0_palette
+        palindex = 0 if sp_plt is self.obj0_palette else 1
+        obj_priority = sp_obj[3] >> 7 & 1
+        if not obj_priority:
+            shade = sp_plt[sp_px]
+            color = (
+                self.obj_palette_ram.array[palindex * 8 + shade * 2 + 1],
+                self.obj_palette_ram.array[palindex * 8 + shade * 2],
+            )
+        else:
+            if st_px:
+                shade = self.bg_palette[st_px]
+                color = (
+                    self.bg_palette_ram.array[shade * 2 + 1],
+                    self.bg_palette_ram.array[shade * 2],
+                )
+            else:
+                shade = sp_plt[sp_px]
+                color = (
+                    self.obj_palette_ram.array[palindex * 8 + shade * 2 + 1],
+                    self.obj_palette_ram.array[palindex * 8 + shade * 2],
+                )
+        return color
 
     def flip(self):
         self.proxy.write(bytes(self.buffer))

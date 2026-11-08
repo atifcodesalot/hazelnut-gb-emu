@@ -227,7 +227,7 @@ class GBMemoryController:
             # Boot ROM overlays 0x0000-0x00FF while enabled
             if a <= self.bootmax and self.boot_enabled:
                 # take the boot hole into account
-                if 0x0100 < a < 0x01FF:
+                if 0x0100 < a < 0x0200:
                     return self.rom.array[a]
                 # or boot_rom[a] if bytearray
                 return self.boot_rom.array[a]
@@ -368,8 +368,6 @@ class GBMemoryController:
                 # unimplemented/unused IO, ignore
                 return
 
-            # DMA (FF46) often triggers a transfer;
-            # later when implementing DMA, hook it here.
             self.io_registers[a] = v
             return
 
@@ -422,7 +420,7 @@ class GBMemoryController:
 
 
 class CgbMemoryController(GBMemoryController):
-    def __init__(self, gameboy, ext_ram=False, bank_switching=None):
+    def __init__(self, gameboy, ext_ram=False, bank_switching=None, DMG_compat=False):
         super().__init__(gameboy, ext_ram, bank_switching, boot=CGBbootROM)
         # 128 byte palette ram
         self.obj_palette_ram = RAM(addressable_bits=6)
@@ -435,11 +433,13 @@ class CgbMemoryController(GBMemoryController):
         self.ram_bank = 1
         self.vram.resize(14)  # 16KB with additional bank
         self.vram_bank = 0
-
+        
         self.hdma_counter = None
         self.hdma_len = None
 
         self.init_gbc_regs()
+        
+        self.DMG_compat = DMG_compat
 
     def init_gbc_regs(self):
         # CPU mode select
@@ -478,13 +478,15 @@ class CgbMemoryController(GBMemoryController):
             self.io_registers[0xFF72 + i] = 0
 
     def read_at(self, loc) -> int:
+        if self.DMG_compat and not self.boot_enabled:
+            return GBMemoryController.read_at(self, loc)
         a = loc
         # --- ROM / Boot ROM overlay (hottest path: instruction fetch) ---
         if a < 0x8000:
             # Boot ROM overlays 0x0000-0x00FF while enabled
             if a <= self.bootmax and self.boot_enabled:
                 # take the boot hole into account
-                if 0x0100 < a < 0x01FF:
+                if 0x0100 < a < 0x0200:
                     return self.rom.array[a]
                 # or boot_rom[a] if bytearray
                 return self.boot_rom.array[a]
@@ -560,6 +562,8 @@ class CgbMemoryController(GBMemoryController):
         return self.io_registers[0xFFFF]
 
     def write_to(self, loc: int, byte: int) -> None:
+        if self.DMG_compat and not self.boot_enabled:
+            return GBMemoryController.write_to(self, loc, byte)
         a = loc
         v = byte & 0xFF  # always clamp to 8-bit
 
@@ -648,7 +652,6 @@ class CgbMemoryController(GBMemoryController):
                     self.io_registers[0xFF55] = v
                     self.gameboy.start_HDMA()
                     
-
             if a == 0xFF50:
                 # Any nonzero write disables boot ROM
                 self.disable_boot_rom()
@@ -663,6 +666,12 @@ class CgbMemoryController(GBMemoryController):
                 self.io_registers[a] = v
                 self.gameboy.start_OAM_DMA()
                 return
+            
+            if a == 0xFF4C:
+                # compatibility register
+                self.io_registers[a] = v
+                if v >> 2 & 1:
+                    self.gameboy.start_DMG_compat_mode()
 
             if a == 0xFF4F:
                 self.io_registers[a] = v
