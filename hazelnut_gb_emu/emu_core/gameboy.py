@@ -353,3 +353,13 @@ class GameboyColor(Gameboy):
     def frame_end(self):
         super().frame_end()
         self.PPU.flip()
+        
+        
+    def reset(self):
+        super().reset()
+        
+        self.speed_mode = 0
+        self.switcing_mode = False
+        self.switch_cycles = None
+        self.HBLANK_DMA = False
+        self.HBLANK_DMA_cost = None
