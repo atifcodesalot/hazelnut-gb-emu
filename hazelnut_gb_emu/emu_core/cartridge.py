@@ -1,83 +1,11 @@
-
-
 from . import dataclass
 
-
-NINTENDO_LOGO = bytearray.fromhex(
-    """
+NINTENDO_LOGO = bytearray.fromhex("""
     CE ED 66 66 CC 0D 00 0B 03 73 00 83 00 0C 00 0D
     00 08 11 1F 88 89 00 0E DC CC 6E E6 DD DD D9 99
     BB BB 67 63 6E 0E EC CC DD DC 99 9F BB B9 33 3E
-    """
-)
+    """)
 
-NEW_LICENSEE_CODES = {
-    0x00: None,
-    0x01: "Nintendo Research & Development 1",
-    0x08: "Capcom",
-    0x13: "EA (Electronic Arts)",
-    0x18: "Hudson Soft",
-    0x19: "B-AI",
-    0x14: "KSS",
-    0x16: "Planning Office WADA",
-    0x18: "PCM Complete",
-    0x19: "San-X",
-    0x1C: "Kemco",
-    0x1D: "SETA Corporation",
-    0x1E: "Viacom",
-    0x1F: "Nintendo",
-    0x20: "Bandai",
-    0x21: "Ocean Software/Acclaim Entertainment",
-    0x22: "Konami",
-    0x23: "HectorSoft",
-    0x25: "Taito",
-    0x26: "Hudson Soft",
-    0x27: "Banpresto",
-    0x29: "Ubi Soft1",
-    0x2A: "Atlus",
-    0x2C: "Malibu Interactive",
-    0x2E: "Angel",
-    0x2F: "Bullet-Proof Software",
-    0x30: "Viacom",
-    0x31: "Irem",
-    0x32: "Absolute",
-    0x33: "Acclaim Entertainment",
-    0x34: "Activision",
-    0x35: "Sammy USA Corporation",
-    0x36: "Konami",
-    0x37: "Hi Tech Expressions",
-    0x38: "LJN",
-    0x39: "Matchbox",
-    0x3A: "Mattel",
-    0x3B: "Milton Bradley Company",
-    0x3C: "Titus Interactive",
-    0x3D: "Virgin Games Ltd.",
-    0x40: "Lucasfilm Games",
-    0x43: "Ocean Software",
-    0x45: "EA (Electronic Arts)",
-    0x46: "Infogrames",
-    0x47: "Interplay Entertainment",
-    0x48: "Broderbund",
-    0x49: "Sculptured Software",
-    0x4B: "The Sales Curve Limited",
-    0x4E: "THQ",
-    0x4F: "Accolade",
-    0x50: "Misawa Entertainment",
-    0x53: "LOZC G.",
-    0x56: "Tokuma Shoten",
-    0x57: "Tsukuda Original",
-    0x5B: "Chunsoft Co.9",
-    0x5C: "Video System",
-    0x5D: "Ocean Software/Acclaim Entertainment",
-    0x5F: "Varie",
-    0x60: "Yonezawa10/S’Pal",
-    0x61: "Kaneko",
-    0x63: "Pack-In-Video",
-    0x68: "Bottom Up",
-    0x61: "Konami (Yu-Gi-Oh!)",
-    0x4C: "MTO",
-    0x44: "Kodansha"
-}
 
 OLD_LICENSEE_CODES = {
     0x00: None,
@@ -226,8 +154,80 @@ OLD_LICENSEE_CODES = {
     0xEE: "IGS",
     0xF0: "A Wave",
     0xF3: "Extreme Entertainment",
-    0xFF: "LJ"
+    0xFF: "LJ",
 }
+
+NEW_LICENSEE_CODES = {
+    0x00: None,
+    0x01: "Nintendo Research & Development 1",
+    0x08: "Capcom",
+    0x13: "EA (Electronic Arts)",
+    0x18: "Hudson Soft",
+    0x19: "B-AI",
+    0x14: "KSS",
+    0x16: "Planning Office WADA",
+    0x18: "PCM Complete",
+    0x19: "San-X",
+    0x1C: "Kemco",
+    0x1D: "SETA Corporation",
+    0x1E: "Viacom",
+    0x1F: "Nintendo",
+    0x20: "Bandai",
+    0x21: "Ocean Software/Acclaim Entertainment",
+    0x22: "Konami",
+    0x23: "HectorSoft",
+    0x25: "Taito",
+    0x26: "Hudson Soft",
+    0x27: "Banpresto",
+    0x29: "Ubi Soft1",
+    0x2A: "Atlus",
+    0x2C: "Malibu Interactive",
+    0x2E: "Angel",
+    0x2F: "Bullet-Proof Software",
+    0x30: "Viacom",
+    0x31: "Irem",
+    0x32: "Absolute",
+    0x33: "Acclaim Entertainment",
+    0x34: "Activision",
+    0x35: "Sammy USA Corporation",
+    0x36: "Konami",
+    0x37: "Hi Tech Expressions",
+    0x38: "LJN",
+    0x39: "Matchbox",
+    0x3A: "Mattel",
+    0x3B: "Milton Bradley Company",
+    0x3C: "Titus Interactive",
+    0x3D: "Virgin Games Ltd.",
+    0x40: "Lucasfilm Games",
+    0x43: "Ocean Software",
+    0x45: "EA (Electronic Arts)",
+    0x46: "Infogrames",
+    0x47: "Interplay Entertainment",
+    0x48: "Broderbund",
+    0x49: "Sculptured Software",
+    0x4B: "The Sales Curve Limited",
+    0x4E: "THQ",
+    0x4F: "Accolade",
+    0x50: "Misawa Entertainment",
+    0x53: "LOZC G.",
+    0x56: "Tokuma Shoten",
+    0x57: "Tsukuda Original",
+    0x5B: "Chunsoft Co.9",
+    0x5C: "Video System",
+    0x5D: "Ocean Software/Acclaim Entertainment",
+    0x5F: "Varie",
+    0x60: "Yonezawa10/S’Pal",
+    0x61: "Kaneko",
+    0x63: "Pack-In-Video",
+    0x68: "Bottom Up",
+    0x61: "Konami (Yu-Gi-Oh!)",
+    0x4C: "MTO",
+    0x44: "Kodansha",
+}
+
+NEW_LICENSEE_CODES.update(OLD_LICENSEE_CODES)
+
+
 
 
 CARTRIDGE_TYPES = {
@@ -258,7 +258,7 @@ CARTRIDGE_TYPES = {
     0xFC: "POCKET CAMERA",
     0xFD: "BANDAI TAMA5",
     0xFE: "HuC3",
-    0xFF: "HuC1+RAM+BATTERY"
+    0xFF: "HuC1+RAM+BATTERY",
 }
 
 
@@ -279,9 +279,13 @@ class Cartridge:
     destination_code: int
     destination: str
     content: bytearray
+    
+    cgb_flag: int = None
 
 
 class CartridgeReader:
+    CGB_COMPAT = 0x80
+    CGB_ONLY = 0xC0
     ranges_content = {
         "nintendo_logo": (0x104, 0x133),
         "title": (0x134, 0x143),
@@ -296,7 +300,7 @@ class CartridgeReader:
         "destination_code": (0x14A, 0x14A),
         "mask_rom_version_number": (0x14C, 0x14C),
         "header_checksum": (0x14D, 0x14D),
-        "global_checksum": (0x14E, 0x14F)
+        "global_checksum": (0x14E, 0x14F),
     }
 
     def __init__(self, file):
@@ -309,22 +313,29 @@ class CartridgeReader:
         for field in self.ranges_content:
             _range = self.ranges_content[field]
             start, end = _range
-            self.__dict__[field] = self.content[start: end+1]
+            self.__dict__[field] = self.content[start : end + 1]
 
     def check_logo(self):
         return self.nintendo_logo == NINTENDO_LOGO
 
     def handle_title(self):
         # get rid of null bytes
-        stripped_title = self.title.replace(b'\x00', b'')
+        if self.title[-1] in [self.CGB_COMPAT, self.CGB_ONLY]:
+            self.cgb_flag = self.title.pop()
+            
+        stripped_title = self.title.replace(b"\x00", b"")
         if stripped_title.isascii():
             return stripped_title.decode("ASCII")
         return stripped_title.strip()
 
     def handle_licensee(self):
         olc = self.old_licensee_code[0]
-        nlc = self.new_licensee_code[0]
+        # new licensee code is encoded in ascii
         if olc == 0x33:
+            try:
+                nlc = int(self.new_licensee_code.decode('ascii'), 16)
+            except:
+                nlc = -1
             licensee = NEW_LICENSEE_CODES.get(nlc, "Unknown")
         else:
             licensee = OLD_LICENSEE_CODES.get(olc, "Unknown")
@@ -360,13 +371,12 @@ class CartridgeReader:
     # the boot rom will do this checksum, python alternative
     def compute_header_checksum(self):
         checksum = 0
-        for a in range(0x0134, 0x014C+1):
+        for a in range(0x0134, 0x014C + 1):
             checksum = (checksum - self.content[a] - 1) & 0xFF
         return checksum
 
     def _header_checksum(self) -> bool:
-        return self.header_checksum[0] \
-            == self.compute_header_checksum()
+        return self.header_checksum[0] == self.compute_header_checksum()
 
     def handle_rom_banks(self, rom_num):
         num_banks = dict((num, pow(2, num + 1)) for num in range(0, 9))
@@ -374,48 +384,48 @@ class CartridgeReader:
         return num_banks.get(rom_num, 0)
 
     def handle_ram_banks(self, ram_num):
-        num_banks = {
-            0x00: 0,
-            0x01: 0,
-            0x02: 1,
-            0x03: 4,
-            0x04: 16,
-            0x05: 8
-        }
+        num_banks = {0x00: 0, 0x01: 0, 0x02: 1, 0x03: 4, 0x04: 16, 0x05: 8}
         return num_banks.get(ram_num, 0)
 
     def get_cartridge(self) -> Cartridge:
         self.read()
         self.get_fields()
-        cartridge = Cartridge(type=self.type[0],
-                              type_name=CARTRIDGE_TYPES[self.type[0]],
-                              header_checksum=self._header_checksum(),
-                              nintendo_logo=self.check_logo(),
-                              title=self.handle_title(),
-                              version=self.mask_rom_version_number[0],
-                              manufacturer_code=self.manufacturer_code,
-                              licensee=self.handle_licensee(),
-                              rom_size=self.handle_rom_size(),
-                              rom_banks=self.handle_rom_banks(
-                                  self.rom_size[0]),
-                              ram_size=self.handle_ram_size(),
-                              ram_banks=self.handle_ram_banks(
-                                  self.ram_size[0]),
-                              destination_code=self.destination_code[0],
-                              destination=self.handle_destination(),
-                              content=self.content)
+        cartridge = Cartridge(
+            type=self.type[0],
+            type_name=CARTRIDGE_TYPES[self.type[0]],
+            header_checksum=self._header_checksum(),
+            nintendo_logo=self.check_logo(),
+            title=self.handle_title(),
+            version=self.mask_rom_version_number[0],
+            manufacturer_code=self.manufacturer_code,
+            licensee=self.handle_licensee(),
+            rom_size=self.handle_rom_size(),
+            rom_banks=self.handle_rom_banks(self.rom_size[0]),
+            ram_size=self.handle_ram_size(),
+            ram_banks=self.handle_ram_banks(self.ram_size[0]),
+            destination_code=self.destination_code[0],
+            destination=self.handle_destination(),
+            content=self.content,
+            cgb_flag=getattr(self, "cgb_flag", None)
+        )
         return cartridge
 
 
 def identify():
     import sys
+    
+    CGBFLAG_MEANING = {
+        None: "DMG only",
+        0x80: "CGB, DMG compatible",
+        0xC0: "CGB only",
+    }
+
     # read a cartridge and get type data
     reader = CartridgeReader(open(sys.argv[1], "rb"))
     c = reader.get_cartridge()
     print(f"""
     Cartridge type: {c.type_name} (0x{c.type:02X})
     Title: {c.title}
-    By: {c.manufacturer_code}
     Licensee: {c.licensee}
     Version: {c.version}
     ROM size: {c.rom_size} bytes ({c.rom_banks} banks)
@@ -423,6 +433,7 @@ def identify():
     Destination: {c.destination} (0x{c.destination_code:02X})
     Content length: {len(c.content)} bytes
     Valid Nintendo logo and header checksum: {c.nintendo_logo and c.header_checksum}
+    CGB Flag: {CGBFLAG_MEANING[c.cgb_flag]}
           """)
 
 
