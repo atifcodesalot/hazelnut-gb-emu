@@ -6,73 +6,6 @@ NINTENDO_LOGO = bytearray.fromhex("""
     BB BB 67 63 6E 0E EC CC DD DC 99 9F BB B9 33 3E
     """)
 
-NEW_LICENSEE_CODES = {
-    0x00: None,
-    0x01: "Nintendo Research & Development 1",
-    0x08: "Capcom",
-    0x13: "EA (Electronic Arts)",
-    0x18: "Hudson Soft",
-    0x19: "B-AI",
-    0x14: "KSS",
-    0x16: "Planning Office WADA",
-    0x18: "PCM Complete",
-    0x19: "San-X",
-    0x1C: "Kemco",
-    0x1D: "SETA Corporation",
-    0x1E: "Viacom",
-    0x1F: "Nintendo",
-    0x20: "Bandai",
-    0x21: "Ocean Software/Acclaim Entertainment",
-    0x22: "Konami",
-    0x23: "HectorSoft",
-    0x25: "Taito",
-    0x26: "Hudson Soft",
-    0x27: "Banpresto",
-    0x29: "Ubi Soft1",
-    0x2A: "Atlus",
-    0x2C: "Malibu Interactive",
-    0x2E: "Angel",
-    0x2F: "Bullet-Proof Software",
-    0x30: "Viacom",
-    0x31: "Irem",
-    0x32: "Absolute",
-    0x33: "Acclaim Entertainment",
-    0x34: "Activision",
-    0x35: "Sammy USA Corporation",
-    0x36: "Konami",
-    0x37: "Hi Tech Expressions",
-    0x38: "LJN",
-    0x39: "Matchbox",
-    0x3A: "Mattel",
-    0x3B: "Milton Bradley Company",
-    0x3C: "Titus Interactive",
-    0x3D: "Virgin Games Ltd.",
-    0x40: "Lucasfilm Games",
-    0x43: "Ocean Software",
-    0x45: "EA (Electronic Arts)",
-    0x46: "Infogrames",
-    0x47: "Interplay Entertainment",
-    0x48: "Broderbund",
-    0x49: "Sculptured Software",
-    0x4B: "The Sales Curve Limited",
-    0x4E: "THQ",
-    0x4F: "Accolade",
-    0x50: "Misawa Entertainment",
-    0x53: "LOZC G.",
-    0x56: "Tokuma Shoten",
-    0x57: "Tsukuda Original",
-    0x5B: "Chunsoft Co.9",
-    0x5C: "Video System",
-    0x5D: "Ocean Software/Acclaim Entertainment",
-    0x5F: "Varie",
-    0x60: "Yonezawa10/S’Pal",
-    0x61: "Kaneko",
-    0x63: "Pack-In-Video",
-    0x68: "Bottom Up",
-    0x61: "Konami (Yu-Gi-Oh!)",
-    0x4C: "MTO",
-    0x44: "Kodansha",
-}
 
 OLD_LICENSEE_CODES = {
     0x00: None,
@@ -224,6 +157,78 @@ OLD_LICENSEE_CODES = {
     0xFF: "LJ",
 }
 
+NEW_LICENSEE_CODES = {
+    0x00: None,
+    0x01: "Nintendo Research & Development 1",
+    0x08: "Capcom",
+    0x13: "EA (Electronic Arts)",
+    0x18: "Hudson Soft",
+    0x19: "B-AI",
+    0x14: "KSS",
+    0x16: "Planning Office WADA",
+    0x18: "PCM Complete",
+    0x19: "San-X",
+    0x1C: "Kemco",
+    0x1D: "SETA Corporation",
+    0x1E: "Viacom",
+    0x1F: "Nintendo",
+    0x20: "Bandai",
+    0x21: "Ocean Software/Acclaim Entertainment",
+    0x22: "Konami",
+    0x23: "HectorSoft",
+    0x25: "Taito",
+    0x26: "Hudson Soft",
+    0x27: "Banpresto",
+    0x29: "Ubi Soft1",
+    0x2A: "Atlus",
+    0x2C: "Malibu Interactive",
+    0x2E: "Angel",
+    0x2F: "Bullet-Proof Software",
+    0x30: "Viacom",
+    0x31: "Irem",
+    0x32: "Absolute",
+    0x33: "Acclaim Entertainment",
+    0x34: "Activision",
+    0x35: "Sammy USA Corporation",
+    0x36: "Konami",
+    0x37: "Hi Tech Expressions",
+    0x38: "LJN",
+    0x39: "Matchbox",
+    0x3A: "Mattel",
+    0x3B: "Milton Bradley Company",
+    0x3C: "Titus Interactive",
+    0x3D: "Virgin Games Ltd.",
+    0x40: "Lucasfilm Games",
+    0x43: "Ocean Software",
+    0x45: "EA (Electronic Arts)",
+    0x46: "Infogrames",
+    0x47: "Interplay Entertainment",
+    0x48: "Broderbund",
+    0x49: "Sculptured Software",
+    0x4B: "The Sales Curve Limited",
+    0x4E: "THQ",
+    0x4F: "Accolade",
+    0x50: "Misawa Entertainment",
+    0x53: "LOZC G.",
+    0x56: "Tokuma Shoten",
+    0x57: "Tsukuda Original",
+    0x5B: "Chunsoft Co.9",
+    0x5C: "Video System",
+    0x5D: "Ocean Software/Acclaim Entertainment",
+    0x5F: "Varie",
+    0x60: "Yonezawa10/S’Pal",
+    0x61: "Kaneko",
+    0x63: "Pack-In-Video",
+    0x68: "Bottom Up",
+    0x61: "Konami (Yu-Gi-Oh!)",
+    0x4C: "MTO",
+    0x44: "Kodansha",
+}
+
+NEW_LICENSEE_CODES.update(OLD_LICENSEE_CODES)
+
+
+
 
 CARTRIDGE_TYPES = {
     0x00: "ROM ONLY",
@@ -315,7 +320,7 @@ class CartridgeReader:
 
     def handle_title(self):
         # get rid of null bytes
-        if self.title[-1] != 0:
+        if self.title[-1] in [self.CGB_COMPAT, self.CGB_ONLY]:
             self.cgb_flag = self.title.pop()
             
         stripped_title = self.title.replace(b"\x00", b"")
@@ -326,8 +331,8 @@ class CartridgeReader:
     def handle_licensee(self):
         olc = self.old_licensee_code[0]
         # new licensee code is encoded in ascii
-        nlc = int(self.new_licensee_code.decode('ascii'))
         if olc == 0x33:
+            nlc = int(self.new_licensee_code.decode('ascii'), 16)
             licensee = NEW_LICENSEE_CODES.get(nlc, "Unknown")
         else:
             licensee = OLD_LICENSEE_CODES.get(olc, "Unknown")
