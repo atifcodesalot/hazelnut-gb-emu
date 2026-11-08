@@ -641,8 +641,13 @@ class CgbMemoryController(GBMemoryController):
                 self.io_registers[0xFF68] = v
                 
             if a == 0xFF55:
-                self.io_registers[0xFF55] = v
-                self.gameboy.start_HDMA()
+                if self.gameboy.HBLANK_DMA and v >> 7 & 1 == 0:
+                    self.gameboy.HBLANK_DMA = False
+                    self.io_registers[0xFF55] |= 0x80
+                else:
+                    self.io_registers[0xFF55] = v
+                    self.gameboy.start_HDMA()
+                    
 
             if a == 0xFF50:
                 # Any nonzero write disables boot ROM
@@ -702,8 +707,19 @@ class CgbMemoryController(GBMemoryController):
         _io = self.io_registers
         hdma_src = (_io[0xFF51] << 8 | _io[0xFF52]) & 0xFFF0
         hdma_dest = _io[0xFF53] << 8 | _io[0xFF54]
-        hdma_dest = (hdma_dest & 0x1fff) >> 4
+        hdma_dest = ((hdma_dest & 0x1FFF) >> 4) << 4
         
-        copy = self.get_block_at(hdma_src + 16*self.hdma_counter, 16)
-        vramstart = 0x2000 * self.vram_bank + hdma_dest * 16
+        hdmactl = _io[0xFF55]
+        remaining = hdmactl & 0x7F
+        
+        offset = 16*(self.hdma_len - remaining - 1)
+        
+        copy = self.get_block_at(hdma_src + offset, 16)
+        vramstart = 0x2000 * self.vram_bank + hdma_dest + offset
         self.vram.array[vramstart: vramstart+16] = copy
+        
+        # update remaining lenth on hdma control
+        remaining = (remaining - 1) & 0xFF
+        self.io_registers[0xFF55] = remaining
+        
+        
