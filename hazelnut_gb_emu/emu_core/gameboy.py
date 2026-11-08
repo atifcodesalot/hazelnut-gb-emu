@@ -234,25 +234,24 @@ class GameboyColor(Gameboy):
         self.HBLANK_DMA_cost = None
 
     def start_HDMA(self):
+        # clear bit 7 to indicate ongoing transfer
+        self.memctl.io_registers[0xFF55] &= 0x7F
         hdmactl = self.memctl.io_registers[0xFF55]
         mode = hdmactl >> 7 & 1
         if not mode:
             # General purpose DMA
             self.start_GPDMA(hdmactl)
         else:
-            # hblank DMA
             self.start_HBLANK_DMA(hdmactl)
 
     def start_HBLANK_DMA(self, hdmactl):
         self.memctl.hdma_len = (hdmactl & 0x7F) + 1
-        self.memctl.hdma_counter = 0
         self.HBLANK_DMA = True
 
     def handle_HBLANK_DMA(self):
         m = self.memctl
         m.HDMA_copy()
-        m.hdma_counter += 1
-        if m.hdma_counter == m.hdma_len:
+        if self.memctl.io_registers[0xFF55] == 0xFF:
             self.HBLANK_DMA = False
 
     def start_GPDMA(self, hdmactl):   
@@ -264,8 +263,9 @@ class GameboyColor(Gameboy):
         _io = m.io_registers
         hdma_src = (_io[0xFF51] << 8 | _io[0xFF52]) & 0xFFF0
         hdma_dest = _io[0xFF53] << 8 | _io[0xFF54]
-        hdma_dest = (hdma_dest & 0x1fff) >> 4
-        vramstart = (0x2000 * m.vram_bank + hdma_dest * 16)
+        hdma_dest = ((hdma_dest & 0x1FFF) >> 4) << 4
+    
+        vramstart = 0x2000 * m.vram_bank + hdma_dest
         
         chunk = m.get_block_at(hdma_src, copylen)
         self.memctl.vram.array[vramstart: vramstart + copylen] = chunk
@@ -343,7 +343,7 @@ class GameboyColor(Gameboy):
         if self.HBLANK_DMA:
             self.handle_HBLANK_DMA()
             # the cpu sleeps 34 or 68 clock cycles if hblank DMA happens
-            DMA_time = 204 - (32 << self.speed_mode) - 4
+            DMA_time = 204 - (32 << self.speed_mode)
             self.tick_timers(DMA_time)
             hblank_cpu_burst = (204 - DMA_time) << self.speed_mode
         else:
