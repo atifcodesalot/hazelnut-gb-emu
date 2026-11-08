@@ -430,10 +430,10 @@ class CgbMemoryController(GBMemoryController):
 
         self.bootmax = 0x08FF
 
-        self.ram = RAM(addressable_bits=15)  # 32KB with additional 6 banks
+        self.ram.resize(15)  # 32KB with additional 6 banks
         # can't be 0
         self.ram_bank = 1
-        self.vram = VRAM(addressable_bits=14)  # 16KB with additional bank
+        self.vram.resize(14)  # 16KB with additional bank
         self.vram_bank = 0
 
         self.hdma_counter = None
@@ -721,5 +721,13 @@ class CgbMemoryController(GBMemoryController):
         # update remaining lenth on hdma control
         remaining = (remaining - 1) & 0xFF
         self.io_registers[0xFF55] = remaining
+        
+        
+    def reset(self):
+        super().reset()
+        self.ram.resize(15)
+        self.vram.resize(14)
+        self.bg_palette_ram.reset()
+        self.obj_palette_ram.reset()
         
         
