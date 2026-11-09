@@ -406,7 +406,7 @@ class GBMemoryController:
         addr = self.OAM_DMA_src + self.OAM_DMA_counter
         self.OAM[self.OAM_DMA_counter] = self.read_at(addr)
         self.OAM_DMA_counter += 1
-        if self.OAM_DMA_counter == 159:
+        if self.OAM_DMA_counter == 160:
             self.gameboy.OAM_DMA_end()
         
     def reset(self):
