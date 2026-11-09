@@ -99,6 +99,8 @@ class Gameboy:
         if old >> 2 != self.OAM_DMA_timer >> 2:
             edges = (self.OAM_DMA_timer - old) >> 2
             for _ in range(edges):
+                if not self.OAM_DMA:
+                    break
                 self.memctl.OAM_DMA_copy()
 
     def handle_TIMA(self, old_cycles, elapsed):
