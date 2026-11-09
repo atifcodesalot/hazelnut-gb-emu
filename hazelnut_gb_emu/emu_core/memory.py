@@ -99,7 +99,10 @@ class GBMemoryController:
         self.ext_ram = RAM(addressable_bits=13)
         self.hram = RAM(addressable_bits=7)  # 127B
         self.OAM = bytearray(160)
-
+        
+        self.OAM_DMA_src = None
+        self.OAM_DMA_counter = 0
+    
         # Note: Audio, serial transfer registers are not implemented.
         self.io_registers = {
             # --- Joypad / Serial ---
@@ -399,6 +402,13 @@ class GBMemoryController:
     def __setitem__(self, key, value):
         self.write_to(key, value)
 
+    def OAM_DMA_copy(self):
+        addr = self.OAM_DMA_src + self.OAM_DMA_counter
+        self.OAM[self.OAM_DMA_counter] = self.read_at(addr)
+        self.OAM_DMA_counter += 1
+        if self.OAM_DMA_counter == 160:
+            self.gameboy.OAM_DMA_end()
+        
     def reset(self):
         self.ext_ram_enabled = False
         self.bank_switching = None

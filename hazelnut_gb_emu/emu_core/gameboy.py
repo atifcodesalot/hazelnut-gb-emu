@@ -29,6 +29,10 @@ class Gameboy:
         self.cycles = 0
         #
 
+        # OAM DMA flag
+        self.OAM_DMA = False
+        self.OAM_DMA_timer = 0
+
         self.debug = False
         self.running = True
 
@@ -51,6 +55,8 @@ class Gameboy:
     def handle_halt_burst(self, clock_cycles):
         self.tick_timers(clock_cycles)
         self.handle_serial(clock_cycles)
+        if self.OAM_DMA:
+            self.handle_OAM_DMA(clock_cycles)
         self.cpu_debt = 0
 
     def tick_timers(self, dots):
@@ -67,6 +73,7 @@ class Gameboy:
                 self.handle_halt_burst(clock_cycles)
                 return
         cycles_passed = 0
+        # normal cpu burst starts here
         while cycles_passed < clock_cycles:
             ins, ins_cycles = self.SM83_processor.tick_one_ins(self)
 
@@ -78,13 +85,26 @@ class Gameboy:
                 remaining = clock_cycles - cycles_passed
                 self.handle_halt_burst(remaining)
                 return
-            elif self.SM83_processor.STOP_EXED:
-                pass
+
+            if self.OAM_DMA:
+                self.handle_OAM_DMA(ins_cycles)
+
         # get debt
         self.cpu_debt = cycles_passed - clock_cycles
 
     def handle_DIV(self):
         self.memctl.io_registers[0xFF04] = (self.cycles >> 8) & 0xFF
+
+    def handle_OAM_DMA(self, cycles):
+        old = self.OAM_DMA_timer
+        self.OAM_DMA_timer += cycles
+        # OAM edge
+        if old >> 2 != self.OAM_DMA_timer >> 2:
+            edges = (self.OAM_DMA_timer - old) >> 2
+            for _ in range(edges):
+                if not self.OAM_DMA:
+                    break
+                self.memctl.OAM_DMA_copy()
 
     def handle_TIMA(self, old_cycles, elapsed):
         TAC = self.memctl.io_registers[0xFF07]
@@ -134,14 +154,19 @@ class Gameboy:
     def start_OAM_DMA(self):
         # logger.debug("starting OAM DMA...")
         m = self.memctl
-        source = (m.io_registers[0xFF46]) * 0x100
-        # copy 160 bytes to OAM
-        for i in range(0xA0):
-            m.OAM[i] = m.read_at(source + i)
-        # takes 640 dots
-        self.tick_timers(640)
-        # logger.debug("ending DMA...")
-        # logger.debug(f"OAM:{self.memctl.OAM}")
+        self.OAM_DMA = True
+        self.OAM_DMA_timer = 0
+        m.OAM_DMA_src = (m.io_registers[0xFF46]) * 0x100
+        m.OAM_DMA_counter = 0
+
+        # start with phase 1
+        m.OAM_DMA_copy()
+
+    def OAM_DMA_end(self):
+        self.OAM_DMA = False
+        self.memctl.OAM_DMA_src = None
+        self.memctl.OAM_DMA_counter = 0
+        self.OAM_DMA_timer = 0
 
     def scanline_PPU_modes(self):
         # timer tick are inside cpu burst calls

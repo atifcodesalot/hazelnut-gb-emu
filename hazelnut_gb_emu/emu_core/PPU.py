@@ -316,7 +316,7 @@ class GbPPU:
             row = self.sprite_rows[i]
             for j in range(8):
                 scan = sx + j
-                if not (GB_LCD_RES[0] > scan > 0):
+                if not (GB_LCD_RES[0] > scan >= 0):
                     continue
                 old = self.sp_winner_cache[scan]
                 # if no sprite that has higher priority,
