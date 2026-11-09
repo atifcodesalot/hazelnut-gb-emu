@@ -178,20 +178,20 @@ class Gameboy:
         self.PPU.HBLANK_mode()
         self.CPU_burst(204 - self.cpu_debt)
 
-    def tick_PPU_modes_basis(self):
+    def tick_PPU_modes_basis(self, vblank_dots=456):
         lcdc = self.memctl.io_registers[0xFF40]
 
         # clear the lcd if PPU is disabled
         if not lcdc >> 7 & 1:
             self.PPU.disable()
-            self.CPU_burst(456)
+            self.CPU_burst(vblank_dots)
             return
 
         ly = self.memctl.io_registers[0xFF44]
 
         if self.PPU.is_VBLANK_scan(ly):
             # cpu burst then inc ly and handle lyc compare
-            self.CPU_burst(456)
+            self.CPU_burst(vblank_dots)
             self.PPU.handle_VBLANK()
             return
 
@@ -371,6 +371,9 @@ class GameboyColor(Gameboy):
                 self.handle_OAM_DMA(ins_cycles)
         # get debt
         self.cpu_debt = cycles_passed - clock_cycles
+        
+    def tick_PPU_modes_basis(self):
+        return super().tick_PPU_modes_basis(456 << self.speed_mode)
 
     def scanline_PPU_modes(self):
         if self.DMG_compat:
