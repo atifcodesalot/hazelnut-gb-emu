@@ -26,7 +26,10 @@ class Gameboy:
         # 16 bit internal divider register value
         self.cycles = 0
         #
-        self.DMA = False
+        
+        # OAM DMA flag
+        self.OAM_DMA = False
+        self.OAM_DMA_timer = 0
 
         self.debug = False
         self.running = True
@@ -46,6 +49,11 @@ class Gameboy:
         if self.interrupt_pending():
             self.awake()
             return True
+        
+    def handle_halt_burst(self, clock_cycles):
+        self.tick_timers(clock_cycles)
+        self.handle_serial(clock_cycles)
+        self.cpu_debt = 0
 
     def tick_timers(self, dots):
         TAC = self.memctl.io_registers[0xFF07]
@@ -55,14 +63,13 @@ class Gameboy:
         self.cycles = self.cycles + dots
         self.handle_DIV()
 
-    def CPU_APU_burst(self, clock_cycles):
+    def CPU_burst(self, clock_cycles):
         if self.SM83_processor.HALT:
             if not self.handle_cpu_halt():
-                self.tick_timers(clock_cycles)
-                self.handle_serial(clock_cycles)
-                self.cpu_debt = 0
+                self.handle_halt_burst(clock_cycles)
                 return
         cycles_passed = 0
+        # normal cpu burst starts here
         while cycles_passed < clock_cycles:
             ins, ins_cycles = self.SM83_processor.tick_one_ins(self)
             self.tick_timers(ins_cycles)
@@ -71,10 +78,16 @@ class Gameboy:
 
             if self.SM83_processor.HALT:
                 remaining = clock_cycles - cycles_passed
-                self.tick_timers(remaining)
-                self.handle_serial(remaining)
-                self.cpu_debt = 0
+                self.handle_halt_burst(remaining)
                 return
+            
+            if self.OAM_DMA:
+                old = self.OAM_DMA_timer
+                self.OAM_DMA_timer += ins_cycles
+                # OAM edge
+                if old >> 2 != self.OAM_DMA_timer >> 2:
+                    self.memctl.OAM_DMA_copy()
+                
 
         # get debt
         self.cpu_debt = cycles_passed - clock_cycles
@@ -127,28 +140,32 @@ class Gameboy:
     def get_serial_bit(self):
         return 1
 
-    def start_DMA(self):
-        # logger.debug("starting DMA...")
+    def start_OAM_DMA(self):
+        logger.debug("starting OAM DMA...")
         m = self.memctl
-        self.DMA = True
-        source = (m.io_registers[0xFF46]) * 0x100
-        # copy 160 bytes to OAM
-        for i in range(0xA0):
-            m.OAM[i] = m.read_at(source + i)
-        # takes 640 dots
-        self.tick_timers(640)
-        # logger.debug("ending DMA...")
-        # logger.debug(f"OAM:{self.memctl.OAM}")
+        self.OAM_DMA = True
+        self.OAM_DMA_timer = 0
+        m.OAM_DMA_src = (m.io_registers[0xFF46]) * 0x100
+        m.OAM_DMA_counter = 0
+        
+        # start with phase 1
+        m.OAM_DMA_copy()
+        
+    def OAM_DMA_end(self):
+        self.OAM_DMA = False
+        self.memctl.OAM_DMA_src = None
+        self.memctl.OAM_DMA_counter = 0
+        self.OAM_DMA_timer = 0
 
     def scanline_PPU_modes(self):
         # timer tick are inside cpu burst calls
         self.PPU.OAM_scan(self.PPU.get_context())
-        self.CPU_APU_burst(80 - self.cpu_debt)
+        self.CPU_burst(80 - self.cpu_debt)
         # recall because CPU burst may change the context
         self.PPU.drawing_mode(self.PPU.get_context())
-        self.CPU_APU_burst(172 - self.cpu_debt)
+        self.CPU_burst(172 - self.cpu_debt)
         self.PPU.HBLANK_mode()
-        self.CPU_APU_burst(204 - self.cpu_debt)
+        self.CPU_burst(204 - self.cpu_debt)
 
     def tick_PPU_modes_basis(self):
         lcdc = self.memctl.io_registers[0xFF40]
@@ -156,14 +173,14 @@ class Gameboy:
         # clear the lcd if PPU is disabled
         if not lcdc >> 7 & 1:
             self.PPU.disable()
-            self.CPU_APU_burst(456)
+            self.CPU_burst(456)
             return
 
         ly = self.memctl.io_registers[0xFF44]
 
         if self.PPU.is_VBLANK_scan(ly):
             # cpu burst then inc ly and handle lyc compare
-            self.CPU_APU_burst(456)
+            self.CPU_burst(456)
             self.PPU.handle_VBLANK()
             return
 
@@ -175,7 +192,7 @@ class Gameboy:
         # if just finished the last visible scanline
         if ly == GB_LCD_RES[1] - 1:
             # ensure framerate is 60
-            self.pyclock.tick(59)
+            self.pyclock.tick(60)
             #
             self.PPU.enter_VBLANK()
 
