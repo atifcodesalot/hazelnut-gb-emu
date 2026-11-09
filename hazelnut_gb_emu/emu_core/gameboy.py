@@ -359,6 +359,8 @@ class GameboyColor(Gameboy):
                     self.switch_cycles -= remaining
                     self.cpu_debt = 0
                     return
+            if self.OAM_DMA:
+                self.handle_OAM_DMA(ins_cycles)
         # get debt
         self.cpu_debt = cycles_passed - clock_cycles
 
