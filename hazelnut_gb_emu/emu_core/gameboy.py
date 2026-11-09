@@ -141,7 +141,7 @@ class Gameboy:
         return 1
 
     def start_OAM_DMA(self):
-        logger.debug("starting OAM DMA...")
+        # logger.debug("starting OAM DMA...")
         m = self.memctl
         self.OAM_DMA = True
         self.OAM_DMA_timer = 0
