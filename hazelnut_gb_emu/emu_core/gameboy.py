@@ -256,7 +256,7 @@ class GameboyColor(Gameboy):
 
         self.HBLANK_DMA = False
         self.HBLANK_DMA_cost = None
-        
+
         self.DMG_compat = False
 
     def start_HDMA(self):
@@ -270,8 +270,7 @@ class GameboyColor(Gameboy):
         else:
             self.start_HBLANK_DMA(hdmactl)
 
-    def start_HBLANK_DMA(self, hdmactl):
-        self.memctl.hdma_len = (hdmactl & 0x7F) + 1
+    def start_HBLANK_DMA(self):
         self.HBLANK_DMA = True
 
     def handle_HBLANK_DMA(self):
@@ -281,23 +280,32 @@ class GameboyColor(Gameboy):
             self.HBLANK_DMA = False
 
     def start_GPDMA(self, hdmactl):
+        m = self.memctl
+        
         # in bytes
         blocks = (hdmactl & 0x7F) + 1
         copylen = blocks * 16
-
-        m = self.memctl
-        _io = m.io_registers
-        hdma_src = (_io[0xFF51] << 8 | _io[0xFF52]) & 0xFFF0
-        hdma_dest = _io[0xFF53] << 8 | _io[0xFF54]
-        hdma_dest = ((hdma_dest & 0x1FFF) >> 4) << 4
-
-        vramstart = 0x2000 * m.vram_bank + hdma_dest
-
-        chunk = m.get_block_at(hdma_src, copylen)
+        # print(
+        #     f"SRC={m.hdma_src:04X} "
+        #     f"DST={m.hdma_dest:04X} "
+        #     f"VBK={m.vram_bank} "
+        #     f"BLOCKS={blocks}"
+        # )
+        
+        vramstart = 0x2000 * m.vram_bank + m.hdma_dest
+        chunk = m.get_block_at(m.hdma_src, copylen)
         self.memctl.vram.array[vramstart : vramstart + copylen] = chunk
         # tick timers
         DMA_time = blocks * (32 << self.speed_mode)
         self.tick_timers(DMA_time)
+        self.GPDMA_end(transfer=blocks)
+
+    def GPDMA_end(self, transfer):
+        m = self.memctl
+        m.io_registers[0xFF55] = 0xFF
+        # update memctl internal counters
+        m.hdma_src = (m.hdma_src + 0x10 * transfer) & 0xFFFF
+        m.hdma_dest = (m.hdma_dest + 0x10 * transfer) & 0x1FFF
 
     def check_speed_switch(self) -> bool:
         spdkey1 = self.memctl.io_registers[0xFF4D]
@@ -401,7 +409,7 @@ class GameboyColor(Gameboy):
         self.switch_cycles = None
         self.HBLANK_DMA = False
         self.HBLANK_DMA_cost = None
-        
+
         self.DMG_compat = False
         self.PPU.DMG_compat = False
         self.memctl.DMG_compat = False

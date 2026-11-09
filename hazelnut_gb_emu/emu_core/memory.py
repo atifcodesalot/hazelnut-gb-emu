@@ -99,10 +99,10 @@ class GBMemoryController:
         self.ext_ram = RAM(addressable_bits=13)
         self.hram = RAM(addressable_bits=7)  # 127B
         self.OAM = bytearray(160)
-        
+
         self.OAM_DMA_src = None
         self.OAM_DMA_counter = 0
-    
+
         # Note: Audio, serial transfer registers are not implemented.
         self.io_registers = {
             # --- Joypad / Serial ---
@@ -321,7 +321,7 @@ class GBMemoryController:
             return
 
         # --- Echo RAM (E000-FDFF) ---
-        if a < 0xFE00:
+        if a < 0xFE00:  
             # mirror to C000-DDFF region
             self.ram.write_to(a - 0xE000, v)
             return
@@ -408,7 +408,7 @@ class GBMemoryController:
         self.OAM_DMA_counter += 1
         if self.OAM_DMA_counter == 160:
             self.gameboy.OAM_DMA_end()
-        
+
     def reset(self):
         self.ext_ram_enabled = False
         self.bank_switching = None
@@ -444,12 +444,12 @@ class CgbMemoryController(GBMemoryController):
         self.vram.resize(14)  # 16KB with additional bank
         self.vram_bank = 0
 
-        self.hdma_counter = None
-        self.hdma_len = None
-
         self.init_gbc_regs()
 
         self.DMG_compat = DMG_compat
+
+        self.hdma_src = 0
+        self.hdma_dest = 0
 
     def init_gbc_regs(self):
         # CPU mode select
@@ -530,7 +530,10 @@ class CgbMemoryController(GBMemoryController):
 
         # --- Echo RAM (E000-FDFF) mirror WRAM ---
         if a < 0xFE00:
-            return self.ram.array[a - 0xE000]
+            if a < 0xF000:
+                return self.ram.array[a - 0xE000]
+
+            return self.ram.array[a - 0xF000 + self.ram_bank * 0x1000]
 
         # --- OAM (FE00-FE9F)  ---
         if a < 0xFEA0:
@@ -608,8 +611,10 @@ class CgbMemoryController(GBMemoryController):
 
         # --- Echo RAM (E000-FDFF) ---
         if a < 0xFE00:
-            # mirror to C000-DDFF region
-            self.ram.write_to(a - 0xE000, v)
+            if a < 0xF000:
+                self.ram.write_to(a - 0xE000, v)
+            else:
+                self.ram.write_to(a - 0xF000 + self.ram_bank * 0x1000, v)
             return
 
         # --- OAM (FE00-FE9F) ---
@@ -659,12 +664,30 @@ class CgbMemoryController(GBMemoryController):
                 self.io_registers[0xFF68] = v
 
             if a == 0xFF55:
-                if self.gameboy.HBLANK_DMA and v >> 7 & 1 == 0:
+                if self.gameboy.HBLANK_DMA and (v >> 7 & 1) == 0:
                     self.gameboy.HBLANK_DMA = False
                     self.io_registers[0xFF55] |= 0x80
                 else:
                     self.io_registers[0xFF55] = v
                     self.gameboy.start_HDMA()
+                return
+
+            # hdma src hi
+            if a == 0xFF51:
+                self.hdma_src = (v << 8) | (self.hdma_src & 0x00FF)
+            # hdma src low
+            if a == 0xFF52:
+                self.hdma_src = (self.hdma_src & 0xFF00) | (v & 0xF0)
+
+            # hdma dest hi
+            if a == 0xFF53:
+                temp = (v << 8) | (self.hdma_dest & 0x00FF)
+                self.hdma_dest = ((temp & 0x1FFF) >> 4) << 4
+
+            # hdma dest low
+            if a == 0xFF54:
+                temp = (self.hdma_dest & 0xFF00) | v
+                self.hdma_dest = ((temp & 0x1FFF) >> 4) << 4
 
             if a == 0xFF50:
                 # Any nonzero write disables boot ROM
@@ -710,8 +733,6 @@ class CgbMemoryController(GBMemoryController):
                 # unimplemented/unused IO, ignore
                 return
 
-            # DMA (FF46) often triggers a transfer;
-            # later when implementing DMA, hook it here.
             self.io_registers[a] = v
             return
 
@@ -725,23 +746,20 @@ class CgbMemoryController(GBMemoryController):
 
     # one 16 byte copy of HDMA
     def HDMA_copy(self):
-        _io = self.io_registers
-        hdma_src = (_io[0xFF51] << 8 | _io[0xFF52]) & 0xFFF0
-        hdma_dest = _io[0xFF53] << 8 | _io[0xFF54]
-        hdma_dest = ((hdma_dest & 0x1FFF) >> 4) << 4
+        hdmactl = self.io_registers[0xFF55]
 
-        hdmactl = _io[0xFF55]
-        remaining = hdmactl & 0x7F
-
-        offset = 16 * (self.hdma_len - remaining - 1)
-
-        copy = self.get_block_at(hdma_src + offset, 16)
-        vramstart = 0x2000 * self.vram_bank + hdma_dest + offset
+        copy = self.get_block_at(self.hdma_src, 16)
+        vramstart = 0x2000 * self.vram_bank + self.hdma_dest
         self.vram.array[vramstart : vramstart + 16] = copy
 
         # update remaining lenth on hdma control
+        remaining = hdmactl & 0x7F
         remaining = (remaining - 1) & 0xFF
         self.io_registers[0xFF55] = remaining
+
+        # update internal counters
+        self.hdma_src = (self.hdma_src + 0x10) & 0xFFFF
+        self.hdma_dest = (self.hdma_dest + 0x10) & 0x1FFF
 
     def reset(self):
         super().reset()
@@ -749,3 +767,5 @@ class CgbMemoryController(GBMemoryController):
         self.vram.resize(14)
         self.bg_palette_ram.reset()
         self.obj_palette_ram.reset()
+        self.hdma_src = 0
+        self.hdma_dest = 0
