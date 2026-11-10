@@ -141,7 +141,7 @@ class GBMemoryController:
 
     def configure_bank_switching(self, cartridge: Cartridge):
         # ROM only
-        if cartridge.type == 0:
+        if cartridge.type in [0x0, ]:
             self.bank_switching = None
 
         # MBC1
@@ -152,13 +152,13 @@ class GBMemoryController:
         elif cartridge.type in [0x5, 0x6]:
             self.bank_switching = True
             self.mbc = MBC2(self, cartridge)
-        # MBC3 without RTC
-        elif cartridge.type in [0x10, 0x11, 0x12, 0x13]:
+        # MBC3
+        elif cartridge.type in [0xF, 0x10, 0x11, 0x12, 0x13]:
             self.bank_switching = True
             self.mbc = MBC3(self, cartridge)
 
         # MBC5 without rumble motor
-        elif cartridge.type in [0x19, 0x1A, 0x1B, 0x1E]:
+        elif cartridge.type in [0x19, 0x1A, 0x1B, 0x1E, 0x1C, 0x1D]:
             self.bank_switching = True
             self.mbc = MBC5(self, cartridge)
 
