@@ -141,7 +141,7 @@ class GBMemoryController:
 
     def configure_bank_switching(self, cartridge: Cartridge):
         # ROM only
-        if cartridge.type in [0x0, ]:
+        if cartridge.type in [0x0, 0x08, 0x09]:
             self.bank_switching = None
 
         # MBC1
