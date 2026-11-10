@@ -585,24 +585,26 @@ class CgbMemoryController(GBMemoryController):
             self.ram_bank = v & 7 if v & 7 != 0 else 1
 
         elif a == 0xFF6B:
-            # obj palette data write
-            self.io_registers[0xFF6B] = v
             obpi = self.io_registers[0xFF6A]
-            self.obj_palette_ram.write_to(obpi & 0x3F, v)
+            if self.io_registers[0xFF41] & 3 != 3:
+                # obj palette data write
+                self.io_registers[0xFF6B] = v
+                self.obj_palette_ram.write_to(obpi & 0x3F, v)
             # auto increment
             self.io_registers[0xFF6A] = (
-                obpi & 0x80 | ((obpi & 0x7F) + (obpi >> 7 & 1))
-            ) & 0xFF
+                obpi & 0x80 | ((obpi & 0x3F) + (obpi >> 7 & 1) & 0x3F)
+            ) 
 
         elif a == 0xFF69:
-            # bg palette data write
-            self.io_registers[0xFF69] = v
             bgpi = self.io_registers[0xFF68]
-            self.bg_palette_ram.write_to(bgpi & 0x3F, v)
+            if self.io_registers[0xFF41] & 3 != 3:
+                # bg palette data write
+                self.io_registers[0xFF69] = v
+                self.bg_palette_ram.write_to(bgpi & 0x3F, v)
             # auto increment
             self.io_registers[0xFF68] = (
-                bgpi & 0x80 | ((bgpi & 0x7F) + (bgpi >> 7 & 1))
-            ) & 0xFF
+                bgpi & 0x80 | ((bgpi & 0x3F) + (bgpi >> 7 & 1) & 0x3F)
+            ) 
 
         elif a == 0xFF55:
             if self.gameboy.HBLANK_DMA and (v >> 7 & 1) == 0:
