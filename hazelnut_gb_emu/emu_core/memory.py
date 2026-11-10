@@ -341,6 +341,12 @@ class GBMemoryController:
                 self.disable_boot_rom()
                 return
             
+            if a == 0xFF41:
+                STAT = self.io_registers[0xFF41]
+                # preserve readonly 3 bits
+                self.io_registers[0xFF41] = v & 0xF8 | STAT & 7
+                return
+            
             if a == 0xFF45:
                 self.io_registers[0xFF45] = v
                 self.gameboy.PPU.handle_LY_compare()
