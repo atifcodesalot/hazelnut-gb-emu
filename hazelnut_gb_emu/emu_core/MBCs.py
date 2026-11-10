@@ -1,5 +1,5 @@
-
 from math import log
+from .auxiliary import BO
 from .cartridge import Cartridge
 import time
 
@@ -10,11 +10,9 @@ class MBC:
         self.cart = cartridge
 
         # adjust rom and external ram size
-        self.memctl.rom.resize(
-            int(log(cartridge.rom_size, 2)))
+        self.memctl.rom.resize(int(log(cartridge.rom_size, 2)))
         if cartridge.ram_size != 0:
-            self.memctl.ext_ram.resize(
-                int(log(cartridge.ram_size, 2)))
+            self.memctl.ext_ram.resize(int(log(cartridge.ram_size, 2)))
 
 
 class MBC1(MBC):
@@ -24,7 +22,7 @@ class MBC1(MBC):
             0x2000: 0,  # RAM EN
             0x4000: 1,  # ROM BANK NUM
             0x6000: 0,  # RAM BANK/UPPER
-            0x8000: 0  # BANK MODE
+            0x8000: 0,  # BANK MODE
         }
 
     def handle_rom_banking(self, address, mode):
@@ -35,9 +33,8 @@ class MBC1(MBC):
             return m.rom.array[address]
 
         r2 = self.cart_regs[0x6000]
-        bank_num = (
-            (r2 << 5) | self.cart_regs[0x4000]) % self.cart.rom_banks
-        offset = address & 0x3fff  # get the lower 14 bits
+        bank_num = ((r2 << 5) | self.cart_regs[0x4000]) % self.cart.rom_banks
+        offset = address & 0x3FFF  # get the lower 14 bits
         switched_addr_b1 = bank_num * 0x4000 + offset
 
         # bank 1
@@ -46,8 +43,7 @@ class MBC1(MBC):
 
         # MBC1 mode 1 starts here
         if bank_i == 0:
-            switched_addr_b0 = ((r2 << 5) %
-                                self.cart.rom_banks * 0x4000) + offset
+            switched_addr_b0 = ((r2 << 5) % self.cart.rom_banks * 0x4000) + offset
             return m.rom.array[switched_addr_b0]
 
         # bank 1, mode 1
@@ -75,7 +71,7 @@ class MBC1(MBC):
 
     def handle_ram_banking_read(self, address, mode):
         m = self.memctl
-        offset = address & 0x1fff
+        offset = address & 0x1FFF
 
         if mode == 1:
             if self.cart.ram_banks > 0:
@@ -90,7 +86,7 @@ class MBC1(MBC):
     def handle_ram_banking_write(self, address, value):
         m = self.memctl
         mode = self.cart_regs[0x8000]
-        offset = address & 0x1fff
+        offset = address & 0x1FFF
         if mode == 1:
             if self.cart.ram_banks > 0:
                 bank_num = self.cart_regs[0x6000] % self.cart.ram_banks
@@ -145,7 +141,7 @@ class MBC2(MBC):
             return self.memctl.rom.array[address]
 
         # banked read starts here
-        offset = address & 0x3fff
+        offset = address & 0x3FFF
         reg = self.cart_regs[0x4001]
 
         ln = reg & 0xF
@@ -172,7 +168,7 @@ class MBC2(MBC):
         self.cart_regs[0x4000 + reg_num] = value
         # if bit 8 was clear, control extram enable
         if not reg_num:
-            self.memctl.ext_ram_enabled = (value & 0xF == 0xA)
+            self.memctl.ext_ram_enabled = value & 0xF == 0xA
 
 
 class MBC3(MBC):
@@ -192,38 +188,56 @@ class MBC3(MBC):
             0xA00C: 0,  # RTC DH
         }
         self.last_sample = 0
+        
+        self.totseconds = 0
         self.seconds = 0
+        self.minutes = 0
+        self.hours = 0
+        self.days = 0
+        
+        
         self.RTC_read_enabled = False
+        self.start_RTC()
+        self.seconds = 0
 
     def start_RTC(self):
-        self.start_seconds = time.monotonic()
+        self.update_time(initial=True)
 
-    def sample_sec_diff(self):
+    def get_elapsed(self):
         now = time.monotonic()
         elapsed = now - self.last_sample
         self.last_sample = now
-        return elapsed
+        return int(elapsed)
+    
+    def update_time(self, initial=False):
+        elapsec = self.get_elapsed()
+        if initial:
+            return
+        
+        self.totseconds += elapsec
+        self.seconds = self.totseconds % 60
+        self.minutes = (self.totseconds // 60) % 60
+        self.hours = (self.totseconds // 3600) % 24
+        self.days = (self.totseconds // 86400) % 512
 
-    def update_seconds(self):
-        self.seconds += self.sample_sec_diff()
-
-    def sample_seconds_reg(self):
-        self.cart_regs[0xA008] = self.seconds
-
-    def sample_minutes_reg(self):
-        self.cart_regs[0xA009] = self.seconds // 60
-
-    def sample_hours_reg(self):
-        self.cart_regs[0xA00A] = self.seconds // 3600
-
-    def sample_days(self):
-        days = self.seconds // 86400
-        self.cart_regs[0xA00B] = days & 0xFF
-        self.cart_regs[0xA00C] = days >> 8
+    def latch_RTC_regs(self):
+        self.update_time()
+        self.cart_regs[0xA008] = self.seconds 
+        self.cart_regs[0xA009] = self.minutes 
+        self.cart_regs[0xA00A] = self.hours 
+        self.cart_regs[0xA00B] = self.days & 0xFF
+        self.cart_regs[0xA00C] |= self.days >> 8
+        
+        if self.days >> 9:
+            # days counter overflowed
+            # set dh's 7th bit
+            dh = self.cart_regs[0xA00C]
+            BO.set_nth_bit(dh, 7)
+            self.cart_regs[0xA00C] = dh
 
     def handle_rom_banking(self, address):
         m = self.memctl
-        offset = address & 0x3fff
+        offset = address & 0x3FFF
         bank_i = (address >> 14) & 1
         if bank_i == 0:
             # no conversion, bank 0 is never bank switched in mbc3
@@ -249,48 +263,47 @@ class MBC3(MBC):
             self.cart_regs[0x6000] = value & 0x0F
             return
         if address < 0x8000:
+            old = self.cart_regs[0x6000]
+            if old == 0x00 and value & 1 == 0x01:
+                self.latch_RTC_regs()
             self.cart_regs[0x8000] = value & 1
             return
 
     def handle_ram_banking_read(self, address, sel):
-        offset = address & 0x1fff
-        return self.memctl.ext_ram.array[
-            sel * 0x2000 + offset]
+        offset = address & 0x1FFF
+        return self.memctl.ext_ram.array[sel * 0x2000 + offset]
 
     def handle_ram_banking_write(self, address, value, sel):
-        offset = address & 0x1fff
+        offset = address & 0x1FFF
         switched_addr = sel * 0x2000 + offset
         self.memctl.ext_ram.write_to(switched_addr, value)
 
     def handle_RTC_read(self, sel):
-        self.update_seconds()
-        if sel == 0x08:
-            self.sample_seconds_reg()
-            return self.cart_regs[0xA008]
-        if sel == 0x09:
-            self.sample_minutes_reg()
-            return self.cart_regs[0xA009]
-        if sel == 0x0A:
-            self.sample_hours_reg()
-            return self.cart_regs[0xA00A]
-        if sel == 0x0B or sel == 0x0C:
-            self.sample_days()
-            return self.cart_regs[0xA000 + sel]
+        return self.cart_regs[0xA000 + sel]
 
     def handle_RTC_write(self, sel, value):
-        self.update_seconds()
-        reg = self.cart_regs[0xA008]
-        diff = value - reg
-        if sel == 0x08:
-            self.seconds += diff
-        if sel == 0x09:
-            self.seconds += diff * 60
-        if sel == 0x0A:
-            self.seconds += diff * 3600
-        if sel == 0x0B or sel == 0x0C:
-            self.seconds += diff * 86400
-
-        reg.set_val(value)
+        if not self.RTC_halted():
+            if sel == 0x0C:
+               self.cart_regs[0xA00C] = value
+            return
+        elif sel == 0x08:
+            value %= 60
+            self.seconds = value
+        elif sel == 0x09:
+            value %= 60
+            self.minutes = value
+        elif sel == 0x0A:
+            value %= 24
+            self.hours = value
+        elif sel == 0x0B:
+            value &= 0xFF
+            self.days = value
+        elif sel == 0x0C:
+            self.days = value >> 8 * (1 << 8)
+        
+    def RTC_halted(self):
+        dh = self.cart_regs[0xA00C]
+        return dh >> 6 & 1
 
     def read(self, address, rom: bool):
         if rom:
@@ -320,7 +333,7 @@ class MBC3(MBC):
 
         if self.RTC_read_enabled:
             self.handle_RTC_write(sel, value)
-         # if RTC isn't enabled, write nothing
+        # if RTC isn't enabled, write nothing
 
 
 class MBC5(MBC):
@@ -330,7 +343,7 @@ class MBC5(MBC):
             0x2000: 0,  # RAM EN
             0x3000: 1,  # ROM 8
             0x4000: 0,  # ROM 9
-            0x6000: 0  # RAM BANK NUM
+            0x6000: 0,  # RAM BANK NUM
         }
 
     def handle_rom_write(self, address, value):
@@ -347,28 +360,25 @@ class MBC5(MBC):
             self.cart_regs[0x6000] = (value) & 0xF
 
     def handle_ram_write(self, address, value):
-        offset = address & 0x1fff
+        offset = address & 0x1FFF
         bank_num = (self.cart_regs[0x6000]) % self.cart.ram_banks
         switched_addr = bank_num * 0x2000 + offset
-        self.memctl.ext_ram.array[
-            switched_addr] = value
+        self.memctl.ext_ram.array[switched_addr] = value
 
     def handle_rom_read(self, address):
         bank_i = address >> 14 & 1
         if not bank_i:
             return self.memctl.rom.array[address]
         # banked rom read starts here
-        offset = address & 0x3fff
+        offset = address & 0x3FFF
         bank_num = (self.cart_regs[0x4000] << 8) | self.cart_regs[0x3000]
         bank_num %= self.cart.rom_banks
-        return self.memctl.rom.array[
-            bank_num * 0x4000 + offset]
+        return self.memctl.rom.array[bank_num * 0x4000 + offset]
 
     def handle_ram_read(self, address):
-        offset = address & 0x1fff
+        offset = address & 0x1FFF
         bank_num = (self.cart_regs[0x6000]) % self.cart.ram_banks
-        return self.memctl.ext_ram.array[
-            bank_num * 0x2000 + offset]
+        return self.memctl.ext_ram.array[bank_num * 0x2000 + offset]
 
     def read(self, address, rom: bool):
         if rom:
@@ -383,3 +393,4 @@ class MBC5(MBC):
 
         # ram write starts here
         self.handle_ram_write(address, value)
+
