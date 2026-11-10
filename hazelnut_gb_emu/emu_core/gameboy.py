@@ -206,7 +206,7 @@ class Gameboy:
 
     def frame_end(self):
         # ensure framerate is 60
-        self.pyclock.tick(59)
+        self.pyclock.tick(60)
         #
         self.PPU.enter_VBLANK()
 
@@ -354,7 +354,7 @@ class GameboyColor(Gameboy):
             self.tick_timers(ins_cycles)
             self.handle_serial(ins_cycles)
             cycles_passed += ins_cycles
-            # if self.SM83_processor.PC > 0x6000 and not self.memctl.boot_enabled:
+            # if self.SM83_processor.PC > 0x2000 and not self.memctl.boot_enabled:
             #     log = str(ins) +  str(self.SM83_processor.state_snap())
             #     logging_file.write(log + "\n")
             if self.SM83_processor.HALT:
