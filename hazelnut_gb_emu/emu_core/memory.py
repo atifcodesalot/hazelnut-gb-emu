@@ -290,6 +290,44 @@ class GBMemoryController:
         # --- IE (FFFF) ---
         return self.io_registers[0xFFFF]
 
+    def handle_io_write(self, a, v):
+        # Boot ROM disable register (FF50)
+        if a == 0xFF50:
+            # Any nonzero write disables boot ROM
+            self.disable_boot_rom()
+            
+        # STAT register write
+        if a == 0xFF41:
+            STAT = self.io_registers[0xFF41]
+            # preserve readonly 3 bits
+            self.io_registers[0xFF41] = v & 0xF8 | STAT & 7
+
+        elif a == 0xFF45:
+            self.io_registers[0xFF45] = v
+            self.gameboy.PPU.handle_LY_compare()
+
+        elif a == 0xFF46:
+            self.io_registers[a] = v
+            self.gameboy.start_OAM_DMA()
+
+        elif a == 0xFF00:
+            # joyp write
+            self.io_registers[0xFF00] = 0xC0 | (v & 0x30) | 0x0F
+
+        elif a == 0xFF04:
+            # div is always reset so no argument
+            self.handle_DIV_write()
+
+        elif a == 0xFF07:
+            self.handle_TAC_write(v)
+
+        elif a not in self.io_registers:
+            # unimplemented/unused IO, ignore
+            return
+        else:
+            # default case
+            self.io_registers[a] = v
+
     def write_to(self, loc: int, byte: int) -> None:
         a = loc
         v = byte & 0xFF  # always clamp to 8-bit
@@ -321,7 +359,7 @@ class GBMemoryController:
             return
 
         # --- Echo RAM (E000-FDFF) ---
-        if a < 0xFE00:  
+        if a < 0xFE00:
             # mirror to C000-DDFF region
             self.ram.write_to(a - 0xE000, v)
             return
@@ -337,42 +375,7 @@ class GBMemoryController:
 
         # --- IO (FF00-FF7F) ---
         if a < 0xFF80:
-            # Boot ROM disable register (FF50)
-            if a == 0xFF50:
-                # Any nonzero write disables boot ROM
-                self.disable_boot_rom()
-                return
-
-            if a == 0xFF45:
-                self.io_registers[0xFF45] = v
-                self.gameboy.PPU.handle_LY_compare()
-                return
-
-            if a == 0xFF46:
-                self.io_registers[a] = v
-                self.gameboy.start_OAM_DMA()
-                return
-
-            if a == 0xFF00:
-                # joyp write
-                self.io_registers[0xFF00] = 0xC0 | (v & 0x30) | 0x0F
-                return
-
-            if a == 0xFF04:
-                # div is always reset so no argument
-                self.handle_DIV_write()
-                return
-
-            if a == 0xFF07:
-                self.handle_TAC_write(v)
-                return
-
-            if a not in self.io_registers:
-                # unimplemented/unused IO, ignore
-                return
-
-            self.io_registers[a] = v
-            return
+            return self.handle_io_write(a, v)
 
         # --- HRAM (FF80-FFFE) ---
         if a < 0xFFFF:
@@ -574,6 +577,73 @@ class CgbMemoryController(GBMemoryController):
         # --- IE (FFFF) ---
         return self.io_registers[0xFFFF]
 
+    def handle_io_write(self, a, v):
+        if a == 0xFF70:
+            self.io_registers[0xFF70] = v
+            # update wram bank
+            # 0 writes also point to bank 1
+            self.ram_bank = v & 7 if v & 7 != 0 else 1
+
+        elif a == 0xFF6B:
+            # obj palette data write
+            self.io_registers[0xFF6B] = v
+            obpi = self.io_registers[0xFF6A]
+            self.obj_palette_ram.write_to(obpi & 0x3F, v)
+            # auto increment
+            self.io_registers[0xFF6A] = (
+                obpi & 0x80 | ((obpi & 0x7F) + (obpi >> 7 & 1))
+            ) & 0xFF
+
+        elif a == 0xFF69:
+            # bg palette data write
+            self.io_registers[0xFF69] = v
+            bgpi = self.io_registers[0xFF68]
+            self.bg_palette_ram.write_to(bgpi & 0x3F, v)
+            # auto increment
+            self.io_registers[0xFF68] = (
+                bgpi & 0x80 | ((bgpi & 0x7F) + (bgpi >> 7 & 1))
+            ) & 0xFF
+
+        elif a == 0xFF55:
+            if self.gameboy.HBLANK_DMA and (v >> 7 & 1) == 0:
+                self.gameboy.HBLANK_DMA = False
+                self.io_registers[0xFF55] |= 0x80
+            else:
+                self.io_registers[0xFF55] = v
+                self.gameboy.start_HDMA()
+
+        # hdma src hi
+        elif a == 0xFF51:
+            self.io_registers[a] = v
+            self.hdma_src = (v << 8) | (self.hdma_src & 0x00FF)
+        # hdma src low
+        elif a == 0xFF52:
+            self.io_registers[a] = v
+            self.hdma_src = (self.hdma_src & 0xFF00) | (v & 0xF0)
+
+        # hdma dest hi
+        elif a == 0xFF53:
+            temp = (v << 8) | (self.hdma_dest & 0x00FF)
+            self.hdma_dest = ((temp & 0x1FFF) >> 4) << 4
+
+        # hdma dest low
+        elif a == 0xFF54:
+            temp = (self.hdma_dest & 0xFF00) | v
+            self.hdma_dest = ((temp & 0x1FFF) >> 4) << 4
+        elif a == 0xFF4C:
+            # compatibility register
+            self.io_registers[a] = v
+            if v >> 2 & 1:
+                self.gameboy.start_DMG_compat_mode()
+
+        elif a == 0xFF4F:
+            self.io_registers[a] = v
+            # update wram bank
+            self.vram_bank = v & 1
+
+        else:
+            GBMemoryController.handle_io_write(self, a, v)
+
     def write_to(self, loc: int, byte: int) -> None:
         if self.DMG_compat and not self.boot_enabled:
             return GBMemoryController.write_to(self, loc, byte)
@@ -628,113 +698,7 @@ class CgbMemoryController(GBMemoryController):
 
         # --- IO (FF00-FF7F) ---
         if a < 0xFF80:
-            # Boot ROM disable register (FF50)
-            if a == 0xFF70:
-                self.io_registers[0xFF70] = v
-                # update wram bank
-                # 0 writes also point to bank 1
-                self.ram_bank = v & 7 if v & 7 != 0 else 1
-
-            if a == 0xFF6B:
-                # obj palette data write
-                self.io_registers[0xFF6B] = v
-                obpi = self.io_registers[0xFF6A]
-                self.obj_palette_ram.write_to(obpi & 0x3F, v)
-                # auto increment
-                self.io_registers[0xFF6A] = (
-                    obpi & 0x80 | ((obpi & 0x7F) + (obpi >> 7 & 1))
-                ) & 0xFF
-
-            if a == 0xFF6A:
-                # obj palette inxex data write
-                self.io_registers[0xFF6A] = v
-
-            if a == 0xFF69:
-                # bg palette data write
-                self.io_registers[0xFF69] = v
-                bgpi = self.io_registers[0xFF68]
-                self.bg_palette_ram.write_to(bgpi & 0x3F, v)
-                # auto increment
-                self.io_registers[0xFF68] = (
-                    bgpi & 0x80 | ((bgpi & 0x7F) + (bgpi >> 7 & 1))
-                ) & 0xFF
-
-            if a == 0xFF68:
-                # bg palette inxex data write
-                self.io_registers[0xFF68] = v
-
-            if a == 0xFF55:
-                if self.gameboy.HBLANK_DMA and (v >> 7 & 1) == 0:
-                    self.gameboy.HBLANK_DMA = False
-                    self.io_registers[0xFF55] |= 0x80
-                else:
-                    self.io_registers[0xFF55] = v
-                    self.gameboy.start_HDMA()
-                return
-
-            # hdma src hi
-            if a == 0xFF51:
-                self.hdma_src = (v << 8) | (self.hdma_src & 0x00FF)
-            # hdma src low
-            if a == 0xFF52:
-                self.hdma_src = (self.hdma_src & 0xFF00) | (v & 0xF0)
-
-            # hdma dest hi
-            if a == 0xFF53:
-                temp = (v << 8) | (self.hdma_dest & 0x00FF)
-                self.hdma_dest = ((temp & 0x1FFF) >> 4) << 4
-
-            # hdma dest low
-            if a == 0xFF54:
-                temp = (self.hdma_dest & 0xFF00) | v
-                self.hdma_dest = ((temp & 0x1FFF) >> 4) << 4
-
-            if a == 0xFF50:
-                # Any nonzero write disables boot ROM
-                self.disable_boot_rom()
-                return
-
-            if a == 0xFF45:
-                self.io_registers[0xFF45] = v
-                self.gameboy.PPU.handle_LY_compare()
-                return
-
-            if a == 0xFF46:
-                self.io_registers[a] = v
-                self.gameboy.start_OAM_DMA()
-                return
-
-            if a == 0xFF4C:
-                # compatibility register
-                self.io_registers[a] = v
-                if v >> 2 & 1:
-                    self.gameboy.start_DMG_compat_mode()
-
-            if a == 0xFF4F:
-                self.io_registers[a] = v
-                # update wram bank
-                self.vram_bank = v & 1
-
-            if a == 0xFF00:
-                # joyp write
-                self.io_registers[0xFF00] = 0xC0 | (v & 0x30) | 0x0F
-                return
-
-            if a == 0xFF04:
-                # div is always reset so no argument
-                self.handle_DIV_write()
-                return
-
-            if a == 0xFF07:
-                self.handle_TAC_write(v)
-                return
-
-            if a not in self.io_registers:
-                # unimplemented/unused IO, ignore
-                return
-
-            self.io_registers[a] = v
-            return
+            return self.handle_io_write(a, v)
 
         # --- HRAM (FF80-FFFE) ---
         if a < 0xFFFF:
