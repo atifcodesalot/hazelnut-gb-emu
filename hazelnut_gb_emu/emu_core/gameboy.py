@@ -281,17 +281,11 @@ class GameboyColor(Gameboy):
 
     def start_GPDMA(self, hdmactl):
         m = self.memctl
-        
+
         # in bytes
         blocks = (hdmactl & 0x7F) + 1
         copylen = blocks * 16
-        # print(
-        #     f"SRC={m.hdma_src:04X} "
-        #     f"DST={m.hdma_dest:04X} "
-        #     f"VBK={m.vram_bank} "
-        #     f"BLOCKS={blocks}"
-        # )
-        
+
         vramstart = 0x2000 * m.vram_bank + m.hdma_dest
         chunk = m.get_block_at(m.hdma_src, copylen)
         self.memctl.vram.array[vramstart : vramstart + copylen] = chunk
@@ -336,7 +330,6 @@ class GameboyColor(Gameboy):
         if self.DMG_compat:
             return super().CPU_burst(clock_cycles)
 
-        # logging_file = open("cpu_log.txt", "a")
         if self.switcing_mode:
             if clock_cycles >= self.switch_cycles:
                 clock_cycles -= self.switch_cycles
@@ -349,13 +342,18 @@ class GameboyColor(Gameboy):
                 self.handle_halt_burst(clock_cycles)
                 return
         cycles_passed = 0
+        # logging_file = open("cpu_log.txt", "a")
         while cycles_passed < clock_cycles:
             ins, ins_cycles = self.SM83_processor.tick_one_ins(self)
             self.tick_timers(ins_cycles)
             self.handle_serial(ins_cycles)
             cycles_passed += ins_cycles
-            # if self.SM83_processor.PC > 0x2000 and not self.memctl.boot_enabled:
-            #     log = str(ins) +  str(self.SM83_processor.state_snap())
+            # if (
+            #     not self.memctl.boot_enabled
+                
+            # ):
+                
+            #     log = str(ins) + str(self.SM83_processor.state_snap())
             #     logging_file.write(log + "\n")
             if self.SM83_processor.HALT:
                 remaining = clock_cycles - cycles_passed
@@ -371,7 +369,7 @@ class GameboyColor(Gameboy):
                 self.handle_OAM_DMA(ins_cycles)
         # get debt
         self.cpu_debt = cycles_passed - clock_cycles
-        
+
     def tick_PPU_modes_basis(self):
         return super().tick_PPU_modes_basis(456 << self.speed_mode)
 
