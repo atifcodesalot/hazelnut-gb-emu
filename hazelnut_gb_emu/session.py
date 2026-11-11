@@ -178,6 +178,7 @@ class SessionController:
 
     def __init__(self, gbscaler=1, color=False):
         self.init_gameboy(color=color)
+        self.color = color
         self.init_cart()
         self.game_name = self.cartridge.title
         self.check_implementations(
@@ -317,14 +318,15 @@ class SessionController:
                     self.handle_gb_input_event(event)
         self.end()
 
-    @staticmethod
-    def get_rom_file():
+    def get_rom_file(self):
         filetypes = [
             ("Gameboy files", "*.gb .GB"),
-            ("Gameboy color files", "*.gbc .GBC"),
             ("ROM files", "*.rom"),
             ("Binary files,", "*.bin"),
         ]
+        if self.color:
+            filetypes[0] = ("Gameboy (color) files", "*.gbc *.gb")
+            
         title = "Choose a ROM file"
         dir_ = "."
 
