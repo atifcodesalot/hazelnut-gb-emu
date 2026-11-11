@@ -112,7 +112,6 @@ AI was instead used extensively, only for; bug hunting, disassembly and optimiza
 ### GameBoy Color
 - FIFA 2000 unplayable due to STAT line boundaries
 - Pokemon Puzzle Challenge crashing after mode selection 
-- Tomb Raider unplayable due to unknown reasons (likely due to double speed mode as well)
 
 
 ### GameBoy
