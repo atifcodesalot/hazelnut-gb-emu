@@ -58,14 +58,20 @@ On the repo root directory:
 Unix (Darwin or Linux):
 ```python3 -m hazelnut_gb_emu```
 
+If you want to play gameboy color:
+```python3 -m hazelnut_gb_emu --color```
+
 Windows:
 
 ```py -m hazelnut_gb_emu```
 
-First choose if you want to play Gameboy Color or gameboy by providing a `--color` or `-cgb` flag 
-in the command line, or not if you want to play Gameboy only. Note: The gameboy color is backwards compatible with the gameboy roms as well.
-Then choose if you want to download and use PyPy, by pressing y or n then enter,
-afterwards choose a ROM file to play, simple.
+Once again if you want to play GBC:
+```py -m hazelnut_gb_emu --color```
+
+After you choose if you want to play Gameboy Color or gameboy by providing a `--color` or `--cgb` flag 
+in the command line,  (Note: The gameboy color is backwards compatible with the gameboy roms as well.)
+you can then choose if you want to download and use PyPy, by pressing y or n then enter,
+afterwards choose a ROM file to play, simple enough!
 
 
 ## Info on the emulator, disclaimers
@@ -87,7 +93,7 @@ the emulator truly instruction stepped in the future so this issue will (hopeful
 ### General Disclaimers
 - As mentioned, this emulator is currently not clock or machine cycle accurate: it does not emulate GameBoy hardware in full accuraccy.
 It is instead instruction stepped, due to this, you will experience bugs every now and then (expecially for GBC).
-- It is functional enough to run almost all commercial games for the Gameboy, but GAmeBoy Color is not as stable due to the reasons mentioned above.
+- It is functional enough to run almost all commercial games for the Gameboy, but GameBoy Color is not as stable due to the reasons mentioned above.
 - MBC1, MBC2, MBC3 (with RTC registers) and MBC5 are implemented for bank switching (MBC6, MBC7 is next :yum:).
 - It may run slower than the actual gameboy with [CPython](https://en.wikipedia.org/wiki/CPython) (60 fps normally), except if you use PyPy, then it can run x8 with ease.
 - The APU unit is in development, hence no sound yet.
