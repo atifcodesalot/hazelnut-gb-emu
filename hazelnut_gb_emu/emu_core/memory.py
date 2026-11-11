@@ -642,6 +642,9 @@ class CgbMemoryController(GBMemoryController):
             self.io_registers[a] = v
             # update wram bank
             self.vram_bank = v & 1
+            
+        elif a == 0xFF26:
+            return 0x70 | (self.io_registers[0xFF26] & 0x80)
 
         else:
             GBMemoryController.handle_io_write(self, a, v)
