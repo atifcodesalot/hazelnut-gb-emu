@@ -12,9 +12,10 @@ Hazelnut is a [Game Boy](https://en.wikipedia.org/wiki/Game_Boy) and [Game Boy C
 
 <img width="178" height="325" alt="metroid" src="https://github.com/user-attachments/assets/031d25ea-364b-405c-940d-695df845fcbd" />
 <img width="181" height="320" alt="wario" src="https://github.com/user-attachments/assets/b5fd3a24-bde3-4681-a21f-e45fcfd8afc3" />
+
 <img width="332" height="620" alt="hellokitty" src="https://github.com/user-attachments/assets/0aa6f3b4-c4d6-46a5-bb7d-dc6ec0a9d4bc" />
 <img width="332" height="620" alt="gameandwatch" src="https://github.com/user-attachments/assets/8ae59d4f-f114-4e2d-ae8c-76363a5657b9" />
-<img width="332" height="620" alt="Ekran görüntüsü 2026-11-11 211438" src="https://github.com/user-attachments/assets/4c2cb776-6c59-4400-8981-cd7952a77afa" />
+<img width="332" height="620" alt="worms" src="https://github.com/user-attachments/assets/4c2cb776-6c59-4400-8981-cd7952a77afa" />
 
 
 
