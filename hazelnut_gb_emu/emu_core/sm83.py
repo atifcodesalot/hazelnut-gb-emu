@@ -172,6 +172,8 @@ class SM83(CPU):
             (m, getattr(self, f"exe_INS_{m}")) for m in MNEMONICS
         )
 
+        self.STOP_EXED = False
+
     def set_flags_fast(self, Z=None, N=None, H=None, C=None, IME=None):
         if Z is not None:
             self.flags[0] = Z
@@ -653,6 +655,7 @@ class SM83(CPU):
         self.HALT = True
 
     def exe_INS_STOP(self, ins):
+        self.STOP_EXED = True
         logger.debug("STOP instruction executed.")
         pass
 
@@ -928,17 +931,27 @@ class SM83(CPU):
             self.set_register(regname, 0)
 
         self.set_flags_fast(Z=0, N=0, H=0, C=0, IME=0)
-        
+
         self.HALT = False
-        
+
     def state_snap(self):
         state_dict = {
             "PC": self.PC,
             "SP": self.SP.value,
-            "registers": {regname: self.get_register(regname) for regname in self.register_names},
+            "registers": {
+                regname: self.get_register(regname) for regname in self.register_names
+            },
             "flags": self.flags.copy(),
             "HALT": self.HALT,
             "pending_interrupt_enable": self.pending_interrupt_enable,
             "enable_interrupts_now": self.enable_interrupts_now,
         }
         return state_dict
+
+
+class CgbSM83(SM83):
+    def __init__(self, memory):
+        super().__init__(memory)
+        self.double = 0
+        self.STOP_EXED = False
+        self.gameboy = self.memory.gameboy
