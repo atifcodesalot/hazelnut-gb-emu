@@ -162,13 +162,13 @@ def install_packages(pypy):
         ], check=True)
 
 
-def rerun(pypy):
+def rerun(pypy, *flags):
     subprocess.run([
-        pypy, "-m", "hazelnut_gb_emu"
+        pypy, "-m", "hazelnut_gb_emu", *flags
     ], check=True)
 
 
-def try_pypy():
+def try_pypy(*flags):
     installed = False
     if os.path.exists(".runtime"):
         # runtime path exists
@@ -179,7 +179,8 @@ def try_pypy():
         logging.info("Using the PYPY runtime is highly recommended.")
         logging.info(INPUT)
         inp = input()
-        if inp.strip().lower() in ["y", "yes", "ya", "yeah", "yy", "yyy"]:
+        acceptable_yes = ["y", "yes", "ya", "yeah", "yy", "yyy", "ja", "yyyy", "ye"]
+        if inp.strip().lower() in acceptable_yes:
             if install_pypy():
                 pypy = find_pypy3()
                 install_packages(pypy)
@@ -190,5 +191,5 @@ def try_pypy():
 
     logging.info("You have PyPy installed, using it.")
     install_packages(pypy)
-    rerun(pypy)
+    rerun(pypy, *flags)
     exit()

@@ -87,6 +87,13 @@ class ByteOperator:
     @classmethod
     def res_nth_bit(cls, byte, n):
         return byte & (0xFF - (1 << n))
+    
+    @classmethod
+    def put_nth_bit(cls, byte, n, bit):
+        if bit:
+            return cls.set_nth_bit(byte, n)
+        else:
+            return cls.res_nth_bit(byte, n)
 
     @classmethod
     def swap_nibbles(cls, byte):

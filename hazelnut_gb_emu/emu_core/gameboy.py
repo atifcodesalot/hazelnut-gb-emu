@@ -4,6 +4,7 @@ from .memory import *
 from .cartridge import Cartridge
 from .auxiliary import BO
 
+import time
 
 pyclock = pygame.time.Clock()
 
@@ -15,19 +16,22 @@ pyclock = pygame.time.Clock()
 # Real input to Joypad handling, pygame display etc.
 #
 
+
 class Gameboy:
     def __init__(self):
         self.screen = None
         self.input_state = 255
-        self.TIMA_hertz = [256*4, 16, 64, 256]
-        self.memctl = GBMemoryController(
-            self, ext_ram=False)
+        self.TIMA_hertz = [256 * 4, 16, 64, 256]
+        self.memctl = GBMemoryController(self, ext_ram=False)
         self.SM83_processor = SM83(self.memctl)
         self.PPU = GbPPU(self.memctl)
         # 16 bit internal divider register value
         self.cycles = 0
         #
-        self.DMA = False
+
+        # OAM DMA flag
+        self.OAM_DMA = False
+        self.OAM_DMA_timer = 0
 
         self.debug = False
         self.running = True
@@ -48,15 +52,22 @@ class Gameboy:
             self.awake()
             return True
 
+    def handle_halt_burst(self, clock_cycles):
+        self.tick_timers(clock_cycles)
+        self.handle_serial(clock_cycles)
+        if self.OAM_DMA:
+            self.handle_OAM_DMA(clock_cycles)
+        self.cpu_debt = 0
+
     def tick_timers(self, dots):
         TAC = self.memctl.io_registers[0xFF07]
         TIMA_en = (TAC >> 2) & 1
         if TIMA_en:
             self.handle_TIMA(old_cycles=self.cycles, elapsed=dots)
-        self.cycles = (self.cycles + dots)
+        self.cycles = self.cycles + dots
         self.handle_DIV()
 
-    def CPU_APU_burst(self, clock_cycles):
+    def CPU_burst(self, clock_cycles):
         if self.SM83_processor.HALT:
             if not self.handle_cpu_halt():
                 self.tick_timers(clock_cycles)
@@ -64,8 +75,10 @@ class Gameboy:
                     self.APU.tick_cycles(clock_cycles)
                 return
         cycles_passed = 0
+        # normal cpu burst starts here
         while cycles_passed < clock_cycles:
             ins, ins_cycles = self.SM83_processor.tick_one_ins(self)
+
             self.tick_timers(ins_cycles)
             if self.APU.audio_on():
                 # print(self.APU.rbuffer2)
@@ -79,16 +92,28 @@ class Gameboy:
 
             if self.SM83_processor.HALT:
                 remaining = clock_cycles - cycles_passed
-                self.tick_timers(remaining)
-                self.handle_serial(remaining)
-                self.cpu_debt = 0
+                self.handle_halt_burst(remaining)
                 return
+
+            if self.OAM_DMA:
+                self.handle_OAM_DMA(ins_cycles)
 
         # get debt
         self.cpu_debt = cycles_passed - clock_cycles
 
     def handle_DIV(self):
-        self.memctl.io_registers[0xFF04] = (self.cycles >> 8) & 0xff
+        self.memctl.io_registers[0xFF04] = (self.cycles >> 8) & 0xFF
+
+    def handle_OAM_DMA(self, cycles):
+        old = self.OAM_DMA_timer
+        self.OAM_DMA_timer += cycles
+        # OAM edge
+        if old >> 2 != self.OAM_DMA_timer >> 2:
+            edges = (self.OAM_DMA_timer - old) >> 2
+            for _ in range(edges):
+                if not self.OAM_DMA:
+                    break
+                self.memctl.OAM_DMA_copy()
 
     def handle_TIMA(self, old_cycles, elapsed):
         TAC = self.memctl.io_registers[0xFF07]
@@ -113,7 +138,7 @@ class Gameboy:
         SB = self.memctl.io_registers[0xFF01]
         send_bit = SB >> 7 & 1
         self.send_serial_bit(send_bit)
-        SB = (SB << 1) & 0x7f
+        SB = (SB << 1) & 0x7F
         recvd = self.get_serial_bit()
         SB = ((SB << 1) & 0xFF) | recvd
         self.memctl.io_registers[0xFF01] = SB
@@ -135,43 +160,47 @@ class Gameboy:
     def get_serial_bit(self):
         return 1
 
-    def start_DMA(self):
-        # logger.debug("starting DMA...")
+    def start_OAM_DMA(self):
+        # logger.debug("starting OAM DMA...")
         m = self.memctl
-        self.DMA = True
-        source = (m.io_registers[0xFF46]) * 0x100
-        # copy 160 bytes to OAM
-        for i in range(0xA0):
-            m.OAM[i] = m.read_at(source + i)
-        # takes 640 dots
-        self.tick_timers(640)
-        # logger.debug("ending DMA...")
-        # logger.debug(f"OAM:{self.memctl.OAM}")
+        self.OAM_DMA = True
+        self.OAM_DMA_timer = 0
+        m.OAM_DMA_src = (m.io_registers[0xFF46]) * 0x100
+        m.OAM_DMA_counter = 0
+
+        # start with phase 1
+        m.OAM_DMA_copy()
+
+    def OAM_DMA_end(self):
+        self.OAM_DMA = False
+        self.memctl.OAM_DMA_src = None
+        self.memctl.OAM_DMA_counter = 0
+        self.OAM_DMA_timer = 0
 
     def scanline_PPU_modes(self):
         # timer tick are inside cpu burst calls
         self.PPU.OAM_scan(self.PPU.get_context())
-        self.CPU_APU_burst(80 - self.cpu_debt)
+        self.CPU_burst(80 - self.cpu_debt)
         # recall because CPU burst may change the context
         self.PPU.drawing_mode(self.PPU.get_context())
-        self.CPU_APU_burst(172 - self.cpu_debt)
+        self.CPU_burst(172 - self.cpu_debt)
         self.PPU.HBLANK_mode()
-        self.CPU_APU_burst(204 - self.cpu_debt)
+        self.CPU_burst(204 - self.cpu_debt)
 
-    def tick_PPU_modes_basis(self):
+    def tick_PPU_modes_basis(self, vblank_dots=456):
         lcdc = self.memctl.io_registers[0xFF40]
 
         # clear the lcd if PPU is disabled
         if not lcdc >> 7 & 1:
             self.PPU.disable()
-            self.CPU_APU_burst(456)
+            self.CPU_burst(vblank_dots)
             return
 
         ly = self.memctl.io_registers[0xFF44]
 
         if self.PPU.is_VBLANK_scan(ly):
             # cpu burst then inc ly and handle lyc compare
-            self.CPU_APU_burst(456)
+            self.CPU_burst(vblank_dots)
             self.PPU.handle_VBLANK()
             return
 
@@ -182,10 +211,13 @@ class Gameboy:
 
         # if just finished the last visible scanline
         if ly == GB_LCD_RES[1] - 1:
-            # ensure framerate is 60
-            self.pyclock.tick(59)
-            #
-            self.PPU.enter_VBLANK()
+            self.frame_end()
+
+    def frame_end(self):
+        # ensure framerate is 60
+        self.pyclock.tick(60)
+        #
+        self.PPU.enter_VBLANK()
 
     def powerup(self):
         self.SM83_processor.PC = 0x0
@@ -196,9 +228,198 @@ class Gameboy:
         self.tick_PPU_modes_basis()
 
     def insert_cartridge(self, cartridge: Cartridge):
+        self.memctl.configure_bank_switching(cartridge)
         self.memctl.rom.burn_from(cartridge=cartridge)
 
     def interrupt_pending(self):
         _if = self.memctl.io_registers[0xFF0F]
         ie = self.memctl.io_registers[0xFFFF]
         return _if & ie
+
+    def reset(self):
+        self.SM83_processor.reset()
+        self.memctl.reset()
+        self.PPU.reset()
+
+        self.input_state = 255
+
+        self.cpu_debt = 0
+        self.serial_timer = 0
+
+        self.cycles = 0
+
+
+class GameboyColor(Gameboy):
+    SWITCH_CYCLES = 8200
+
+    def __init__(self):
+        super().__init__()
+        self.speed_mode = 0
+        # update components
+        self.memctl = CgbMemoryController(self, ext_ram=False)
+        self.PPU = CgbPPU(self.memctl)
+        self.SM83_processor = CgbSM83(self.memctl)
+        #
+        self.switcing_mode = False
+        self.switch_cycles = None
+
+        self.HBLANK_DMA = False
+        self.HBLANK_DMA_cost = None
+
+        self.DMG_compat = False
+
+    def start_HDMA(self):
+        # clear bit 7 to indicate ongoing transfer
+        self.memctl.io_registers[0xFF55] &= 0x7F
+        hdmactl = self.memctl.io_registers[0xFF55]
+        mode = hdmactl >> 7 & 1
+        if not mode:
+            # General purpose DMA
+            self.start_GPDMA(hdmactl)
+        else:
+            self.start_HBLANK_DMA(hdmactl)
+
+    def start_HBLANK_DMA(self):
+        self.HBLANK_DMA = True
+
+    def handle_HBLANK_DMA(self):
+        m = self.memctl
+        m.HDMA_copy()
+        if self.memctl.io_registers[0xFF55] == 0xFF:
+            self.HBLANK_DMA = False
+
+    def start_GPDMA(self, hdmactl):
+        m = self.memctl
+
+        # in bytes
+        blocks = (hdmactl & 0x7F) + 1
+        copylen = blocks * 16
+
+        vramstart = 0x2000 * m.vram_bank + m.hdma_dest
+        chunk = m.get_block_at(m.hdma_src, copylen)
+        self.memctl.vram.array[vramstart : vramstart + copylen] = chunk
+        # tick timers
+        DMA_time = blocks * (32 << self.speed_mode)
+        self.tick_timers(DMA_time)
+        self.GPDMA_end(transfer=blocks)
+
+    def GPDMA_end(self, transfer):
+        m = self.memctl
+        m.io_registers[0xFF55] = 0xFF
+        # update memctl internal counters
+        m.hdma_src = (m.hdma_src + 0x10 * transfer) & 0xFFFF
+        m.hdma_dest = (m.hdma_dest + 0x10 * transfer) & 0x1FFF
+
+    def check_speed_switch(self) -> bool:
+        spdkey1 = self.memctl.io_registers[0xFF4D]
+        armed = spdkey1 & 1
+        # if the "switch" is armed
+        # and the CPU executed a stop,
+        # overwrite the current mode
+        if armed and self.SM83_processor.STOP_EXED:
+            self.switch_mode_start(spdkey1)
+        return armed
+
+    def switch_mode_start(self, spdkey1):
+        self.SM83_processor.STOP_EXED = False
+        self.switcing_mode = True
+        self.switch_cycles = self.SWITCH_CYCLES
+        # disarm the switch
+        self.memctl.io_registers[0xFF4D] &= BO.res_nth_bit(spdkey1, 0)
+
+    def switch_mode_end(self):
+        # toggle speed mode
+        self.speed_mode ^= 1
+        spdkey1 = self.memctl.io_registers[0xFF4D]
+        self.memctl.io_registers[0xFF4D] = BO.put_nth_bit(spdkey1, 7, self.speed_mode)
+        self.switcing_mode = False
+        self.switch_cycles = 0
+
+    def CPU_burst(self, clock_cycles):
+        if self.DMG_compat:
+            return super().CPU_burst(clock_cycles)
+
+        if self.switcing_mode:
+            if clock_cycles >= self.switch_cycles:
+                clock_cycles -= self.switch_cycles
+                self.switch_mode_end()
+            else:
+                self.switch_cycles -= clock_cycles
+                return
+        if self.SM83_processor.HALT:
+            if not self.handle_cpu_halt():
+                self.handle_halt_burst(clock_cycles)
+                return
+        cycles_passed = 0
+        # logging_file = open("cpu_log.txt", "a")
+        while cycles_passed < clock_cycles:
+            ins, ins_cycles = self.SM83_processor.tick_one_ins(self)
+            self.tick_timers(ins_cycles)
+            self.handle_serial(ins_cycles)
+            cycles_passed += ins_cycles
+            # if (
+            #     not self.memctl.boot_enabled
+                
+            # ):
+                
+            #     log = str(ins) + str(self.SM83_processor.state_snap())
+            #     logging_file.write(log + "\n")
+            if self.SM83_processor.HALT:
+                remaining = clock_cycles - cycles_passed
+                self.handle_halt_burst(remaining)
+                return
+            elif self.SM83_processor.STOP_EXED:
+                remaining = clock_cycles - cycles_passed
+                if self.check_speed_switch():
+                    self.switch_cycles -= remaining
+                    self.cpu_debt = 0
+                    return
+            if self.OAM_DMA:
+                self.handle_OAM_DMA(ins_cycles)
+        # get debt
+        self.cpu_debt = cycles_passed - clock_cycles
+
+    def tick_PPU_modes_basis(self):
+        return super().tick_PPU_modes_basis(456 << self.speed_mode)
+
+    def scanline_PPU_modes(self):
+        if self.DMG_compat:
+            return super().scanline_PPU_modes()
+        # double ticks fed into the CPU if double mode
+        self.PPU.OAM_scan(self.PPU.get_context())
+        self.CPU_burst((80 << self.speed_mode) - self.cpu_debt)
+        self.PPU.drawing_mode(self.PPU.get_context())
+        self.CPU_burst((172 << self.speed_mode) - self.cpu_debt)
+        self.PPU.HBLANK_mode()
+        if self.HBLANK_DMA:
+            self.handle_HBLANK_DMA()
+            # the cpu sleeps 34 or 68 clock cycles if hblank DMA happens
+            DMA_time = 204 - (32 << self.speed_mode)
+            self.tick_timers(DMA_time)
+            hblank_cpu_burst = (204 - DMA_time) << self.speed_mode
+        else:
+            hblank_cpu_burst = 204 << self.speed_mode
+        self.CPU_burst(hblank_cpu_burst - self.cpu_debt)
+
+    def frame_end(self):
+        super().frame_end()
+        self.PPU.flip()
+
+    def start_DMG_compat_mode(self):
+        logger.info("now running on DMG compatibility mode.")
+        self.DMG_compat = True
+        self.PPU.DMG_compat = True
+        self.memctl.DMG_compat = True
+
+    def reset(self):
+        super().reset()
+
+        self.speed_mode = 0
+        self.switcing_mode = False
+        self.switch_cycles = None
+        self.HBLANK_DMA = False
+        self.HBLANK_DMA_cost = None
+
+        self.DMG_compat = False
+        self.PPU.DMG_compat = False
+        self.memctl.DMG_compat = False
