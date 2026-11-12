@@ -3,6 +3,7 @@ from .PPU import *
 from .memory import *
 from .cartridge import Cartridge
 from .auxiliary import BO
+from .sound import *
 
 import time
 
@@ -25,6 +26,7 @@ class Gameboy:
         self.memctl = GBMemoryController(self, ext_ram=False)
         self.SM83_processor = SM83(self.memctl)
         self.PPU = GbPPU(self.memctl)
+        self.APU = GbAPU(self.memctl)
         # 16 bit internal divider register value
         self.cycles = 0
         #
@@ -57,6 +59,8 @@ class Gameboy:
         self.handle_serial(clock_cycles)
         if self.OAM_DMA:
             self.handle_OAM_DMA(clock_cycles)
+        if self.APU.audio_on():
+            self.APU.tick_cycles(clock_cycles)
         self.cpu_debt = 0
 
     def tick_timers(self, dots):
@@ -67,27 +71,15 @@ class Gameboy:
         self.cycles = self.cycles + dots
         self.handle_DIV()
 
-    def CPU_burst(self, clock_cycles):
+    def CPU_APU_burst(self, clock_cycles):
         if self.SM83_processor.HALT:
             if not self.handle_cpu_halt():
-                self.tick_timers(clock_cycles)
-                if self.APU.audio_on():
-                    self.APU.tick_cycles(clock_cycles)
-                return
-        cycles_passed = 0
+                return self.handle_halt_burst(clock_cycles)
         # normal cpu burst starts here
+        cycles_passed = 0
         while cycles_passed < clock_cycles:
             ins, ins_cycles = self.SM83_processor.tick_one_ins(self)
-
             self.tick_timers(ins_cycles)
-            if self.APU.audio_on():
-                # print(self.APU.rbuffer2)
-                self.APU.tick_cycles(ins_cycles)
-            # if self.debug:
-            #     self.debug_state(ins, colorama=colorama)
-            #     if self.memctl.io_registers[0xFF0F].value != 0:
-            #         print(self.memctl.io_registers[0xFF0F])
-            #     print(self.memctl.io_registers[0xFF05].value)
             cycles_passed += ins_cycles
 
             if self.SM83_processor.HALT:
@@ -97,6 +89,9 @@ class Gameboy:
 
             if self.OAM_DMA:
                 self.handle_OAM_DMA(ins_cycles)
+                
+            if self.APU.audio_on():
+                self.APU.tick_cycles(ins_cycles)
 
         # get debt
         self.cpu_debt = cycles_passed - clock_cycles
@@ -180,12 +175,12 @@ class Gameboy:
     def scanline_PPU_modes(self):
         # timer tick are inside cpu burst calls
         self.PPU.OAM_scan(self.PPU.get_context())
-        self.CPU_burst(80 - self.cpu_debt)
+        self.CPU_APU_burst(80 - self.cpu_debt)
         # recall because CPU burst may change the context
         self.PPU.drawing_mode(self.PPU.get_context())
-        self.CPU_burst(172 - self.cpu_debt)
+        self.CPU_APU_burst(172 - self.cpu_debt)
         self.PPU.HBLANK_mode()
-        self.CPU_burst(204 - self.cpu_debt)
+        self.CPU_APU_burst(204 - self.cpu_debt)
 
     def tick_PPU_modes_basis(self, vblank_dots=456):
         lcdc = self.memctl.io_registers[0xFF40]
@@ -193,14 +188,14 @@ class Gameboy:
         # clear the lcd if PPU is disabled
         if not lcdc >> 7 & 1:
             self.PPU.disable()
-            self.CPU_burst(vblank_dots)
+            self.CPU_APU_burst(vblank_dots)
             return
 
         ly = self.memctl.io_registers[0xFF44]
 
         if self.PPU.is_VBLANK_scan(ly):
             # cpu burst then inc ly and handle lyc compare
-            self.CPU_burst(vblank_dots)
+            self.CPU_APU_burst(vblank_dots)
             self.PPU.handle_VBLANK()
             return
 
@@ -335,9 +330,9 @@ class GameboyColor(Gameboy):
         self.switcing_mode = False
         self.switch_cycles = 0
 
-    def CPU_burst(self, clock_cycles):
+    def CPU_APU_burst(self, clock_cycles):
         if self.DMG_compat:
-            return super().CPU_burst(clock_cycles)
+            return super().CPU_APU_burst(clock_cycles)
 
         if self.switcing_mode:
             if clock_cycles >= self.switch_cycles:
@@ -387,19 +382,19 @@ class GameboyColor(Gameboy):
             return super().scanline_PPU_modes()
         # double ticks fed into the CPU if double mode
         self.PPU.OAM_scan(self.PPU.get_context())
-        self.CPU_burst((80 << self.speed_mode) - self.cpu_debt)
+        self.CPU_APU_burst((80 << self.speed_mode) - self.cpu_debt)
         self.PPU.drawing_mode(self.PPU.get_context())
-        self.CPU_burst((172 << self.speed_mode) - self.cpu_debt)
+        self.CPU_APU_burst((172 << self.speed_mode) - self.cpu_debt)
         self.PPU.HBLANK_mode()
         if self.HBLANK_DMA:
             self.handle_HBLANK_DMA()
             # the cpu sleeps 34 or 68 clock cycles if hblank DMA happens
             DMA_time = 204 - (32 << self.speed_mode)
             self.tick_timers(DMA_time)
-            hblank_cpu_burst = (204 - DMA_time) << self.speed_mode
+            hblank_cpu_APU_burst = (204 - DMA_time) << self.speed_mode
         else:
-            hblank_cpu_burst = 204 << self.speed_mode
-        self.CPU_burst(hblank_cpu_burst - self.cpu_debt)
+            hblank_cpu_APU_burst = 204 << self.speed_mode
+        self.CPU_APU_burst(hblank_cpu_APU_burst - self.cpu_debt)
 
     def frame_end(self):
         super().frame_end()

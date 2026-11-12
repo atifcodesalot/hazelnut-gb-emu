@@ -1,9 +1,23 @@
 from .auxiliary import BO
 from .cartridge import Cartridge
 from . import DMG_BOOTSEQ, CGB_BOOTSEQ
-import math
 from .MBCs import MBC1, MBC2, MBC3, MBC5
+from dataclasses import dataclass
 
+import math
+
+@dataclass
+class GPreg:
+    name: str
+    value: int
+    max_value: int
+    bit_length: int
+
+    def set_val(self, val):
+        self.value = val % self.max_value
+
+    def __repr__(self):
+        return str(self.value)
 
 class RAM:
     def __init__(self, addressable_bits):
@@ -103,8 +117,8 @@ class GBMemoryController:
         self.OAM_DMA_src = None
         self.OAM_DMA_counter = 0
         
-        def r8bit(name): return Register(
-                    name=name, value=0, max_value=0xFF, bit_length=8)
+        def r8bit(name):
+            return GPreg(name=name, value=0, max_value=0xFF, bit_length=8)
 
         # Note: Audio, serial transfer registers are not implemented.
         self.io_registers = {
@@ -119,7 +133,7 @@ class GBMemoryController:
             0xFF07: 0,  # TAC
             # --- Interrupt flag ---
             0xFF0F: 0,
-            # --- Sound (stub for now) ---
+            # --- Sound ---
             # FF10–FF3F
             **{addr: r8bit(f"SND_{addr & 0xF}") for addr in range(0xFF10, 0xFF40)},
 
@@ -275,6 +289,8 @@ class GBMemoryController:
 
         # --- IO / HRAM / IE ---
         if a < 0xFF80:
+            if 0xFF10 < a < 0xFF40:
+                return self.io_registers.get(a, 0xFF).value
             if a == 0xFF00:
                 return self.handle_joypad_read()
             
@@ -291,13 +307,18 @@ class GBMemoryController:
         return self.io_registers[0xFFFF]
 
     def handle_io_write(self, a, v):
+        if 0xFF10 < a < 0xFF40:
+            self.io_registers[a].value = v
+            for ch in self.gameboy.APU.gb_channels:
+                ch.update()
+                
         # Boot ROM disable register (FF50)
-        if a == 0xFF50:
+        elif a == 0xFF50:
             # Any nonzero write disables boot ROM
             self.disable_boot_rom()
             
         # STAT register write
-        if a == 0xFF41:
+        elif a == 0xFF41:
             STAT = self.io_registers[0xFF41]
             # preserve readonly 3 bits
             self.io_registers[0xFF41] = v & 0xF8 | STAT & 7
@@ -557,6 +578,9 @@ class CgbMemoryController(GBMemoryController):
 
             if a == 0xFF02:
                 return 0
+            
+            if 0xFF10 < a < 0xFF40:
+                return self.io_registers.get(a, 0xFF).value
 
             if a == 0xFF6B:
                 # obj palette data read

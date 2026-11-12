@@ -75,6 +75,7 @@ class GBPulseWave:
 
     def set_period(self, new_period):
         self.period = new_period
+        self.dots %= self.period
         self.step = self.period // 8
         self.set_waveform()
 
@@ -294,13 +295,13 @@ class GBNoiseChannel():
 
 
 class GbAPU:
-    def __init__(self, memctl: GBMemoryController, gb):
+    def __init__(self, memctl: GBMemoryController):
         # placeholder
         self.master_volume = 1
         #
         self.dots = 0
-        self.gb = gb
         self.memctl = memctl
+        self.gb = self.memctl.gameboy
         self.reg_master = memctl.io_registers[0xFF26]
         self.reg_panning = memctl.io_registers[0xFF25]
 
@@ -310,7 +311,6 @@ class GbAPU:
         self.ch2 = GBChannel2(self.memctl)
         self.ch3 = GBChannel3(self.memctl)
         self.ch4 = GBNoiseChannel(self.memctl)
-        # todo: add the noise channel
 
         self.gb_channels = [self.ch1, self.ch2, self.ch3]
 
@@ -342,7 +342,7 @@ class GbAPU:
     def mix(self, ch1, ch2, ch3, ch4):
         mixed = (ch1 + ch2 + ch3 + ch4) / 4
         # convert to 8 bit unsigned audio
-        return 17 * mixed * self.master_volume
+        return int((17 * mixed * self.master_volume)) & 0xFF
         #
 
     def handle_envelope(self):

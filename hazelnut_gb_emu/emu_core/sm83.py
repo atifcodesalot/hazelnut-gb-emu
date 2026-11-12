@@ -24,20 +24,6 @@ def init_mnemonics():
 init_mnemonics()
 
 
-@dataclass
-class GPreg:
-    name: str
-    value: int
-    max_value: int
-    bit_length: int
-
-    def set_val(self, val):
-        self.value = val % self.max_value
-
-    def __repr__(self):
-        return str(self.value)
-
-
 class GPregPair:
     def __init__(self, name, hi_reg, low_reg):
         self.name = name
