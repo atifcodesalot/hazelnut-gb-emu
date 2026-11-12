@@ -260,15 +260,15 @@ class GameboyColor(Gameboy):
         self.DMG_compat = False
 
     def start_HDMA(self):
-        # clear bit 7 to indicate ongoing transfer
-        self.memctl.io_registers[0xFF55] &= 0x7F
         hdmactl = self.memctl.io_registers[0xFF55]
         mode = hdmactl >> 7 & 1
+        # clear bit 7 to indicate ongoing transfer
+        self.memctl.io_registers[0xFF55] &= 0x7F
         if not mode:
             # General purpose DMA
             self.start_GPDMA(hdmactl)
         else:
-            self.start_HBLANK_DMA(hdmactl)
+            self.start_HBLANK_DMA()
 
     def start_HBLANK_DMA(self):
         self.HBLANK_DMA = True
@@ -385,7 +385,7 @@ class GameboyColor(Gameboy):
         if self.HBLANK_DMA:
             self.handle_HBLANK_DMA()
             # the cpu sleeps 34 or 68 clock cycles if hblank DMA happens
-            DMA_time = 204 - (32 << self.speed_mode)
+            DMA_time = (32 << self.speed_mode)
             self.tick_timers(DMA_time)
             hblank_cpu_burst = (204 - DMA_time) << self.speed_mode
         else:
