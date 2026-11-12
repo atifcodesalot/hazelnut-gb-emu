@@ -390,7 +390,7 @@ class GbAPU:
         self.ch3.sample_accumulator = 0
         self.ch4.sample_accumulator = 0
         #
-        mixed = 64
+        mixed = self.mix(ch1avg, ch2avg, ch3avg, ch4avg)
         self.buffers[buffer][self.ring % self.buffer_size] = mixed
         self.ring = (self.ring + 1) % (self.buffer_size * 2)
         self.handle_buffer_boundary()
