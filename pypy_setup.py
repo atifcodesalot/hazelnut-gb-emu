@@ -160,6 +160,12 @@ def install_packages(pypy):
             "--only-binary=:all:",
             "pygame-ce==2.5.8",
         ], check=True)
+    # install numpy 
+    subprocess.run([
+        pypy, "-m", "pip", "install",
+        "--only-binary=:all:",
+        "numpy",
+    ], check=True)
 
 
 def rerun(pypy, *flags):
