@@ -1,30 +1,22 @@
-
-
-
-
 # skeleton of the APU, not even close to being correct
 # don't use it for playing
-
-
-
-
 from .memory import GBMemoryController
 import pygame
 import numpy as np
 from .auxiliary import BO
 
 
-PCM_SAMPLE_RATE = 44100
-MASTER_CLK = 4194304
 
-BUFFER_UPDATE_TIME = 0.01  # in seconds
+
+PCM_SAMPLE_RATE = 44100
+MASTER_CLK = 0x400000
+FRAME_SEQ = 0x10000
+BUFFER_UPDATE_TIME = 0.5  # in seconds
 BUFFER_SIZE = int(PCM_SAMPLE_RATE * BUFFER_UPDATE_TIME)
 
-
-# mono sound
+# mono sound for now
 pygame.mixer.init(frequency=PCM_SAMPLE_RATE, size=8, channels=1)
 #
-
 
 SILENCE = 0x80
 
@@ -49,7 +41,6 @@ class GBPulseWave:
 
     def sample_for(self, dots_elapsed):
         ons = 0
-
         remaining = self.period - self.dots
         if remaining > dots_elapsed:
             ons += sum(self.waveform[self.dots: self.dots + dots_elapsed])
@@ -60,9 +51,7 @@ class GBPulseWave:
         elapsed_periods = dots_elapsed // self.period
         ons += elapsed_periods * self.duty_time * self.period
         ons += sum(self.waveform[:dots_elapsed % self.period])
-
         self.dots = dots_elapsed % self.period
-
         return ons
 
     def set_duty_time(self):
@@ -75,7 +64,6 @@ class GBPulseWave:
 
     def set_period(self, new_period):
         self.period = new_period
-        self.dots %= self.period
         self.step = self.period // 8
         self.set_waveform()
 
@@ -89,6 +77,7 @@ class GBPulseWave:
 
 
 class GBPulseChannel:
+
     def __init__(self, memctl: GBMemoryController, num):
         self.memctl = memctl
         self.num = num
@@ -97,11 +86,9 @@ class GBPulseChannel:
         self.get_period()
         self.get_volume()
         self.get_duty_cycle()
-
         self.ltimer = 0x100000  # length timer
         self.env_timer = 0  # envelope timer
         self.sample_accumulator = 0
-
         self.disabled = True
 
     def get_period(self):
@@ -110,13 +97,17 @@ class GBPulseChannel:
 
     def get_volume(self):
         self.pw.set_volume((self.reg_vol_env.value >> 4) & 0xF)
+        self.volume = self.pw.volume
+
+    def set_volume(self, new_volume):
+        self.volume = min(max(0, new_volume), 0xF)
+        self.pw.set_volume(self.volume)
+        current = self.reg_vol_env.value
+        self.reg_vol_env.value = current >> 4 | self.volume << 4
 
     def get_duty_cycle(self):
         duty = (self.reg_duty_timer.value >> 6) & 0x3
         self.pw.set_duty(duty)
-
-    def get_env(self):
-        pass
 
     def get_length_timer(self):
         pass
@@ -131,9 +122,9 @@ class GBPulseChannel:
     def accumulate_for(self, cycles):
         self.sample_accumulator += \
             self.pw.sample_for(cycles) * self.pw.volume
-
     # accumulation step for an inactive channel with DAC on
     # until the High Pass filter is implemented in the future
+
     def accumulate_silence(self, cycles):
         self.sample_accumulator += 7.5 * cycles
 
@@ -154,8 +145,8 @@ class GBPulseChannel:
 
     def DAC_on(self):
         return self.reg_vol_env.value & 0xF8 != 0
-
     # does not turn the DAC off
+
     def turn_off(self):
         master = self.memctl.io_registers[0xFF26].value
         new_master = BO.res_nth_bit(master, self.num)
@@ -164,6 +155,7 @@ class GBPulseChannel:
 
 
 class GBChannel1(GBPulseChannel):
+
     def __init__(self, memctl):
         super().__init__(memctl, num=0)
         # sweep register only for channel 1
@@ -172,29 +164,28 @@ class GBChannel1(GBPulseChannel):
 
 
 class GBChannel2(GBPulseChannel):
+
     def __init__(self, memctl):
         super().__init__(memctl, num=1)
-
-
 # voluntary waveform channel
+
+
 class GBChannel3():
+
     def __init__(self, memctl):
         self.memctl = memctl
         self.get_registers()
-
         self.ltimer = 0x100000
-
         self.phase = 0
         self.ram_i = 0
         self.sample_accumulator = 0
         self.get_period_step()
         self.get_volume()
-
         self.disabled = False
 
     def read_waveRAM(self):
         # get the correct nible from wave ram
-        # wave ram starts fro 0xFF30
+        # wave ram starts at 0xFF30
         sample = self.memctl.io_registers[0xFF30 + self.ram_i // 2].value
         return sample & 0xF if self.ram_i % 2 else (sample >> 4) & 0xF
 
@@ -242,7 +233,6 @@ class GBChannel3():
         master = self.memctl.io_registers[0xFF26].value
         self.memctl.io_registers[0xFF26].value = BO.set_nth_bit(
             master, 2)
-
         if self.ltimer == 0:
             self.ltimer = 0x100000
 
@@ -257,6 +247,7 @@ class GBChannel3():
 
 
 class GBNoiseChannel():
+
     def __init__(self, memctl):
         self.memctl = memctl
         self.get_registers()
@@ -273,6 +264,11 @@ class GBNoiseChannel():
 
     def get_volume(self):
         self.volume = (self.reg_vol_env.value >> 4) & 0xF
+
+    def set_volume(self, new_volume):
+        self.volume = min(max(0, new_volume), 0xF)
+        current = self.reg_vol_env.value
+        self.reg_vol_env.value = current >> 4 | self.volume << 4
 
     def shift(self):
         # Tap bit 0 and 1
@@ -295,6 +291,7 @@ class GBNoiseChannel():
 
 
 class GbAPU:
+
     def __init__(self, memctl: GBMemoryController):
         # placeholder
         self.master_volume = 1
@@ -304,21 +301,16 @@ class GbAPU:
         self.gb = self.memctl.gameboy
         self.reg_master = memctl.io_registers[0xFF26]
         self.reg_panning = memctl.io_registers[0xFF25]
-
         self.init_buffers()
-
         self.ch1 = GBChannel1(self.memctl)
         self.ch2 = GBChannel2(self.memctl)
         self.ch3 = GBChannel3(self.memctl)
         self.ch4 = GBNoiseChannel(self.memctl)
-
         self.gb_channels = [self.ch1, self.ch2, self.ch3]
-
         self.samples_sec = 0
         self.samples = 0
         self.ring = 0
         self.accm = 95
-
         self.queued = False
 
     def audio_on(self):
@@ -331,9 +323,9 @@ class GbAPU:
     def init_buffers(self):
         self.buffer_size = int(PCM_SAMPLE_RATE * BUFFER_UPDATE_TIME)
         self.snd_portion1 = pygame.mixer.Sound(
-            np.array([SILENCE] * self.buffer_size, dtype=np.uint8))
+            np.array([1] * self.buffer_size, dtype=np.uint8))
         self.snd_portion2 = pygame.mixer.Sound(
-            np.array([SILENCE] * self.buffer_size, dtype=np.uint8))
+            np.array([1] * self.buffer_size, dtype=np.uint8))
         self.rbuffer1 = pygame.sndarray.samples(self.snd_portion1)
         self.rbuffer2 = pygame.sndarray.samples(self.snd_portion2)
         self.buffers = [self.rbuffer1, self.rbuffer2]
@@ -342,20 +334,48 @@ class GbAPU:
     def mix(self, ch1, ch2, ch3, ch4):
         mixed = (ch1 + ch2 + ch3 + ch4) / 4
         # convert to 8 bit unsigned audio
-        return int((17 * mixed * self.master_volume)) & 0xFF
+        return int(17 * mixed * self.master_volume) & 0xFF
         #
 
+    def tick_channel_envelope(self, ch):
+        env_ctl = ch.reg_vol_env.value
+        env_pace = env_ctl & 7
+        env_dir = env_ctl >> 3 & 1
+        if self.dots & (FRAME_SEQ * env_pace) == 0:
+            if env_dir:
+                ch.set_volume(ch.volume + 1)
+            else:
+                ch.set_volume(ch.volume - 1)
+
     def handle_envelope(self):
-        pass
+        self.tick_channel_envelope(self.ch1)
+        self.tick_channel_envelope(self.ch2)
+        self.tick_channel_envelope(self.ch4)
 
     def handle_sweep(self):
         sweep_ctl = self.ch1.reg_sweep.value
-        _dir = (sweep_ctl >> 3) & 1
+        swp_dir = (sweep_ctl >> 3) & 1
         step = sweep_ctl & 0x7
-        new_period = self.ch1.pw.period >> step if _dir else self.ch1.pw.period << step
+        new_period = self.ch1.pw.period >> step if swp_dir else self.ch1.pw.period << step
         self.ch1.reg_period_lo.value = new_period & 0xFF
         val = self.ch1.reg_hi_ctl.value
         self.ch1.reg_hi_ctl.value = (val & 0xF8) | ((new_period >> 8) & 0x07)
+        
+    def handle_buffer_boundary(self):
+        if self.ring == self.buffer_size:
+            if not self.pgchannel.get_busy():
+                print("UNDERRUN!!!")
+            if self.pgchannel.get_queue() is not None:
+                print("OVERRUN!!!")
+            self.pgchannel.queue(self.snd_portion1)
+            
+
+        elif self.ring == 0:
+            if not self.pgchannel.get_busy():
+                print("UNDERRUN!!!")
+            if self.pgchannel.get_queue() is not None:
+                print("OVERRUN!!!")
+            self.pgchannel.queue(self.snd_portion2)
 
     def emit_PCM_sample(self, buffer):
         # average channel samples over 95 dots
@@ -364,23 +384,17 @@ class GbAPU:
         ch3avg = self.ch3.sample_accumulator / self.accm if self.ch3.DAC_on() else 0
         ch4avg = self.ch4.sample_accumulator / self.accm if self.ch4.DAC_on() else 0
         #
-
         # reset accumulators
         self.ch1.sample_accumulator = 0
         self.ch2.sample_accumulator = 0
         self.ch3.sample_accumulator = 0
         self.ch4.sample_accumulator = 0
         #
-
-        mixed = self.mix(ch1avg, ch2avg, ch3avg, 0)
+        mixed = 64
         self.buffers[buffer][self.ring % self.buffer_size] = mixed
         self.ring = (self.ring + 1) % (self.buffer_size * 2)
-        if self.ring == self.buffer_size:
-            self.pgchannel.queue(self.snd_portion1)
-        elif self.ring == 0:
-            self.pgchannel.queue(self.snd_portion2)
+        self.handle_buffer_boundary()
         self.samples_sec += 1
-        
         if self.samples_sec == PCM_SAMPLE_RATE:
             self.samples_sec = 0
             self.dots = 0
@@ -389,7 +403,7 @@ class GbAPU:
         remaining_pcm = PCM_SAMPLE_RATE - self.samples_sec
         remaining_cycles = MASTER_CLK - self.dots
         self.accm = remaining_cycles // remaining_pcm
-        
+
     def handle_len_counters(self):
         if self.ch1.reg_hi_ctl.value & 0x40:
             # channel 1 length counter enabled
@@ -420,7 +434,8 @@ class GbAPU:
         else:
             self.ch2.accumulate_silence(cycles)
         if True:  # (active >> 2) & 1:
-            self.ch3.accumulate_for(cycles)
+            pass
+            # self.ch3.accumulate_for(cycles)
         else:
             self.ch3.accumulate_silence()
         # if (active >> 3) & 1:
@@ -436,32 +451,23 @@ class GbAPU:
         active = self.get_active()
         elapsed = cycles
         old = self.dots
-
         while cycles > 0:
             dots_until_sample = self.accm - self.samples
             chunk = min(cycles, dots_until_sample)
-
             self.accumulate_samples(active, chunk)
-
             self.samples += chunk
             cycles -= chunk
-
             self.dots = (self.dots + chunk) % MASTER_CLK
-
             if self.samples == self.accm:
                 buffer = self.ring // self.buffer_size
                 self.emit_PCM_sample(buffer)
                 self.samples = 0
-
-        counter_trigger = self.triggers_edge(old, 0x4000, elapsed)
-        sweep_trigger = self.triggers_edge(old, 0x8000, elapsed)
-        envelope_trigger = self.triggers_edge(old, 0xFFFF + 1, elapsed)
-
+        counter_trigger = self.triggers_edge(old, FRAME_SEQ // 4, elapsed)
+        sweep_trigger = self.triggers_edge(old, FRAME_SEQ // 2, elapsed)
+        envelope_trigger = self.triggers_edge(old, FRAME_SEQ, elapsed)
         if counter_trigger:
             self.handle_len_counters()
-
         if sweep_trigger:
             self.handle_sweep()
-
         if envelope_trigger:
             self.handle_envelope()
