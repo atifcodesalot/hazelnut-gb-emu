@@ -66,7 +66,7 @@ def main():
     scale_flag = any(argset.intersection(SCALE_FLAGS))
     
     if scale_flag:
-        flag = any(argset.intersection(SCALE_FLAGS)).pop()
+        flag = argset.intersection(SCALE_FLAGS).pop()
         flagpos = sys.argv.index(flag)
         scalenum = sys.argv[flagpos + 1].strip()
         if not scalenum.isnumeric():
