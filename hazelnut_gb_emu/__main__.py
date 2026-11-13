@@ -1,4 +1,4 @@
-from .emu_core.gameboy import
+
 from .emu_core.cartridge import *
 from .emu_core import logger
 import sys
@@ -10,6 +10,7 @@ RUNTIME = sys.implementation.name
 
 COLOR_FLAGS = {"--color", "-c", "--gbc", "--cgb"}
 PROFILE_FLAGS = {"--benchmark", "-b", "--profile", "-p"}
+SCALE_FLAGS = {"--scale", "-s", "--size"}
 
 
 SCALE = 2
@@ -62,11 +63,24 @@ def main():
     argset = set(sys.argv)
     color_flag = any(argset.intersection(COLOR_FLAGS))
     profile_flag = any(argset.intersection(PROFILE_FLAGS))
+    scale_flag = any(argset.intersection(SCALE_FLAGS))
+    
+    if scale_flag:
+        flag = any(argset.intersection(SCALE_FLAGS)).pop()
+        flagpos = sys.argv.index(flag)
+        scalenum = sys.argv[flagpos + 1].strip()
+        if not scalenum.isnumeric():
+            raise ValueError("Scale must be a number")
+        global SCALE
+        SCALE = int(scalenum)
 
     logger.info("Welcome to Hazelnut GB Emulator vAlpha 0.1.0")
     logger.info("Running on %s" % RUNTIME)
     logger.info(
         "Emulator mode: CGB" if color_flag else "Emulator mode: DMG"
+    )
+    logger.info(
+        f"Scale relative to the original: {SCALE}"
     )
     logger.info(
         "Benchmark mode: Enabled" if profile_flag else "Benchmark mode: Disabled"
