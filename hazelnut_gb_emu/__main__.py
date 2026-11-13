@@ -4,6 +4,7 @@ from .emu_core import logger
 import sys
 from .session import SessionController
 from pypy_setup import *
+from .emu_core import __version__
 
 RUNTIME = sys.implementation.name
 
@@ -58,6 +59,7 @@ def main():
         try:
             try_pypy(*sys.argv[1:])
         except subprocess.CalledProcessError:
+            logger.info("Shutting down.")
             sys.exit("Bye bye!")
 
     argset = set(sys.argv)
@@ -68,19 +70,27 @@ def main():
     if scale_flag:
         flag = argset.intersection(SCALE_FLAGS).pop()
         flagpos = sys.argv.index(flag)
-        scalenum = sys.argv[flagpos + 1].strip()
+        try:
+            scalenum = sys.argv[flagpos + 1].strip()
+        except IndexError:
+            logger.error(f"a scale number is needed after {flag}")
+            sys.exit()
+            
         if not scalenum.isnumeric():
-            raise ValueError("Scale must be a number")
+            raise ValueError("Scale must be a number and an integer")
         global SCALE
         SCALE = int(scalenum)
+        if SCALE > 8:
+            logger.error(f"scale number {SCALE} is too big!")
+            sys.exit()
 
-    logger.info("Welcome to Hazelnut GB Emulator vAlpha 0.1.0")
+    logger.info(f"Welcome to Hazelnut GB Emulator Version {__version__}")
     logger.info("Running on %s" % RUNTIME)
     logger.info(
         "Emulator mode: CGB" if color_flag else "Emulator mode: DMG"
     )
     logger.info(
-        f"Scale relative to the original: {SCALE}"
+        f"Scale relative to the original: x{SCALE} {'(DEFAULT)' if SCALE == 2 else ''}"
     )
     logger.info(
         "Benchmark mode: Enabled" if profile_flag else "Benchmark mode: Disabled"
