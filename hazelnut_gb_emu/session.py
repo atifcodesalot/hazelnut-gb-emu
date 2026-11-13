@@ -197,7 +197,11 @@ class SessionController:
         
         self.set_display()
         self.GUI = GUIDrawer(self.screen, self.gbres, self.gboff, self.gbscaler)
+        
+        
+        ## emulation related flags
         self.gonna_reset_gb = False
+        self.emulation_paused = False
         
     def init_gameboy(self, color=False):
         if color:
@@ -310,7 +314,7 @@ class SessionController:
     def consume_events(self):
         gb = self.gameboy
         while gb.running:
-            time.sleep(0.000001)
+            time.sleep(0.0001)
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     gb.running = False
