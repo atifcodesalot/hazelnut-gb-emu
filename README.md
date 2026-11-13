@@ -78,6 +78,21 @@ in the command line,  (Note: The gameboy color is backwards compatible with the 
 you can then choose if you want to download and use PyPy, by pressing y or n then enter,
 afterwards choose a ROM file to play, simple enough!
 
+#### Scaling
+You can also choose to scale the emulator window (which will also scale the gameboy lcd) by:
+
+```py -m hazelnut_gb_emu --scale [SCALE NUMBER]```
+
+For example, if you want no scaling and to play GameBoy Color (in Windows):
+
+```py -m hazelnut_gb_emu --scale 1 --color```
+
+or: 
+
+```py -m hazelnut_gb_emu -s 1 -c```
+
+The default scaling factor is 2.
+
 
 ## Info on the emulator, disclaimers
 
