@@ -2,6 +2,7 @@ import logging
 from dataclasses import dataclass
 
 __author__ = "Burzum"
+__version__ = "ALPHA"
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -15,6 +16,10 @@ GB_LCD_OFF = "#1D0118"
 
 IMPLEMENTED_MODES = [0x00, 0x01, 0x02, 0x3, 0x5, 0x6, 0x10, 0x0F, 0x11, 0x12, 0x13, 0x19, 0x1A, 0x1B]
 
+
+
+# ONLY PUBLICLY AVAILABLE BOOT ROMS
+# NO COPYRIGHTED BOOT ROM IS PRESENT HERE
 
 DMG_BOOTSEQ = bytearray([
             0x31, 0xFE, 0xFF, 0xAF, 0x21, 0xFF, 0x9F, 0x32, 
