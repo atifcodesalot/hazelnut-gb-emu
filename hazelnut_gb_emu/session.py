@@ -193,7 +193,6 @@ class SessionController:
         logger.debug(
             "External RAM size: %d bytes" % len(self.gameboy.memctl.ext_ram.array)
         )
-        self.cart_has_battery = self.determine_cart_battery()
         
         self.set_display()
         self.GUI = GUIDrawer(self.screen, self.gbres, self.gboff, self.gbscaler)
@@ -215,9 +214,6 @@ class SessionController:
             sys.exit("exiting dialog...")
         reader = CartridgeReader(file)
         self.cartridge = reader.get_cartridge()
-
-    def determine_cart_battery(self):
-        return "BATTERY" in self.cartridge.type_name
 
     def check_implementations(self, cartridge_types, implemented):
         if self.cartridge.type not in implemented:
@@ -257,11 +253,12 @@ class SessionController:
     def reset_gb(self):
         self.gameboy.reset()
         self.gameboy.insert_cartridge(self.cartridge)
+        self.try_loading_save()
         self.gameboy.powerup()
 
     def try_loading_save(self):
         ext = self.gameboy.memctl.ext_ram
-        if ext is not None and ext.size > 0 and self.cart_has_battery:
+        if ext is not None and ext.size > 0 and self.cartridge.battery:
             try:
                 name = os.path.join(self.save_path, str(self.cartridge.title) + ".save")
                 f = open(name, "rb")
@@ -274,7 +271,7 @@ class SessionController:
 
     def save(self):
         ext = self.gameboy.memctl.ext_ram
-        if ext is not None and ext.size > 0 and self.cart_has_battery:
+        if ext is not None and ext.size > 0 and self.cartridge.battery:
             if not os.path.isdir(self.save_path):
                 os.mkdir(self.save_path)
             f = open(
@@ -301,11 +298,12 @@ class SessionController:
             pygame.display.flip()
 
     def handle_gb_input_event(self, event):
+        # TODO: refactor this function
         gb = self.gameboy
         is_pressed = event.type == pygame.KEYDOWN
         if event.key not in self.keys_gb_inputs:
             # non gameboy inputs
-            if event.key == pygame.K_r:
+            if event.key == pygame.K_r and is_pressed:
                 self.gonna_reset_gb = True
             elif event.key == pygame.K_p and is_pressed:
                 # toggle pause

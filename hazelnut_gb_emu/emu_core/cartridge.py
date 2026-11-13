@@ -279,6 +279,7 @@ class Cartridge:
     destination_code: int
     destination: str
     content: bytearray
+    battery: bool
     
     cgb_flag: int = None
 
@@ -390,6 +391,8 @@ class CartridgeReader:
     def get_cartridge(self) -> Cartridge:
         self.read()
         self.get_fields()
+        battery_types = [0x03, 0x06, 0x09, 0x0D, 0x0F, 0x10, 0x13, 0x1B, 0x1E, 0x22, 0xFF]
+        battery = self.type[0] in battery_types
         cartridge = Cartridge(
             type=self.type[0],
             type_name=CARTRIDGE_TYPES[self.type[0]],
@@ -406,7 +409,8 @@ class CartridgeReader:
             destination_code=self.destination_code[0],
             destination=self.handle_destination(),
             content=self.content,
-            cgb_flag=getattr(self, "cgb_flag", None)
+            cgb_flag=getattr(self, "cgb_flag", None),
+            battery=battery
         )
         return cartridge
 
