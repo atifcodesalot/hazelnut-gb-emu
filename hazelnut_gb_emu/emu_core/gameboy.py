@@ -219,6 +219,7 @@ class Gameboy:
         self.tick_PPU_modes_basis()
 
     def insert_cartridge(self, cartridge: Cartridge):
+        self.loaded_cart = cartridge
         self.memctl.configure_bank_switching(cartridge)
         self.memctl.rom.burn_from(cartridge=cartridge)
 
