@@ -85,7 +85,7 @@ class GUIDrawer:
         self.control_ins1 = (
             "Controls: Arrow keys: D-Pad, X/Z: A/B, S: Select, Enter: Start"
         )
-        self.control_ins2 = "R: reset emulation, ESC: exit and select new rom"
+        self.control_ins2 = "R / P: reset, (un)pause emulation,  ESC: exit and select new rom"
         self.insctl1_surf = ins_font.render(
             self.control_ins1, True, (0, 0, 0), (255, 255, 255)
         )
@@ -97,7 +97,7 @@ class GUIDrawer:
         self.insctl1_off = ((sw - w1) // 2, sh - h1 - 15 * self.scaler)
         w2 = self.insctl2_surf.get_width()
         h2 = self.insctl2_surf.get_height()
-        self.insctl2_off = ((sw - w2) // 2, sh - h2 - 5 * self.scaler)
+        self.insctl2_off = ((sw - w2) // 2, sh - h2 -h1)
 
     def draw_A(self, gb_inp):
         s = self.screen
@@ -240,11 +240,19 @@ class SessionController:
         self.try_loading_save()
         self.gameboy.powerup()
         while self.gameboy.running:
-            if self.gonna_reset_gb:
-                self.reset_gb()
-                self.gonna_reset_gb = False
+            if self.emulation_paused:
+                # wait for main thread to unpause
+                self.handle_reset()
+                continue
+            self.handle_reset()
             self.gameboy.scanline_step()
         self.save()
+        
+    def handle_reset(self):
+        if self.gonna_reset_gb:
+            self.reset_gb()
+            self.emulation_paused = False
+            self.gonna_reset_gb = False
 
     def reset_gb(self):
         self.gameboy.reset()
@@ -296,8 +304,14 @@ class SessionController:
         gb = self.gameboy
         is_pressed = event.type == pygame.KEYDOWN
         if event.key not in self.keys_gb_inputs:
+            # non gameboy inputs
             if event.key == pygame.K_r:
                 self.gonna_reset_gb = True
+            elif event.key == pygame.K_p and is_pressed:
+                # toggle pause
+                self.emulation_paused = not self.emulation_paused
+                infostr = "Emulation paused" if self.emulation_paused else "Emulation unpaused"
+                logger.info(infostr)
             elif event.key == pygame.K_ESCAPE:
                 self.gameboy.running = False
             return
