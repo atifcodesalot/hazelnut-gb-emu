@@ -9,12 +9,11 @@ Here is an awesome demo:\
 <img width="179" height="317" alt="hmoon" src="https://github.com/user-attachments/assets/82d4ee27-fe66-4065-a0b4-ba51a99251d8" />
 <img width="180" height="376" alt="magikarp" src="https://github.com/user-attachments/assets/43f9cc81-8fa7-4d8f-8061-2dc15b1db9e3" />
 <img width="181" height="374" alt="chessmaster" src="https://github.com/user-attachments/assets/d18dc78b-27c9-4f82-bf03-f239c67b41e0" />
-
 <img width="178" height="325" alt="metroid" src="https://github.com/user-attachments/assets/031d25ea-364b-405c-940d-695df845fcbd" />
 <img width="332" height="620" alt="hellokitty" src="https://github.com/user-attachments/assets/0aa6f3b4-c4d6-46a5-bb7d-dc6ec0a9d4bc" />
 <img width="332" height="620" alt="gameandwatch" src="https://github.com/user-attachments/assets/8ae59d4f-f114-4e2d-ae8c-76363a5657b9" />
 <img width="332" height="620" alt="worms" src="https://github.com/user-attachments/assets/4c2cb776-6c59-4400-8981-cd7952a77afa" />
-
+<img width="332" height="620" alt="crystal" src="https://github.com/user-attachments/assets/2f996fde-144b-4af8-8687-81060bf9d0ed" />
 
 
 
