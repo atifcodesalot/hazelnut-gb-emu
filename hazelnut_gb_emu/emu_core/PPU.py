@@ -332,9 +332,8 @@ class GbPPU:
         self.enter_HBLANK()
         self.dots += 204
 
-    def handle_VBLANK(self):
-        # do other stuff ?
-        self.dots += 456
+    def handle_VBLANK(self, dots):
+        self.dots += dots
         self.inc_ly()
         self.handle_LY_compare()
 

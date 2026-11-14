@@ -190,9 +190,18 @@ class Gameboy:
         ly = self.memctl.io_registers[0xFF44]
 
         if self.PPU.is_VBLANK_scan(ly):
+            if ly == 153:
+                # handle early reset
+                early_reset_dots = 4 if vblank_dots == 456 else 8
+                self.CPU_burst(early_reset_dots - self.cpu_debt)
+                self.PPU.inc_ly()
+                self.PPU.handle_LY_compare()
+                self.CPU_burst(vblank_dots - early_reset_dots - self.cpu_debt)
+                return 
+
             # cpu burst then inc ly and handle lyc compare
-            self.CPU_burst(vblank_dots)
-            self.PPU.handle_VBLANK()
+            self.CPU_burst(vblank_dots - self.cpu_debt)
+            self.PPU.handle_VBLANK(vblank_dots)
             return
 
         self.scanline_PPU_modes()
@@ -351,9 +360,9 @@ class GameboyColor(Gameboy):
             cycles_passed += ins_cycles
             # if (
             #     not self.memctl.boot_enabled
-                
+
             # ):
-                
+
             #     log = str(ins) + str(self.SM83_processor.state_snap())
             #     logging_file.write(log + "\n")
             if self.SM83_processor.HALT:
@@ -386,7 +395,7 @@ class GameboyColor(Gameboy):
         if self.HBLANK_DMA:
             self.handle_HBLANK_DMA()
             # the cpu sleeps 34 or 68 clock cycles if hblank DMA happens
-            DMA_time = (32 << self.speed_mode)
+            DMA_time = 32 << self.speed_mode
             self.tick_timers(DMA_time)
             hblank_cpu_burst = (204 - DMA_time) << self.speed_mode
         else:
