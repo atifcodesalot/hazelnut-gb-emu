@@ -125,7 +125,6 @@ AI was instead used extensively, only for; bug hunting, disassembly and optimiza
 ## Known bugs
 ### GameBoy Color
 - FIFA 2000 unplayable due to STAT line boundaries
-- Pokemon Puzzle Challenge crashing after mode selection 
 
 
 ### GameBoy
