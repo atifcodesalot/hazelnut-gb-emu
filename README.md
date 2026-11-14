@@ -110,8 +110,7 @@ the emulator truly instruction stepped in the future so this issue will (hopeful
 
 
 ### General Disclaimers
-- As mentioned, this emulator is currently not clock or machine cycle accurate: it does not emulate GameBoy hardware in full accuraccy.
-It is instead instruction stepped, due to this, you will experience bugs every now and then (expecially for GBC).
+- As mentioned, this emulator is currently not clock or machine cycle accurate: it does not emulate GameBoy hardware in full accuraccy, but emulates almost all commercial games functionally correct.
 - It is functional enough to run almost all commercial games for the Gameboy, but GameBoy Color is not as stable due to the reasons mentioned above.
 - MBC1, MBC2, MBC3 (with RTC registers) and MBC5 are implemented for bank switching (MBC6, MBC7 is next :yum:).
 - It may run slower than the actual gameboy with [CPython](https://en.wikipedia.org/wiki/CPython) (60 fps normally), except if you use PyPy, then it can run x8 with ease.
@@ -125,7 +124,6 @@ AI was instead used extensively, only for; bug hunting, disassembly and optimiza
 ## Known bugs
 ### GameBoy Color
 - FIFA 2000 unplayable due to STAT line boundaries
-- Pokemon Puzzle Challenge crashing after mode selection 
 
 
 ### GameBoy
