@@ -207,7 +207,7 @@ class MBC3(MBC):
         now = time.monotonic()
         elapsed = now - self.last_sample
         self.last_sample = now
-        return int(elapsed)
+        return elapsed
     
     def update_time(self, initial=False):
         elapsec = self.get_elapsed()
@@ -215,10 +215,11 @@ class MBC3(MBC):
             return
         
         self.totseconds += elapsec
-        self.seconds = self.totseconds % 60
-        self.minutes = (self.totseconds // 60) % 60
-        self.hours = (self.totseconds // 3600) % 24
-        self.days = (self.totseconds // 86400) % 512
+        intseconds = int(self.totseconds)
+        self.seconds = intseconds % 60
+        self.minutes = (intseconds // 60) % 60
+        self.hours = (intseconds // 3600) % 24
+        self.days = (intseconds // 86400) % 512
 
     def latch_RTC_regs(self):
         self.update_time()
@@ -263,11 +264,10 @@ class MBC3(MBC):
             self.cart_regs[0x6000] = value & 0x0F
             return
         if address < 0x8000:
-            old = self.cart_regs[0x6000]
+            old = self.cart_regs[0x8000]
             if old == 0x00 and value & 1 == 0x01:
                 self.latch_RTC_regs()
             self.cart_regs[0x8000] = value & 1
-            return
 
     def handle_ram_banking_read(self, address, sel):
         offset = address & 0x1FFF
