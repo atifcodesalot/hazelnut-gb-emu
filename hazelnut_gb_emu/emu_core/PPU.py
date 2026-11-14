@@ -345,8 +345,8 @@ class GbPPU:
         self.pgdisplay.fill(GB_LCD_OFF)
         # reset ly
         self.memctl.io_registers[0xFF44] = 0
-        # set mode to 0
-        self.enter_HBLANK()
+        # set mode to 0 by modifying STAT
+        self.memctl.io_registers[0xFF41] &= 0xFC
         self.dots = 0
 
     def reset(self):

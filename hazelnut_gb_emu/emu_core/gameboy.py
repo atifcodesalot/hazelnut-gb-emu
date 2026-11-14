@@ -184,7 +184,7 @@ class Gameboy:
         # clear the lcd if PPU is disabled
         if not lcdc >> 7 & 1:
             self.PPU.disable()
-            self.CPU_burst(vblank_dots)
+            self.CPU_burst(vblank_dots - self.cpu_debt)
             return
 
         ly = self.memctl.io_registers[0xFF44]
