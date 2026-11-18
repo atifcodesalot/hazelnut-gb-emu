@@ -450,6 +450,9 @@ class GBMemoryController:
 
         # reset io registers
         for addr in self.io_registers:
+            if type(self.io_registers[addr]) is GPreg:
+                self.io_registers[addr].value = 0
+                continue
             self.io_registers[addr] = 0
 
 
