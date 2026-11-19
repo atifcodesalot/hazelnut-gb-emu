@@ -15,7 +15,9 @@ BUFFER_UPDATE_TIME = 0.5  # in seconds
 BUFFER_SIZE = int(PCM_SAMPLE_RATE * BUFFER_UPDATE_TIME)
 
 # mono sound for now
-pygame.mixer.init(frequency=PCM_SAMPLE_RATE, size=8, channels=1)
+pygame.mixer.init(frequency=PCM_SAMPLE_RATE, size=8, channels=1, 
+                  # dont allow any changes to the mixer (looking at you windows)
+                  allowedchanges=0)
 #
 
 SILENCE = 0x80
@@ -89,7 +91,7 @@ class GBPulseChannel:
         self.ltimer = 0x100000  # length timer
         self.env_timer = 0  # envelope timer
         self.sample_accumulator = 0
-        self.disabled = True
+        self.active = False
 
     def get_period(self):
         P = ((self.reg_hi_ctl.value & 0x07) << 8) | self.reg_period_lo.value
@@ -108,10 +110,7 @@ class GBPulseChannel:
     def get_duty_cycle(self):
         duty = (self.reg_duty_timer.value >> 6) & 0x3
         self.pw.set_duty(duty)
-
-    def get_length_timer(self):
-        pass
-
+        
     def get_registers(self):
         offset = 5 * self.num
         self.reg_duty_timer = self.memctl.io_registers[0xFF11 + offset]
@@ -127,14 +126,21 @@ class GBPulseChannel:
 
     def accumulate_silence(self, cycles):
         self.sample_accumulator += 7.5 * cycles
+        
+    def get_trigger(self):
+        if self.reg_hi_ctl.value >> 7 & 1:
+            self.trigger()
 
     def update(self):
         self.get_period()
         self.get_volume()
         self.get_duty_cycle()
+        self.get_trigger()
 
     def trigger(self):
-        self.disabled = False
+        if not self.DAC_on():
+            return
+        self.active = True
         master = self.memctl.io_registers[0xFF26].value
         self.memctl.io_registers[0xFF26].value = BO.set_nth_bit(
             master, self.num)
@@ -145,17 +151,16 @@ class GBPulseChannel:
 
     def DAC_on(self):
         return self.reg_vol_env.value & 0xF8 != 0
+    
     # does not turn the DAC off
-
     def turn_off(self):
         master = self.memctl.io_registers[0xFF26].value
         new_master = BO.res_nth_bit(master, self.num)
         self.memctl.io_registers[0xFF26].value = new_master
-        self.disabled = True
+        self.active = False
 
 
 class GBChannel1(GBPulseChannel):
-
     def __init__(self, memctl):
         super().__init__(memctl, num=0)
         # sweep register only for channel 1
@@ -164,14 +169,11 @@ class GBChannel1(GBPulseChannel):
 
 
 class GBChannel2(GBPulseChannel):
-
     def __init__(self, memctl):
         super().__init__(memctl, num=1)
+        
 # voluntary waveform channel
-
-
 class GBChannel3():
-
     def __init__(self, memctl):
         self.memctl = memctl
         self.get_registers()
@@ -181,7 +183,10 @@ class GBChannel3():
         self.sample_accumulator = 0
         self.get_period_step()
         self.get_volume()
-        self.disabled = False
+        self.active = False
+        
+    def cache_waveform(self):
+        pass
 
     def read_waveRAM(self):
         # get the correct nible from wave ram
@@ -224,12 +229,20 @@ class GBChannel3():
 
     def get_volume(self):
         self.volume = ((self.reg_volume.value >> 5) & 0x3)
+        
+    def get_trigger(self):
+        if self.reg_hi_ctl.value >> 7 & 1:
+            self.trigger()
 
     def update(self):
         self.get_period_step()
         self.get_volume()
+        self.get_trigger()
 
     def trigger(self):
+        if not self.DAC_on():
+            return
+        self.active = True
         master = self.memctl.io_registers[0xFF26].value
         self.memctl.io_registers[0xFF26].value = BO.set_nth_bit(
             master, 2)
@@ -243,7 +256,7 @@ class GBChannel3():
         master = self.memctl.io_registers[0xFF26].value
         new_master = BO.res_nth_bit(master, 2)
         self.memctl.io_registers[0xFF26].value = new_master
-        self.disabled = True
+        self.active = False
 
 
 class GBNoiseChannel():
@@ -288,6 +301,9 @@ class GBNoiseChannel():
 
     def DAC_on(self):
         return self.reg_vol_env.value & 0xF8 != 0
+    
+    def update(self):
+        pass
 
 
 class GbAPU:
@@ -306,7 +322,7 @@ class GbAPU:
         self.ch2 = GBChannel2(self.memctl)
         self.ch3 = GBChannel3(self.memctl)
         self.ch4 = GBNoiseChannel(self.memctl)
-        self.gb_channels = [self.ch1, self.ch2, self.ch3]
+        self.gb_channels = [self.ch1, self.ch2, self.ch3, self.ch4]
         self.samples_sec = 0
         self.samples = 0
         self.ring = 0
@@ -422,23 +438,23 @@ class GbAPU:
             else:
                 self.ch3.turn_off()
 
-    def accumulate_samples(self, active, cycles):
+    def accumulate_samples(self, cycles):
         # force channels for now
-        if True:  # active & 1:
+        if self.ch1.active:
             # channel 1 is active
             self.ch1.accumulate_for(cycles)
         else:
             self.ch1.accumulate_silence(cycles)
-        if True:  # (active >> 1) & 1:
+        if self.ch2.active:
             self.ch2.accumulate_for(cycles)
         else:
             self.ch2.accumulate_silence(cycles)
-        if True:  # (active >> 2) & 1:
+        if self.ch3.active:
             pass
             # self.ch3.accumulate_for(cycles)
         else:
             self.ch3.accumulate_silence()
-        # if (active >> 3) & 1:
+        # if self.ch4.active:
         #     # channel 4 is active
         #     self.ch4.tick()
         # else:
@@ -448,13 +464,12 @@ class GbAPU:
         return dots // period != (dots + elapsed) // period
 
     def tick_cycles(self, cycles):
-        active = self.get_active()
         elapsed = cycles
         old = self.dots
         while cycles > 0:
             dots_until_sample = self.accm - self.samples
             chunk = min(cycles, dots_until_sample)
-            self.accumulate_samples(active, chunk)
+            self.accumulate_samples(chunk)
             self.samples += chunk
             cycles -= chunk
             self.dots = (self.dots + chunk) % MASTER_CLK
