@@ -305,12 +305,30 @@ class GBMemoryController:
 
         # --- IE (FFFF) ---
         return self.io_registers[0xFFFF]
+    
+    def handle_sound_write(self, a, v):
+        if a == 0xFF26:
+            # audio master, first 4 bits read only
+            master = self.io_registers[0xFF26].value
+            self.io_registers[0xFF26].value = (v & 0x80) | 0x1C | (master & 0xF)
+        else:
+            self.io_registers[a].value = v
+        
+        # 
+        if a <= 0xFF23:
+            # write happened in the channel registers
+            chnum = (a - 0xFF10) // 5
+            # update respective channel
+            self.gameboy.APU.gb_channels[chnum].update()
+            
+        elif a >= 0xFF30:
+            # write happened in the wave ram
+            wave_channel = self.gameboy.APU.ch3
+            wave_channel.cache_waveform()
 
     def handle_io_write(self, a, v):
-        if 0xFF10 < a < 0xFF40:
-            self.io_registers[a].value = v
-            for ch in self.gameboy.APU.gb_channels:
-                ch.update()
+        if 0xFF10 <= a < 0xFF40:
+            self.handle_sound_write(a, v)
                 
         # Boot ROM disable register (FF50)
         elif a == 0xFF50:
@@ -669,9 +687,6 @@ class CgbMemoryController(GBMemoryController):
             self.io_registers[a] = v
             # update wram bank
             self.vram_bank = v & 1
-            
-        elif a == 0xFF26:
-            return 0x70 | (self.io_registers[0xFF26] & 0x80)
 
         else:
             GBMemoryController.handle_io_write(self, a, v)
