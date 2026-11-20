@@ -11,7 +11,7 @@ from .auxiliary import BO
 PCM_SAMPLE_RATE = 44100
 MASTER_CLK = 0x400000
 FRAME_SEQ = 0x10000
-BUFFER_UPDATE_TIME = 0.5  # in seconds
+BUFFER_UPDATE_TIME = 0.05  # in seconds
 BUFFER_SIZE = int(PCM_SAMPLE_RATE * BUFFER_UPDATE_TIME)
 
 # mono sound for now
@@ -31,29 +31,29 @@ class GBPulseWave:
         [0, 1, 1, 1, 1, 1, 1, 0]
     ]
 
-    def __init__(self, duty_cycle, period, volume):
+    def __init__(self, duty_cycle, period):
         self.duty_cycle = duty_cycle
-        self.volume = volume
         # in dots
         self.period = period
-        #
-        self.step = self.period // 8
+        # amplitude repetition
+        self.amprep = self.period >> 3
         self.set_waveform()
-        self.dots = 0
+        self.phase = 0
 
-    def sample_for(self, dots_elapsed):
+    def sample_for(self, cycles):
         ons = 0
-        remaining = self.period - self.dots
-        if remaining > dots_elapsed:
-            ons += sum(self.waveform[self.dots: self.dots + dots_elapsed])
-            self.dots += dots_elapsed
+        wave_remaining = self.period - self.phase
+        if wave_remaining > cycles:
+            ons += sum(self.waveform[self.phase: self.phase + cycles])
+            self.phase += cycles
             return ons
-        ons += sum(self.waveform[self.dots:])
-        dots_elapsed -= remaining
-        elapsed_periods = dots_elapsed // self.period
-        ons += elapsed_periods * self.duty_time * self.period
-        ons += sum(self.waveform[:dots_elapsed % self.period])
-        self.dots = dots_elapsed % self.period
+        ons += sum(self.waveform[self.phase:])
+        cycles_remaining = cycles - wave_remaining
+        
+        periods, period_rem = divmod(cycles_remaining, self.period)
+        ons += periods * self.duty_time * self.period
+        ons += sum(self.waveform[:period_rem])
+        self.phase = period_rem
         return ons
 
     def set_duty_time(self):
@@ -61,29 +61,24 @@ class GBPulseWave:
 
     def set_waveform(self):
         self.waveform = [b for b in self.duty_pattern[self.duty_cycle]
-                         for _ in range(self.step)]
+                         for _ in range(self.amprep)]
         self.set_duty_time()
 
     def set_period(self, new_period):
         self.period = new_period
-        self.step = self.period // 8
+        self.amprep = self.period >> 3
         self.set_waveform()
 
     def set_duty(self, new_duty_cycle):
         self.duty_cycle = new_duty_cycle
         self.set_waveform()
 
-    def set_volume(self, new_volume):
-        # clamp to 4 bit
-        self.volume = (new_volume) & 0xF
-
 
 class GBPulseChannel:
-
     def __init__(self, memctl: GBMemoryController, num):
         self.memctl = memctl
         self.num = num
-        self.pw = GBPulseWave(*[0,]*3)
+        self.pw = GBPulseWave(*[0,]*2)
         self.get_registers()
         self.get_period()
         self.get_volume()
@@ -91,6 +86,7 @@ class GBPulseChannel:
         self.ltimer = 0x100000  # length timer
         self.env_timer = 0  # envelope timer
         self.sample_accumulator = 0
+        
         self.active = False
 
     def get_period(self):
@@ -98,12 +94,10 @@ class GBPulseChannel:
         self.pw.set_period((2048 - P) << 5)
 
     def get_volume(self):
-        self.pw.set_volume((self.reg_vol_env.value >> 4) & 0xF)
-        self.volume = self.pw.volume
+        self.volume = ((self.reg_vol_env.value >> 4) & 0xF)
 
     def set_volume(self, new_volume):
         self.volume = min(max(0, new_volume), 0xF)
-        self.pw.set_volume(self.volume)
         current = self.reg_vol_env.value
         self.reg_vol_env.value = current >> 4 | self.volume << 4
 
@@ -120,10 +114,10 @@ class GBPulseChannel:
 
     def accumulate_for(self, cycles):
         self.sample_accumulator += \
-            self.pw.sample_for(cycles) * self.pw.volume
+            self.pw.sample_for(cycles) * self.volume
+            
     # accumulation step for an inactive channel with DAC on
     # until the High Pass filter is implemented in the future
-
     def accumulate_silence(self, cycles):
         self.sample_accumulator += 7.5 * cycles
         
@@ -178,40 +172,67 @@ class GBChannel3():
         self.memctl = memctl
         self.get_registers()
         self.ltimer = 0x100000
+        self.dots = 0
         self.phase = 0
-        self.ram_i = 0
+        self.phase_rem = 0
         self.sample_accumulator = 0
         self.get_period_step()
         self.get_volume()
         self.active = False
         
+        # 32 4 bit samples 
+        self.cached_wave = [0] * 32
+        
     def cache_waveform(self):
-        pass
-
-    def read_waveRAM(self):
-        # get the correct nible from wave ram
-        # wave ram starts at 0xFF30
-        sample = self.memctl.io_registers[0xFF30 + self.ram_i // 2].value
-        return sample & 0xF if self.ram_i % 2 else (sample >> 4) & 0xF
-
-    def tick(self):
-        sample = self.read_waveRAM()
-        # adjust volume
-        if self.volume:
-            sample >>= self.volume - 1
-        else:
-            sample = 0
-        #
-        self.sample_accumulator += sample
-        # adjust counters
-        self.phase = (self.phase + 1) % self.period
-        self.ram_i = self.phase // self.step
-        #
+        m = self.memctl
+        for i in range(16):
+            b = m.io_registers[0xFF30 + i].value
+            self.cached_wave[2*i] = (b >> 4 & 0xF) >> self.volshift
+            self.cached_wave[2*i + 1] = (b & 0xF) >> self.volshift
 
     def accumulate_for(self, cycles):
-        for _ in range(cycles):
-            self.tick()
+        self.dots += cycles
+        
+        # get the wrapped period
+        periods, cycle_shift = divmod(cycles, self.period)
+        
+        norm_cycles = max(cycle_shift - self.phase_rem, 0)
+        phase_shift, phase_mod = divmod(norm_cycles, self.amprep)
+        
+        cw = self.cached_wave
+        if periods:
+            wave_sum = sum(cw) * self.amprep
+            self.sample_accumulator += wave_sum * periods
+            
+        # Complete waveforms only: phase state is unchanged.
+        if cycle_shift == 0:
+            return
 
+        # Still inside the current amplitude.
+        if 0 < self.phase_rem and cycle_shift < self.phase_rem:
+            self.sample_accumulator += cw[self.phase] * cycle_shift
+            self.phase_rem -= cycle_shift
+            return
+            
+        if self.phase_rem > 0:
+            # if the phase remainder is non-zero
+            self.sample_accumulator += cw[self.phase] * min(self.phase_rem, cycle_shift)
+            if cycle_shift >= self.phase_rem:
+                self.phase += 1
+        
+        # after normalizing to phase start
+        shifted_phase = self.phase + phase_shift
+        if shifted_phase > 31:
+            self.sample_accumulator += sum(cw[self.phase:]) * self.amprep
+            remaining = shifted_phase - 32
+            self.sample_accumulator += sum(cw[:remaining]) * self.amprep
+        else:
+            self.sample_accumulator += sum(cw[self.phase: shifted_phase]) * self.amprep
+            
+        self.phase = shifted_phase % 32
+        self.sample_accumulator += cw[self.phase] * phase_mod 
+        self.phase_rem = self.amprep - phase_mod if phase_mod != 0 else 0
+        
     def accumulate_silence(self):
         self.sample_accumulator += 7.5
 
@@ -224,11 +245,12 @@ class GBChannel3():
 
     def get_period_step(self):
         P = ((self.reg_hi_ctl.value & 0x07) << 8) | self.reg_period_lo.value
-        self.step = (2048 - P) * 2
+        self.amprep = (2048 - P) << 1
         self.period = (2048 - P) << 6
 
     def get_volume(self):
         self.volume = ((self.reg_volume.value >> 5) & 0x3)
+        self.volshift = max(self.volume - 1, 0)
         
     def get_trigger(self):
         if self.reg_hi_ctl.value >> 7 & 1:
@@ -450,8 +472,7 @@ class GbAPU:
         else:
             self.ch2.accumulate_silence(cycles)
         if self.ch3.active:
-            pass
-            # self.ch3.accumulate_for(cycles)
+            self.ch3.accumulate_for(cycles)
         else:
             self.ch3.accumulate_silence()
         # if self.ch4.active:
@@ -477,8 +498,8 @@ class GbAPU:
                 buffer = self.ring // self.buffer_size
                 self.emit_PCM_sample(buffer)
                 self.samples = 0
-        counter_trigger = self.triggers_edge(old, FRAME_SEQ // 4, elapsed)
-        sweep_trigger = self.triggers_edge(old, FRAME_SEQ // 2, elapsed)
+        counter_trigger = self.triggers_edge(old, FRAME_SEQ >> 2, elapsed)
+        sweep_trigger = self.triggers_edge(old, FRAME_SEQ >> 1, elapsed)
         envelope_trigger = self.triggers_edge(old, FRAME_SEQ, elapsed)
         if counter_trigger:
             self.handle_len_counters()
