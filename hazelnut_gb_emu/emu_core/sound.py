@@ -11,7 +11,7 @@ from .auxiliary import BO
 PCM_SAMPLE_RATE = 44100
 MASTER_CLK = 0x400000
 FRAME_SEQ = 0x10000
-BUFFER_UPDATE_TIME = 0.05  # in seconds
+BUFFER_UPDATE_TIME = 0.1  # in seconds
 BUFFER_SIZE = int(PCM_SAMPLE_RATE * BUFFER_UPDATE_TIME)
 
 # mono sound for now
@@ -44,15 +44,17 @@ class GBPulseWave:
         ons = 0
         wave_remaining = self.period - self.phase
         if wave_remaining > cycles:
-            ons += sum(self.waveform[self.phase: self.phase + cycles])
+            rem = wave_remaining - cycles
+            ons += ((self.waveform >> rem) & ((1 << cycles) - 1)).bit_count()
             self.phase += cycles
             return ons
-        ons += sum(self.waveform[self.phase:])
+        ons += (self.waveform & ((1 << wave_remaining) - 1)).bit_count()
         cycles_remaining = cycles - wave_remaining
         
         periods, period_rem = divmod(cycles_remaining, self.period)
         ons += periods * self.duty_time * self.period
-        ons += sum(self.waveform[:period_rem])
+        ons += ((self.waveform >> (self.period - period_rem)) & (
+            (1 << period_rem) - 1)).bit_count()
         self.phase = period_rem
         return ons
 
@@ -60,13 +62,17 @@ class GBPulseWave:
         self.duty_time = self.duty_cycle * 0.25 if self.duty_cycle else 0.125
 
     def set_waveform(self):
-        self.waveform = [b for b in self.duty_pattern[self.duty_cycle]
-                         for _ in range(self.amprep)]
+        repeats = [0, (1 << self.amprep) - 1]
+        self.waveform = 0
+        for bit in self.duty_pattern[self.duty_cycle]:
+            self.waveform <<= self.amprep
+            self.waveform |= repeats[bit]
         self.set_duty_time()
 
     def set_period(self, new_period):
         self.period = new_period
         self.amprep = self.period >> 3
+        self.phase %= self.period
         self.set_waveform()
 
     def set_duty(self, new_duty_cycle):
@@ -310,7 +316,7 @@ class GBNoiseChannel():
         new_hi = ~ ((self.lfsr & 1) ^ ((self.lfsr >> 1) & 1) & 1)
         self.lfsr = new_hi | (self.lsfr >> 1)
         # get the new LSB
-        self.silent = self.self.lsfr & 1
+        pass
 
     def accumulate_silence(self):
         self.sample_accumulator += 7.5
@@ -401,18 +407,18 @@ class GbAPU:
         
     def handle_buffer_boundary(self):
         if self.ring == self.buffer_size:
-            if not self.pgchannel.get_busy():
-                print("UNDERRUN!!!")
-            if self.pgchannel.get_queue() is not None:
-                print("OVERRUN!!!")
+            # if not self.pgchannel.get_busy():
+            #     print("UNDERRUN!!!")
+            # if self.pgchannel.get_queue() is not None:
+            #     print("OVERRUN!!!")
             self.pgchannel.queue(self.snd_portion1)
             
 
         elif self.ring == 0:
-            if not self.pgchannel.get_busy():
-                print("UNDERRUN!!!")
-            if self.pgchannel.get_queue() is not None:
-                print("OVERRUN!!!")
+            # if not self.pgchannel.get_busy():
+            #     print("UNDERRUN!!!")
+            # if self.pgchannel.get_queue() is not None:
+            #     print("OVERRUN!!!")
             self.pgchannel.queue(self.snd_portion2)
 
     def emit_PCM_sample(self, buffer):
@@ -461,7 +467,6 @@ class GbAPU:
                 self.ch3.turn_off()
 
     def accumulate_samples(self, cycles):
-        # force channels for now
         if self.ch1.active:
             # channel 1 is active
             self.ch1.accumulate_for(cycles)
