@@ -319,7 +319,7 @@ class GBNoiseChannel:
         sample = self.lfsr & 1
         new_hi = ~(self.lfsr ^ (self.lfsr >> 1)) & 1
         # shift
-        self.lfsr = new_hi | (self.lfsr >> 1)
+        self.lfsr = (new_hi << 15) | (self.lfsr & 0x7FFF)
         return sample
 
     def get_shift_freq(self):
