@@ -188,15 +188,24 @@ class Gameboy:
         # clear the lcd if PPU is disabled
         if not lcdc >> 7 & 1:
             self.PPU.disable()
-            self.CPU_APU_burst(vblank_dots)
+            self.CPU_APU_burst(vblank_dots - self.cpu_debt)
             return
 
         ly = self.memctl.io_registers[0xFF44]
 
         if self.PPU.is_VBLANK_scan(ly):
+            if ly == 153:
+                # handle early reset
+                early_reset_dots = 4 if vblank_dots == 456 else 8
+                self.CPU_burst(early_reset_dots - self.cpu_debt)
+                self.PPU.inc_ly()
+                self.PPU.handle_LY_compare()
+                self.CPU_burst(vblank_dots - early_reset_dots - self.cpu_debt)
+                return 
+
             # cpu burst then inc ly and handle lyc compare
-            self.CPU_APU_burst(vblank_dots)
-            self.PPU.handle_VBLANK()
+            self.CPU_APU_burst(vblank_dots - self.cpu_debt)
+            self.PPU.handle_VBLANK(vblank_dots)
             return
 
         self.scanline_PPU_modes()
@@ -223,6 +232,7 @@ class Gameboy:
         self.tick_PPU_modes_basis()
 
     def insert_cartridge(self, cartridge: Cartridge):
+        self.loaded_cart = cartridge
         self.memctl.configure_bank_switching(cartridge)
         self.memctl.rom.burn_from(cartridge=cartridge)
 
@@ -264,15 +274,15 @@ class GameboyColor(Gameboy):
         self.DMG_compat = False
 
     def start_HDMA(self):
-        # clear bit 7 to indicate ongoing transfer
-        self.memctl.io_registers[0xFF55] &= 0x7F
         hdmactl = self.memctl.io_registers[0xFF55]
         mode = hdmactl >> 7 & 1
+        # clear bit 7 to indicate ongoing transfer
+        self.memctl.io_registers[0xFF55] &= 0x7F
         if not mode:
             # General purpose DMA
             self.start_GPDMA(hdmactl)
         else:
-            self.start_HBLANK_DMA(hdmactl)
+            self.start_HBLANK_DMA()
 
     def start_HBLANK_DMA(self):
         self.HBLANK_DMA = True
@@ -354,9 +364,9 @@ class GameboyColor(Gameboy):
             cycles_passed += ins_cycles
             # if (
             #     not self.memctl.boot_enabled
-                
+
             # ):
-                
+
             #     log = str(ins) + str(self.SM83_processor.state_snap())
             #     logging_file.write(log + "\n")
             if self.SM83_processor.HALT:
@@ -389,7 +399,7 @@ class GameboyColor(Gameboy):
         if self.HBLANK_DMA:
             self.handle_HBLANK_DMA()
             # the cpu sleeps 34 or 68 clock cycles if hblank DMA happens
-            DMA_time = 204 - (32 << self.speed_mode)
+            DMA_time = 32 << self.speed_mode
             self.tick_timers(DMA_time)
             hblank_cpu_APU_burst = (204 - DMA_time) << self.speed_mode
         else:

@@ -6,15 +6,14 @@ Here is an awesome demo:\
 
 
 ## Some Screenshots
-<img width="179" height="317" alt="hmoon" src="https://github.com/user-attachments/assets/82d4ee27-fe66-4065-a0b4-ba51a99251d8" />
-<img width="180" height="376" alt="magikarp" src="https://github.com/user-attachments/assets/43f9cc81-8fa7-4d8f-8061-2dc15b1db9e3" />
-<img width="181" height="374" alt="chessmaster" src="https://github.com/user-attachments/assets/d18dc78b-27c9-4f82-bf03-f239c67b41e0" />
-
-<img width="178" height="325" alt="metroid" src="https://github.com/user-attachments/assets/031d25ea-364b-405c-940d-695df845fcbd" />
-<img width="332" height="620" alt="hellokitty" src="https://github.com/user-attachments/assets/0aa6f3b4-c4d6-46a5-bb7d-dc6ec0a9d4bc" />
-<img width="332" height="620" alt="gameandwatch" src="https://github.com/user-attachments/assets/8ae59d4f-f114-4e2d-ae8c-76363a5657b9" />
-<img width="332" height="620" alt="worms" src="https://github.com/user-attachments/assets/4c2cb776-6c59-4400-8981-cd7952a77afa" />
-
+<img width="166" height="310" alt="hmoon" src="https://github.com/user-attachments/assets/82d4ee27-fe66-4065-a0b4-ba51a99251d8" />
+<img width="166" height="310" alt="magikarp" src="https://github.com/user-attachments/assets/43f9cc81-8fa7-4d8f-8061-2dc15b1db9e3" />
+<img width="166" height="310" alt="chessmaster" src="https://github.com/user-attachments/assets/d18dc78b-27c9-4f82-bf03-f239c67b41e0" />
+<img width="166" height="310" alt="metroid" src="https://github.com/user-attachments/assets/031d25ea-364b-405c-940d-695df845fcbd" />
+<img width="166" height="310" alt="hellokitty" src="https://github.com/user-attachments/assets/0aa6f3b4-c4d6-46a5-bb7d-dc6ec0a9d4bc" />
+<img width="166" height="310" alt="gameandwatch" src="https://github.com/user-attachments/assets/8ae59d4f-f114-4e2d-ae8c-76363a5657b9" />
+<img width="166" height="310" alt="worms" src="https://github.com/user-attachments/assets/4c2cb776-6c59-4400-8981-cd7952a77afa" />
+<img width="166" height="310" alt="crystal" src="https://github.com/user-attachments/assets/2f996fde-144b-4af8-8687-81060bf9d0ed" />
 
 
 
@@ -78,6 +77,21 @@ in the command line,  (Note: The gameboy color is backwards compatible with the 
 you can then choose if you want to download and use PyPy, by pressing y or n then enter,
 afterwards choose a ROM file to play, simple enough!
 
+#### Scaling
+You can also choose to scale the emulator window (which will also scale the gameboy lcd) by:
+
+```py -m hazelnut_gb_emu --scale [SCALE NUMBER]```
+
+For example, if you want no scaling and to play GameBoy Color (in Windows):
+
+```py -m hazelnut_gb_emu --scale 1 --color```
+
+or: 
+
+```py -m hazelnut_gb_emu -s 1 -c```
+
+The default scaling factor is 2.
+
 
 ## Info on the emulator, disclaimers
 
@@ -96,8 +110,7 @@ the emulator truly instruction stepped in the future so this issue will (hopeful
 
 
 ### General Disclaimers
-- As mentioned, this emulator is currently not clock or machine cycle accurate: it does not emulate GameBoy hardware in full accuraccy.
-It is instead instruction stepped, due to this, you will experience bugs every now and then (expecially for GBC).
+- As mentioned, this emulator is currently not clock or machine cycle accurate: it does not emulate GameBoy hardware in full accuraccy, but emulates almost all commercial games functionally correct.
 - It is functional enough to run almost all commercial games for the Gameboy, but GameBoy Color is not as stable due to the reasons mentioned above.
 - MBC1, MBC2, MBC3 (with RTC registers) and MBC5 are implemented for bank switching (MBC6, MBC7 is next :yum:).
 - It may run slower than the actual gameboy with [CPython](https://en.wikipedia.org/wiki/CPython) (60 fps normally), except if you use PyPy, then it can run x8 with ease.
@@ -111,7 +124,6 @@ AI was instead used extensively, only for; bug hunting, disassembly and optimiza
 ## Known bugs
 ### GameBoy Color
 - FIFA 2000 unplayable due to STAT line boundaries
-- Pokemon Puzzle Challenge crashing after mode selection 
 
 
 ### GameBoy
