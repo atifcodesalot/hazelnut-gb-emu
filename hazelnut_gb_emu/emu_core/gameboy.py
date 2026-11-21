@@ -54,7 +54,7 @@ class Gameboy:
 
     def handle_halt_burst(self, clock_cycles):
         self.tick_timers(clock_cycles)
-        self.handle_serial(clock_cycles)
+        # self.handle_serial(clock_cycles)
         if self.OAM_DMA:
             self.handle_OAM_DMA(clock_cycles)
         self.cpu_debt = 0
@@ -352,19 +352,11 @@ class GameboyColor(Gameboy):
                 self.handle_halt_burst(clock_cycles)
                 return
         cycles_passed = 0
-        # logging_file = open("cpu_log.txt", "a")
         while cycles_passed < clock_cycles:
             ins, ins_cycles = self.SM83_processor.tick_one_ins(self)
             self.tick_timers(ins_cycles)
-            self.handle_serial(ins_cycles)
+            # self.handle_serial(ins_cycles)
             cycles_passed += ins_cycles
-            # if (
-            #     not self.memctl.boot_enabled
-
-            # ):
-
-            #     log = str(ins) + str(self.SM83_processor.state_snap())
-            #     logging_file.write(log + "\n")
             if self.SM83_processor.HALT:
                 remaining = clock_cycles - cycles_passed
                 self.handle_halt_burst(remaining)
