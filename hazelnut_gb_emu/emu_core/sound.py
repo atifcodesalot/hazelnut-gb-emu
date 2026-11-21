@@ -104,8 +104,6 @@ class GBPulseChannel:
 
     def set_volume(self, new_volume):
         self.volume = min(max(0, new_volume), 0xF)
-        current = self.reg_vol_env.value
-        self.reg_vol_env.value = current >> 4 | self.volume << 4
 
     def get_duty_cycle(self):
         duty = (self.reg_duty_timer.value >> 6) & 0x3
@@ -295,7 +293,8 @@ class GBNoiseChannel():
         self.get_volume()
         self.lfsr = 0
         self.sample_accumulator = 0
-        self.silent = 0
+        
+        self.active = False
 
     def get_registers(self):
         self.reg_timer = self.memctl.io_registers[0xFF20]
@@ -308,30 +307,32 @@ class GBNoiseChannel():
 
     def set_volume(self, new_volume):
         self.volume = min(max(0, new_volume), 0xF)
-        current = self.reg_vol_env.value
-        self.reg_vol_env.value = current >> 4 | self.volume << 4
 
     def shift(self):
         # Tap bit 0 and 1
+        sample = self.lsfr & 1
         new_hi = ~ ((self.lfsr & 1) ^ ((self.lfsr >> 1) & 1) & 1)
+        # shift
         self.lfsr = new_hi | (self.lsfr >> 1)
-        # get the new LSB
-        pass
+        return sample
+        
+    
+    def accumulate_for(self, cycles):
+        for _ in range(cycles):
+            self.sample_accumulator += self.shift() * self.volume
 
     def accumulate_silence(self):
         self.sample_accumulator += 7.5
 
-    def tick(self):
-        self.sample_accumulator += self.silent * self.volume
-
     def trigger(self):
         self.lsfr = 0x7FFF
+        self.active = True
 
     def DAC_on(self):
         return self.reg_vol_env.value & 0xF8 != 0
     
     def update(self):
-        pass
+        self.get_volume()
 
 
 class GbAPU:
@@ -480,11 +481,10 @@ class GbAPU:
             self.ch3.accumulate_for(cycles)
         else:
             self.ch3.accumulate_silence()
-        # if self.ch4.active:
-        #     # channel 4 is active
-        #     self.ch4.tick()
-        # else:
-        #     self.ch4.accumulate_silence()
+        if self.ch4.active:
+            self.ch4.accumulate_for(cycles)
+        else:
+            self.ch4.accumulate_silence()
 
     def triggers_edge(self, dots, period, elapsed):
         return dots // period != (dots + elapsed) // period
