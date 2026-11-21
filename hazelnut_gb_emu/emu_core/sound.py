@@ -267,9 +267,9 @@ class GBChannel3:
         if self.volshift == 0:
             self.cached_wave = [0] * 32
             return
-        
+
         for i in range(32):
-            self.cached_wave[i] >>= self.volshift 
+            self.cached_wave[i] >>= self.volshift
 
     def get_trigger(self):
         if self.reg_hi_ctl.value >> 7 & 1:
@@ -311,6 +311,8 @@ class GBNoiseChannel:
         self.env_timer = 0
         self.active = False
 
+        self.shifted = 0
+
     def get_registers(self):
         self.reg_timer = self.memctl.io_registers[0xFF20]
         self.reg_vol_env = self.memctl.io_registers[0xFF21]
@@ -337,21 +339,26 @@ class GBNoiseChannel:
         clk_div = clk_div if clk_div != 0 else 0.5
         clk_shift = (rand_clk >> 4) & 0xF
         self.shift_freq = 0x40000 / (clk_div * (1 << clk_shift))
-        self.timer_edge = int(MASTER_CLK // self.shift_freq)
+        self.timer_period = int(MASTER_CLK // self.shift_freq)
 
     def accumulate_for(self, cycles):
-        old = self.internal_timer
-        self.internal_timer += cycles
-        edges = (self.internal_timer // self.timer_edge) - (old // self.timer_edge)
-        if edges:
-            for _ in range(edges):
-                self.sample_accumulator += self.shift()
+        init_rem = self.timer_period - self.internal_timer
+        if init_rem >= cycles:
+            self.sample_accumulator += self.shifted * init_rem
+            self.internal_timer = (self.internal_timer + cycles) % self.timer_period
+            return
+        cycles_rem = cycles - init_rem
+        shift_periods, final_rem = divmod(cycles_rem, self.timer_period)
+        for _ in shift_periods:
+            self.shifted = self.shift()
+            self.sample_accumulator += self.shifted * self.timer_period
+        self.sample_accumulator += self.shifted * final_rem
 
     def accumulate_silence(self, cycles):
         self.sample_accumulator += 7.5 * cycles
 
     def trigger(self):
-        self.lfsr = 0x7FFF
+        self.lfsr = 0
         self.env_timer = (self.reg_vol_env.value & 7) or 8
         self.active = True
 
