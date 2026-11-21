@@ -197,10 +197,10 @@ class Gameboy:
             if ly == 153:
                 # handle early reset
                 early_reset_dots = 4 if vblank_dots == 456 else 8
-                self.CPU_burst(early_reset_dots - self.cpu_debt)
+                self.CPU_APU_burst(early_reset_dots - self.cpu_debt)
                 self.PPU.inc_ly()
                 self.PPU.handle_LY_compare()
-                self.CPU_burst(vblank_dots - early_reset_dots - self.cpu_debt)
+                self.CPU_APU_burst(vblank_dots - early_reset_dots - self.cpu_debt)
                 return 
 
             # cpu burst then inc ly and handle lyc compare
@@ -263,6 +263,7 @@ class GameboyColor(Gameboy):
         # update components
         self.memctl = CgbMemoryController(self, ext_ram=False)
         self.PPU = CgbPPU(self.memctl)
+        self.APU = GbAPU(self.memctl)
         self.SM83_processor = CgbSM83(self.memctl)
         #
         self.switcing_mode = False
@@ -356,19 +357,11 @@ class GameboyColor(Gameboy):
                 self.handle_halt_burst(clock_cycles)
                 return
         cycles_passed = 0
-        # logging_file = open("cpu_log.txt", "a")
         while cycles_passed < clock_cycles:
             ins, ins_cycles = self.SM83_processor.tick_one_ins(self)
             self.tick_timers(ins_cycles)
             self.handle_serial(ins_cycles)
             cycles_passed += ins_cycles
-            # if (
-            #     not self.memctl.boot_enabled
-
-            # ):
-
-            #     log = str(ins) + str(self.SM83_processor.state_snap())
-            #     logging_file.write(log + "\n")
             if self.SM83_processor.HALT:
                 remaining = clock_cycles - cycles_passed
                 self.handle_halt_burst(remaining)
@@ -381,6 +374,8 @@ class GameboyColor(Gameboy):
                     return
             if self.OAM_DMA:
                 self.handle_OAM_DMA(ins_cycles)
+            if self.APU.audio_on():
+                self.APU.tick_cycles(ins_cycles)
         # get debt
         self.cpu_debt = cycles_passed - clock_cycles
 
