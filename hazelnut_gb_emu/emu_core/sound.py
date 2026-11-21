@@ -150,6 +150,7 @@ class GBPulseChannel:
         # reset the length timer
         if self.ltimer == 0:
             self.ltimer = 0x100000
+        self.env_timer = (self.reg_vol_env.value & 7) or 8
         self.pw.dots = 0
 
     def DAC_on(self):
@@ -307,6 +308,7 @@ class GBNoiseChannel:
         self.sample_accumulator = 0
 
         self.internal_timer = 0
+        self.env_timer = 0
         self.active = False
 
     def get_registers(self):
@@ -350,6 +352,7 @@ class GBNoiseChannel:
 
     def trigger(self):
         self.lfsr = 0x7FFF
+        self.env_timer = (self.reg_vol_env.value & 7) or 8
         self.active = True
 
     def DAC_on(self):
@@ -480,17 +483,17 @@ class GbAPU:
     def handle_len_counters(self):
         if self.ch1.reg_hi_ctl.value & 0x40:
             # channel 1 length counter enabled
-            if not self.ch1.ltimer != 0:
+            if self.ch1.ltimer != 0:
                 self.ch1.ltimer -= 1
             else:
                 self.ch1.turn_off()
         if self.ch2.reg_hi_ctl.value & 0x40:
-            if not self.ch2.ltimer != 0:
+            if self.ch2.ltimer != 0:
                 self.ch2.ltimer -= 1
             else:
                 self.ch2.turn_off()
         if self.ch3.reg_hi_ctl.value & 0x40:
-            if not self.ch3.ltimer != 0:
+            if self.ch3.ltimer != 0:
                 self.ch3.ltimer -= 1
             else:
                 self.ch3.turn_off()
