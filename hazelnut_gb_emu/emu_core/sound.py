@@ -243,8 +243,8 @@ class GBChannel3:
         self.sample_accumulator += cw[self.phase] * phase_mod
         self.phase_rem = self.amprep - phase_mod if phase_mod != 0 else 0
 
-    def accumulate_silence(self):
-        self.sample_accumulator += 7.5
+    def accumulate_silence(self, cycles):
+        self.sample_accumulator += 7.5 * cycles
 
     def get_registers(self):
         self.reg_DAC_en = self.memctl.io_registers[0xFF1A]
@@ -338,8 +338,8 @@ class GBNoiseChannel:
             for _ in range(edges):
                 self.sample_accumulator += self.shift()
 
-    def accumulate_silence(self):
-        self.sample_accumulator += 7.5
+    def accumulate_silence(self, cycles):
+        self.sample_accumulator += 7.5 * cycles
 
     def trigger(self):
         self.lfsr = 0x7FFF
@@ -501,11 +501,11 @@ class GbAPU:
         if self.ch3.active:
             self.ch3.accumulate_for(cycles)
         else:
-            self.ch3.accumulate_silence()
+            self.ch3.accumulate_silence(cycles)
         if self.ch4.active:
             self.ch4.accumulate_for(cycles)
         else:
-            self.ch4.accumulate_silence()
+            self.ch4.accumulate_silence(cycles)
 
     def triggers_edge(self, dots, period, elapsed):
         return dots // period != (dots + elapsed) // period
