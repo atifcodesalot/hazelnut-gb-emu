@@ -214,11 +214,11 @@ class GBChannel3:
             wave_sum = sum(cw) * self.amprep
             self.sample_accumulator += wave_sum * periods
 
-        # Complete waveforms only: phase state is unchanged.
+        # Complete waveforms only: phase state is unchanged
         if cycle_shift == 0:
             return
 
-        # Still inside the current amplitude.
+        # Still inside the current amplitude
         if 0 < self.phase_rem and cycle_shift < self.phase_rem:
             self.sample_accumulator += cw[self.phase] * cycle_shift
             self.phase_rem -= cycle_shift
@@ -262,6 +262,14 @@ class GBChannel3:
         self.volume = (self.reg_volume.value >> 5) & 0x3
         self.volshift = max(self.volume - 1, 0)
 
+        # update cached wave
+        if self.volshift == 0:
+            self.cached_wave = [0] * 32
+            return
+        
+        for i in range(32):
+            self.cached_wave[i] >>= self.volshift 
+
     def get_trigger(self):
         if self.reg_hi_ctl.value >> 7 & 1:
             self.trigger()
@@ -291,7 +299,6 @@ class GBChannel3:
 
 
 class GBNoiseChannel:
-
     def __init__(self, memctl):
         self.memctl = memctl
         self.get_registers()
