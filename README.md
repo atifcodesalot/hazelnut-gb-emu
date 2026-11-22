@@ -127,8 +127,7 @@ AI was instead used extensively, only for; bug hunting, disassembly and optimiza
 
 
 ### GameBoy
-- Robocop 2 stalls after boot due to a narrow ly=144 check for game startup,
-might be fixed in the future.
+- None that I know of currently.
 
 
 ## TODOs (from the most possible to insane):
