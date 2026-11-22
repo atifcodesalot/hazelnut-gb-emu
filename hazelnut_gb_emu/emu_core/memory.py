@@ -121,7 +121,7 @@ class GBMemoryController:
             **{addr: 0 for addr in range(0xFF10, 0xFF40)},
             # --- LCD / PPU ---
             0xFF40: 0,  # LCDC
-            0xFF41: 0,  # STAT
+            0xFF41: 0x80,  # STAT, MSB is always 1
             0xFF42: 0,  # SCY
             0xFF43: 0,  # SCX
             0xFF44: 0,  # LY
@@ -299,8 +299,8 @@ class GBMemoryController:
         # STAT register write
         if a == 0xFF41:
             STAT = self.io_registers[0xFF41]
-            # preserve readonly 3 bits
-            self.io_registers[0xFF41] = v & 0xF8 | STAT & 7
+            # preserve readonly 3 bits and the MSB
+            self.io_registers[0xFF41] = (1 << 7) | (v & 0xF8 | STAT & 7)
 
         elif a == 0xFF45:
             self.io_registers[0xFF45] = v
