@@ -103,8 +103,9 @@ class GBPulseChannel:
         self.active = False
 
     def get_period(self):
-        P = ((self.reg_hi_ctl.value & 0x07) << 8) | self.reg_period_lo.value
-        self.pw.set_period((2048 - P) << 5)
+        self.period_value = ((self.reg_hi_ctl.value & 0x07) << 8) \
+            | self.reg_period_lo.value
+        self.pw.set_period((2048 - self.period_value) << 5)
 
     def get_volume(self):
         self.volume = (self.reg_vol_env.value >> 4) & 0xF
@@ -169,7 +170,15 @@ class GBChannel1(GBPulseChannel):
         super().__init__(memctl, num=0)
         # sweep register only for channel 1
         self.reg_sweep = self.memctl.io_registers[0xFF10]
+        self.sweep_timer = 0
         #
+
+    def get_sweep_timer(self):
+        self.sweep_timer = self.reg_sweep.value >> 4 & 7 
+
+    def update(self):
+        super().update()
+        self.get_sweep_timer()
 
 
 class GBChannel2(GBPulseChannel):
@@ -371,7 +380,6 @@ class GBNoiseChannel:
 
 
 class GbAPU:
-
     def __init__(self, memctl: GBMemoryController):
         # placeholder
         self.master_volume = 1
@@ -436,16 +444,36 @@ class GbAPU:
         self.tick_channel_envelope(self.ch2)
         self.tick_channel_envelope(self.ch4)
 
+    # frequency sweep
     def handle_sweep(self):
         sweep_ctl = self.ch1.reg_sweep.value
-        swp_dir = (sweep_ctl >> 3) & 1
+        sweep_dir = sweep_ctl >> 3 & 1
+        sweep_pace = sweep_ctl >> 4 & 7
+        if sweep_pace == 0:
+            # sweep iterations are disabled
+            return
+        self.ch1.sweep_timer -= 1
         step = sweep_ctl & 0x7
-        new_period = (
-            self.ch1.pw.period >> step if swp_dir else self.ch1.pw.period << step
-        )
-        self.ch1.reg_period_lo.value = new_period & 0xFF
+        dfreq = self.ch1.period_value >> step
+        if self.ch1.sweep_timer == 0:
+            # reset sweep timer
+            self.ch1.sweep_timer = sweep_pace
+            #
+            if sweep_dir:
+                self.ch1.period_value -= dfreq
+            else:
+                self.ch1.period_value += dfreq
+        new_pval = self.ch1.period_value
+        if new_pval > 0x7FF:
+            # periof overflow
+            self.ch1.turn_off()
+            return
+        # update pulse channel period
+        self.ch1.pw.set_period((2048 - new_pval) << 5)
+        #
+        self.ch1.reg_period_lo.value = new_pval & 0xFF
         val = self.ch1.reg_hi_ctl.value
-        self.ch1.reg_hi_ctl.value = (val & 0xF8) | ((new_period >> 8) & 0x07)
+        self.ch1.reg_hi_ctl.value = (val & 0xF8) | ((new_pval >> 8) & 0x07)
 
     def handle_buffer_boundary(self):
         if self.ring == self.buffer_size:
