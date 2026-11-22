@@ -199,7 +199,7 @@ class Gameboy:
                 self.CPU_burst(vblank_dots - early_reset_dots - self.cpu_debt)
                 return 
             elif ly == 144:
-                remaining_dots = int(vblank_dots * 0.75) - self.cpu_debt
+                remaining_dots = vblank_dots - self.cpu_debt - 4
                 self.CPU_burst(remaining_dots)
                 self.PPU.handle_VBLANK(remaining_dots)
                 return
@@ -216,13 +216,13 @@ class Gameboy:
 
         # if just finished the last visible scanline
         if ly == GB_LCD_RES[1] - 1:
-            self.frame_end(vblank_dots)
+            self.frame_end()
 
-    def frame_end(self, vblank_dots):
+    def frame_end(self):
         # ensure framerate is 60
         self.pyclock.tick(60)
         #
-        self.CPU_burst(int(vblank_dots * 0.25) - self.cpu_debt)
+        self.CPU_burst(4 - self.cpu_debt)
         self.PPU.enter_VBLANK()
 
     def powerup(self):
@@ -400,8 +400,8 @@ class GameboyColor(Gameboy):
             hblank_cpu_burst = 204 << self.speed_mode
         self.CPU_burst(hblank_cpu_burst - self.cpu_debt)
 
-    def frame_end(self, vblank_dots):
-        super().frame_end(vblank_dots)
+    def frame_end(self):
+        super().frame_end()
         self.PPU.flip()
 
     def start_DMG_compat_mode(self):
