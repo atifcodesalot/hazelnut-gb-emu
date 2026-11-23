@@ -353,6 +353,15 @@ class GameboyColor(Gameboy):
         self.switcing_mode = False
         self.switch_cycles = 0
 
+    def handle_halt_burst(self, clock_cycles):
+        self.tick_timers(clock_cycles)
+        # self.handle_serial(clock_cycles)
+        if self.OAM_DMA:
+            self.handle_OAM_DMA(clock_cycles)
+        if self.APU.audio_on():
+            self.APU.tick_cycles(clock_cycles >> self.speed_mode)
+        self.cpu_debt = 0
+
     def CPU_APU_burst(self, clock_cycles):
         if self.DMG_compat:
             return super().CPU_APU_burst(clock_cycles)
@@ -387,7 +396,7 @@ class GameboyColor(Gameboy):
             if self.OAM_DMA:
                 self.handle_OAM_DMA(ins_cycles)
             if self.APU.audio_on():
-                self.APU.tick_cycles(ins_cycles)
+                self.APU.tick_cycles(ins_cycles >> self.speed_mode)
         # get debt
         self.cpu_debt = cycles_passed - clock_cycles
 
