@@ -325,13 +325,16 @@ class GBNoiseChannel:
     def set_volume(self, new_volume):
         self.volume = min(max(0, new_volume), 0xF)
 
-    def shift(self):
-        # Tap bit 0 and 1
+    def shift(self, short_mode):
         sample = self.lfsr & 1
-        new_hi = ~(self.lfsr ^ (self.lfsr >> 1)) & 1
+        # Tap bit 0 and 1
+        feedback = ~(self.lfsr ^ (self.lfsr >> 1)) & 1
         # shift
-        self.lfsr = (new_hi << 15) | (self.lfsr & 0x7FFF)
-        return sample
+        self.lfsr = (feedback << 15) | (self.lfsr & 0x7FFF)
+        if short_mode:
+            # tap bit 7 as well if short mode
+            self.lfsr = (self.lfsr >> 8 << 8) | (feedback << 7) | self.lfsr & 0x7F
+        return sample * self.volume
 
     def get_shift_freq(self):
         rand_clk = self.reg_randomness.value
@@ -342,6 +345,7 @@ class GBNoiseChannel:
         self.timer_period = int(MASTER_CLK // self.shift_freq)
 
     def accumulate_for(self, cycles):
+        short_mode = self.reg_randomness.value >> 3 & 1
         init_rem = self.timer_period - self.internal_timer
         if init_rem >= cycles:
             self.sample_accumulator += self.shifted * init_rem
@@ -350,7 +354,7 @@ class GBNoiseChannel:
         cycles_rem = cycles - init_rem
         shift_periods, final_rem = divmod(cycles_rem, self.timer_period)
         for _ in shift_periods:
-            self.shifted = self.shift()
+            self.shifted = self.shift(short_mode)
             self.sample_accumulator += self.shifted * self.timer_period
         self.sample_accumulator += self.shifted * final_rem
 
@@ -478,7 +482,9 @@ class GbAPU:
         mixed = self.mix(ch1avg, ch2avg, ch3avg, ch4avg)
         self.buffers[buffer][self.ring % self.buffer_size] = mixed
         self.ring = (self.ring + 1) % (self.buffer_size * 2)
+
         self.handle_buffer_boundary()
+
         self.samples_sec += 1
         if self.samples_sec == PCM_SAMPLE_RATE:
             self.samples_sec = 0
