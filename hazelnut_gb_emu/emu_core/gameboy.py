@@ -205,7 +205,7 @@ class Gameboy:
                 return 
             elif ly == 144:
                 remaining_dots = vblank_dots - self.cpu_debt - 4
-                self.CPU_burst(remaining_dots)
+                self.CPU_APU_burst(remaining_dots)
                 self.PPU.handle_VBLANK(remaining_dots)
                 return
 
