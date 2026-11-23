@@ -227,7 +227,7 @@ class Gameboy:
         # ensure framerate is 60
         self.pyclock.tick(60)
         #
-        self.CPU_burst(4 - self.cpu_debt)
+        self.CPU_APU_burst(4 - self.cpu_debt)
         self.PPU.enter_VBLANK()
 
     def powerup(self):
