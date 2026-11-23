@@ -505,91 +505,103 @@ class SM83(CPU):
     def exe_INS_JP(self, ins: GameboyInstruction):
         if ins.byte_count > 1:
             address = BO.concat_bytes(*ins.operands_raw[:2][::-1])  # little endian
+        ins.cycles = 16
         # JP NZ, a16
         if ins.raw == 0xC2:
             if not self.flags[0]:
-                self.jump_to(address)
+                return self.jump_to(address)
         # JP a16, unconditional jump kappa pride
-        elif ins.raw == 0xC3:
-            self.jump_to(address)
+        if ins.raw == 0xC3:
+            return self.jump_to(address)
         # JP Z, a16
-        elif ins.raw == 0xCA:
+        if ins.raw == 0xCA:
             if self.flags[0]:
-                self.jump_to(address)
+                return self.jump_to(address)
         # JP NC, a16
-        elif ins.raw == 0xD2:
+        if ins.raw == 0xD2:
             if not self.flags[3]:
-                self.jump_to(address)
+                return self.jump_to(address)
         # JP C, a16
-        elif ins.raw == 0xDA:
+        if ins.raw == 0xDA:
             if self.flags[3]:
-                self.jump_to(address)
+                return self.jump_to(address)
         # JP HL
-        elif ins.raw == 0xE9:
-            self.jump_to(self.HL.value)
+        if ins.raw == 0xE9:
+            return self.jump_to(self.HL.value)
+
+        # no jump happened
+        ins.cycles = 12
 
     def exe_INS_JR(self, ins: GameboyInstruction):
         e8 = ins.operands_raw[0]
         signed = BO.byte_twos_complement(e8)
         address = (self.PC + signed) % 0x10000
+        ins.cycles = 12
         # JR NZ, r8
         if ins.raw == 0x20:
             if not self.flags[0]:
-                self.jump_to(address)
+                return self.jump_to(address)
         # JR r8, unconditional jump kappa pride
-        elif ins.raw == 0x18:
-            self.jump_to(address)
+        if ins.raw == 0x18:
+            return self.jump_to(address)
         # JR Z, r8
-        elif ins.raw == 0x28:
+        if ins.raw == 0x28:
             if self.flags[0]:
-                self.jump_to(address)
+                return self.jump_to(address)
         # JR NC, r8
-        elif ins.raw == 0x30:
+        if ins.raw == 0x30:
             if not self.flags[3]:
-                self.jump_to(address)
+                return self.jump_to(address)
         # JR C, r8
-        elif ins.raw == 0x38:
+        if ins.raw == 0x38:
             if self.flags[3]:
-                self.jump_to(address)
+                return self.jump_to(address)
+        # if no jump happens takes 8 clock cycles
+        ins.cycles = 8
 
     def exe_INS_RET(self, ins: GameboyInstruction):
+        ins.cycles = 20
         if ins.raw == 0xC9:
-            self.return__()
-        elif ins.raw == 0xC0:
+            return self.return__()
+        if ins.raw == 0xC0:
             if not self.flags[0]:
-                self.return__()
-        elif ins.raw == 0xD0:
+                return self.return__()
+        if ins.raw == 0xD0:
             if not self.flags[3]:
-                self.return__()
-        elif ins.raw == 0xC8:
+                return self.return__()
+        if ins.raw == 0xC8:
             if self.flags[0]:
-                self.return__()
-        elif ins.raw == 0xD8:
+                return self.return__()
+        if ins.raw == 0xD8:
             if self.flags[3]:
-                self.return__()
+                return self.return__()
+        # no actual return happened
+        ins.cycles = 8
 
     def exe_INS_CALL(self, ins: GameboyInstruction):
         address = BO.concat_bytes(*ins.operands_raw[:2][::-1])  # little endian
-
+        ins.cycles = 24
         # unconditional call
         if ins.raw == 0xCD:
-            self.call(address)
+            return self.call(address)
         # CALL NZ, a16
-        elif ins.raw == 0xC4:
+        if ins.raw == 0xC4:
             if not self.flags[0]:
-                self.call(address)
-        # JP NC, a16
-        elif ins.raw == 0xD4:
+                return self.call(address)
+        # 
+        if ins.raw == 0xD4:
             if not self.flags[3]:
-                self.call(address)
+                return self.call(address)
         # CALL Z, a16
-        elif ins.raw == 0xCC:
+        if ins.raw == 0xCC:
             if self.flags[0]:
-                self.call(address)
+                return self.call(address)
         # CALL C, a16
-        elif ins.raw == 0xDC:
+        if ins.raw == 0xDC:
             if self.flags[3]:
-                self.call(address)
+                return self.call(address)
+        # no call happened
+        ins.cycles = 12
 
     # RST: implicit call
     def exe_INS_RST(self, ins: GameboyInstruction):
@@ -905,8 +917,7 @@ class SM83(CPU):
     def tick_one_ins(self, gb):
         self.handle_interrupts(gb)
         ins = self.instruction_cycle()
-        cycles = ins.cycles if ins else 0
-        return ins, cycles
+        return ins, ins.cycles
 
     def reset(self):
         self.pending_interrupt_enable = False
