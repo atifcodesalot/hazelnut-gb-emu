@@ -436,12 +436,14 @@ class GbAPU:
         env_dir = env_ctl >> 3 & 1
         ch.env_timer -= 1
         if ch.env_timer == 0:
-            if env_dir:
-                ch.set_volume(ch.volume + 1)
-            else:
-                ch.set_volume(ch.volume - 1)
+            env_pace = env_ctl & 7
+            if env_pace:
+                if env_dir:
+                    ch.set_volume(ch.volume + 1)
+                else:
+                    ch.set_volume(ch.volume - 1)
             # reset envelope timer to pace
-            ch.env_timer = env_ctl & 7 or 8
+            ch.env_timer = env_pace or 8
 
     def handle_envelope(self):
         self.tick_channel_envelope(self.ch1)
