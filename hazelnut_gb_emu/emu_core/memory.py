@@ -638,6 +638,9 @@ class CgbMemoryController(GBMemoryController):
             if v >> 2 & 1:
                 self.gameboy.start_DMG_compat_mode()
 
+        elif a == 0xFF4D:
+            self.io_registers[a] = (self.io_registers[a] & 0x80) | (v & 1)
+
         elif a == 0xFF4F:
             self.io_registers[a] = v
             # update wram bank
