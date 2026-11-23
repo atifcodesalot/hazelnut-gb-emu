@@ -546,25 +546,28 @@ class SM83(CPU):
         e8 = ins.operands_raw[0]
         signed = BO.byte_twos_complement(e8)
         address = (self.PC + signed) % 0x10000
+        ins.cycles = 12
         # JR NZ, r8
         if ins.raw == 0x20:
             if not self.flags[0]:
-                self.jump_to(address)
+                return self.jump_to(address)
         # JR r8, unconditional jump kappa pride
         elif ins.raw == 0x18:
-            self.jump_to(address)
+            return self.jump_to(address)
         # JR Z, r8
         elif ins.raw == 0x28:
             if self.flags[0]:
-                self.jump_to(address)
+                return self.jump_to(address)
         # JR NC, r8
         elif ins.raw == 0x30:
             if not self.flags[3]:
-                self.jump_to(address)
+                return self.jump_to(address)
         # JR C, r8
         elif ins.raw == 0x38:
             if self.flags[3]:
-                self.jump_to(address)
+                return self.jump_to(address)
+        # if no jump happens takes 8 clock cycles
+        ins.cycles = 8
 
     def exe_INS_RET(self, ins: GameboyInstruction):
         if ins.raw == 0xC9:
@@ -919,8 +922,7 @@ class SM83(CPU):
     def tick_one_ins(self, gb):
         self.handle_interrupts(gb)
         ins = self.instruction_cycle()
-        cycles = ins.cycles if ins else 0
-        return ins, cycles
+        return ins, ins.cycles
 
     def reset(self):
         self.pending_interrupt_enable = False
