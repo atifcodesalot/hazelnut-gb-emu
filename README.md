@@ -123,11 +123,11 @@ AI was instead used extensively, only for; bug hunting, disassembly and optimiza
 
 ## Known bugs
 ### GameBoy Color
-- FIFA 2000 unplayable due to STAT line boundaries
+- None that I know of currently.
 
 
 ### GameBoy
-- None that I know of currently.
+- The Smurfs not advancing due to explicitly relying on the OAM DMA bug
 
 
 ## TODOs (from the most possible to insane):
