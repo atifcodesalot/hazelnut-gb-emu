@@ -288,6 +288,11 @@ class GameboyColor(Gameboy):
 
     def start_HBLANK_DMA(self):
         self.HBLANK_DMA = True
+        lcdc = self.memctl.io_registers[0xFF40]
+        if not lcdc >> 7 & 1:
+            # if LCD is disabled
+            # copy one byte right away 
+            self.memctl.HDMA_copy()
 
     def handle_HBLANK_DMA(self):
         m = self.memctl
