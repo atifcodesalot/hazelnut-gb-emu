@@ -92,6 +92,16 @@ or:
 
 The default scaling factor is 2.
 
+#### How to play with sound (not recommended)
+There is still no sound on the main branch, but the APU is functional enough to be tested.
+To play with sound:
+```
+git checkout sound
+git pull
+```
+
+Then follow the same instructions above.
+
 
 ## Info on the emulator, disclaimers
 
@@ -106,20 +116,20 @@ of the GameBoy processor from approx. 4 MHz to 8. This doubles the cycles betwee
 the actually PPU does not double its speed! Meaning more CPU bursts between mode boundaries: more inaccurate.
 Because the real hardware runs every system: APU, PPU and CPU concurrently. I will possibly make
 the emulator truly instruction stepped in the future so this issue will (hopefully) bite the dust.
+All of the games (200+) that were tested for GBC is still functional though.
 
 
 
 ### General Disclaimers
 - As mentioned, this emulator is currently not clock or machine cycle accurate: it does not emulate GameBoy hardware in full accuraccy, but emulates almost all commercial games functionally correct.
-- It is functional enough to run almost all commercial games for the Gameboy, but GameBoy Color is not as stable due to the reasons mentioned above.
 - MBC1, MBC2, MBC3 (with RTC registers) and MBC5 are implemented for bank switching (MBC6, MBC7 is next :yum:).
 - It may run slower than the actual gameboy with [CPython](https://en.wikipedia.org/wiki/CPython) (60 fps normally), except if you use PyPy, then it can run x8 with ease.
-- The APU unit is in development, hence no sound yet.
+- The APU unit is still in development.
 
 ## Credits and AI usage
 %99 of the code and the full CPU, PPU implementations for the Gameboy and Gameboy Color are written by me only. Rarely, some functions were refactored, enchanced by AI: no code was generated from scratch, or no agentic code was used.
 
-AI was instead used extensively, only for; bug hunting, disassembly and optimization problems. 
+AI was instead used extensively, only for; bug hunting, disassembly and sometimes optimization problems. 
 
 ## Known bugs
 ### GameBoy Color
