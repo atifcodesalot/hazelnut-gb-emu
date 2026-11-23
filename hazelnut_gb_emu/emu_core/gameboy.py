@@ -56,7 +56,7 @@ class Gameboy:
 
     def handle_halt_burst(self, clock_cycles):
         self.tick_timers(clock_cycles)
-        self.handle_serial(clock_cycles)
+        # self.handle_serial(clock_cycles)
         if self.OAM_DMA:
             self.handle_OAM_DMA(clock_cycles)
         if self.APU.audio_on():
@@ -80,6 +80,7 @@ class Gameboy:
         while cycles_passed < clock_cycles:
             ins, ins_cycles = self.SM83_processor.tick_one_ins(self)
             self.tick_timers(ins_cycles)
+            # self.handle_serial(ins_cycles)
             cycles_passed += ins_cycles
 
             if self.SM83_processor.HALT:
@@ -202,6 +203,11 @@ class Gameboy:
                 self.PPU.handle_LY_compare()
                 self.CPU_APU_burst(vblank_dots - early_reset_dots - self.cpu_debt)
                 return 
+            elif ly == 144:
+                remaining_dots = vblank_dots - self.cpu_debt - 4
+                self.CPU_burst(remaining_dots)
+                self.PPU.handle_VBLANK(remaining_dots)
+                return
 
             # cpu burst then inc ly and handle lyc compare
             self.CPU_APU_burst(vblank_dots - self.cpu_debt)
@@ -221,6 +227,7 @@ class Gameboy:
         # ensure framerate is 60
         self.pyclock.tick(60)
         #
+        self.CPU_burst(4 - self.cpu_debt)
         self.PPU.enter_VBLANK()
 
     def powerup(self):
@@ -287,6 +294,11 @@ class GameboyColor(Gameboy):
 
     def start_HBLANK_DMA(self):
         self.HBLANK_DMA = True
+        lcdc = self.memctl.io_registers[0xFF40]
+        if not lcdc >> 7 & 1:
+            # if LCD is disabled
+            # copy one byte right away 
+            self.memctl.HDMA_copy()
 
     def handle_HBLANK_DMA(self):
         m = self.memctl
@@ -360,7 +372,7 @@ class GameboyColor(Gameboy):
         while cycles_passed < clock_cycles:
             ins, ins_cycles = self.SM83_processor.tick_one_ins(self)
             self.tick_timers(ins_cycles)
-            self.handle_serial(ins_cycles)
+            # self.handle_serial(ins_cycles)
             cycles_passed += ins_cycles
             if self.SM83_processor.HALT:
                 remaining = clock_cycles - cycles_passed
