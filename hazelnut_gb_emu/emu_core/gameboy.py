@@ -78,7 +78,7 @@ class Gameboy:
             ins, ins_cycles = self.SM83_processor.tick_one_ins(self)
 
             self.tick_timers(ins_cycles)
-            self.handle_serial(ins_cycles)
+            # self.handle_serial(ins_cycles)
             cycles_passed += ins_cycles
 
             if self.SM83_processor.HALT:
