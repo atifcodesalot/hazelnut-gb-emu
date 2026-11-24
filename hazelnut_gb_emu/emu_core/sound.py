@@ -352,6 +352,7 @@ class GBNoiseChannel:
         self.sample_accumulator = 0
 
         self.internal_timer = 0
+        self.get_shift_freq()
         self.env_timer = 0
         self.active = False
 
@@ -378,7 +379,7 @@ class GBNoiseChannel:
             # tap bit 7 as well if short mode
             self.lfsr = (self.lfsr & ~0x40) | (feedback << 6)
         sample = self.lfsr & 1
-        return sample * self.volume
+        return sample
 
     def get_shift_freq(self):
         rand_clk = self.reg_randomness.value
@@ -387,37 +388,44 @@ class GBNoiseChannel:
         clk_shift = (rand_clk >> 4) & 0xF
         self.shift_freq = 0x40000 / (clk_div * (1 << clk_shift))
         self.timer_period = int(MASTER_CLK // self.shift_freq)
+        self.internal_timer %= self.timer_period
 
     def accumulate_for(self, cycles):
         short_mode = self.reg_randomness.value >> 3 & 1
         init_rem = self.timer_period - self.internal_timer
         if init_rem >= cycles:
-            self.sample_accumulator += self.shifted * cycles
+            self.sample_accumulator += self.shifted * cycles * self.volume
             self.internal_timer = (self.internal_timer + cycles) % self.timer_period
             if init_rem == cycles:
                 self.shifted = self.shift(short_mode)
             return
         else:
-            self.sample_accumulator += self.shifted * init_rem
+            self.sample_accumulator += self.shifted * init_rem  * self.volume
             self.shifted = self.shift(short_mode)
             
         cycles_rem = cycles - init_rem
         shift_periods, final_rem = divmod(cycles_rem, self.timer_period)
         for _ in range(shift_periods):
-            self.sample_accumulator += self.shifted * self.timer_period
+            self.sample_accumulator += self.shifted * self.timer_period * self.volume
             self.shifted = self.shift(short_mode)
     
-        self.sample_accumulator += self.shifted * final_rem
+        self.sample_accumulator += self.shifted * final_rem  * self.volume
         self.internal_timer = final_rem
 
     def accumulate_silence(self, cycles):
         self.sample_accumulator += 7.5 * cycles
 
     def trigger(self):
+        if not self.DAC_on():
+            return
         self.active = True
         self.get_volume()
         # reset the lfst to 0 (using XNOR)
         self.lfsr = 0
+
+        self.internal_timer = 0
+        self.shifted = 0
+
         self.env_timer = (self.reg_vol_env.value & 7) or 8
         if self.ltimer == 0:
             self.ltimer = 0x40
@@ -443,13 +451,13 @@ class GBNoiseChannel:
         self.ltimer = 0x40 - (self.reg_timer.value & 0x3F)
 
     def update(self, regnum):
-        if regnum == 0:
+        if regnum == 1:
             self.get_len_counter()
-        elif regnum == 1:
-            self.get_DAC()
         elif regnum == 2:
-            self.get_shift_freq()
+            self.get_DAC()
         elif regnum == 3:
+            self.get_shift_freq()
+        elif regnum == 4:
             self.get_trigger()
 
 
