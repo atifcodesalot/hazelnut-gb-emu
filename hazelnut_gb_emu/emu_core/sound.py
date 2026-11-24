@@ -136,6 +136,10 @@ class GBPulseChannel:
         if self.reg_hi_ctl.value >> 7 & 1:
             self.trigger()
 
+    def get_DAC(self):
+        if not self.DAC_on():
+            self.turn_off()
+
     def update(self):
         self.get_period()
         self.get_volume()
@@ -284,10 +288,15 @@ class GBChannel3:
         if self.reg_hi_ctl.value >> 7 & 1:
             self.trigger()
 
+    def get_DAC(self):
+        if not self.DAC_on():
+            self.turn_off()
+
     def update(self):
         self.get_period_step()
         self.get_volume()
         self.get_trigger()
+        self.get_DAC()
 
     def trigger(self):
         if not self.DAC_on():
@@ -378,9 +387,20 @@ class GBNoiseChannel:
     def DAC_on(self):
         return self.reg_vol_env.value & 0xF8 != 0
 
+    def turn_off(self):
+        master = self.memctl.io_registers[0xFF26].value
+        new_master = BO.res_nth_bit(master, 3)
+        self.memctl.io_registers[0xFF26].value = new_master
+        self.active = False
+
+    def get_DAC(self):
+        if not self.DAC_on():
+            self.turn_off()
+
     def update(self):
         self.get_volume()
         self.get_shift_freq()
+        self.get_DAC()
 
 
 class GbAPU:
@@ -471,7 +491,7 @@ class GbAPU:
                 self.ch1.period_value += dfreq
         new_pval = self.ch1.period_value
         if new_pval > 0x7FF:
-            # periof overflow
+            # period overflow
             self.ch1.turn_off()
             return
         # update pulse channel period
