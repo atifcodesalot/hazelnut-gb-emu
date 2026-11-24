@@ -143,19 +143,27 @@ class GBPulseChannel:
     def get_len_counter(self):
         self.ltimer = 0x40 - (self.reg_duty_timer.value & 0x3F)
 
-    def update(self):
-        self.get_period()
-        self.get_volume()
-        self.get_duty_cycle()
-        self.get_trigger()
-        self.get_len_counter()
+    def update(self, regnum):
+        if regnum == 1:
+            self.get_duty_cycle()
+            self.get_len_counter()
+        elif regnum == 2:
+            self.get_DAC()
+        elif regnum == 3:
+            self.get_period()
+        elif regnum == 4:
+            self.get_period()
+            self.get_trigger()
 
     def trigger(self):
         if not self.DAC_on():
             return
         self.active = True
+        self.get_volume()
+        
         master = self.memctl.io_registers[0xFF26].value
         self.memctl.io_registers[0xFF26].value = BO.set_nth_bit(master, self.num)
+
         # reset the length timer
         if self.ltimer == 0:
             self.ltimer = 0x40
@@ -184,9 +192,10 @@ class GBChannel1(GBPulseChannel):
     def get_sweep_timer(self):
         self.sweep_timer = self.reg_sweep.value >> 4 & 7 
 
-    def update(self):
-        super().update()
-        self.get_sweep_timer()
+    def update(self, regnum):
+        super().update(regnum)
+        if regnum == 0:
+            self.get_sweep_timer()
 
 
 class GBChannel2(GBPulseChannel):
@@ -301,12 +310,18 @@ class GBChannel3:
     def get_len_counter(self):
         self.ltimer = 0x100 - self.reg_timer.value 
 
-    def update(self):
-        self.get_period_step()
-        self.get_volume()
-        self.get_trigger()
-        self.get_len_counter()
-        self.get_DAC()
+    def update(self, regnum):
+        if regnum == 0:
+            self.get_DAC()
+        elif regnum == 1:
+            self.get_len_counter()
+        elif regnum == 2:
+            self.get_volume()
+        elif regnum == 3:
+            self.get_period_step()
+        elif regnum == 4:
+            self.get_period_step()
+            self.get_trigger()
 
     def trigger(self):
         if not self.DAC_on():
@@ -399,11 +414,17 @@ class GBNoiseChannel:
         self.sample_accumulator += 7.5 * cycles
 
     def trigger(self):
+        self.active = True
+        self.get_volume()
+        # reset the lfst to 0 (using XNOR)
         self.lfsr = 0
         self.env_timer = (self.reg_vol_env.value & 7) or 8
-        self.active = True
         if self.ltimer == 0:
             self.ltimer = 0x40
+
+    def get_trigger(self):
+        if self.reg_ctl.value >> 7 & 1:
+            self.trigger()
 
     def DAC_on(self):
         return self.reg_vol_env.value & 0xF8 != 0
@@ -421,11 +442,15 @@ class GBNoiseChannel:
     def get_len_counter(self):
         self.ltimer = 0x40 - (self.reg_timer.value & 0x3F)
 
-    def update(self):
-        self.get_volume()
-        self.get_shift_freq()
-        self.get_DAC()
-        self.get_len_counter()
+    def update(self, regnum):
+        if regnum == 0:
+            self.get_len_counter()
+        elif regnum == 1:
+            self.get_DAC()
+        elif regnum == 2:
+            self.get_shift_freq()
+        elif regnum == 3:
+            self.get_trigger()
 
 
 class GbAPU:

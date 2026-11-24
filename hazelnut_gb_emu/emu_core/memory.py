@@ -317,9 +317,9 @@ class GBMemoryController:
         # 
         if a <= 0xFF23:
             # write happened in the channel registers
-            chnum = (a - 0xFF10) // 5
-            # update respective channel
-            self.gameboy.APU.gb_channels[chnum].update()
+            chnum, regnum = divmod(a - 0xFF10, 5)
+            # update respective channel state
+            self.gameboy.APU.gb_channels[chnum].update(regnum)
             
         elif a >= 0xFF30:
             # write happened in the wave ram
