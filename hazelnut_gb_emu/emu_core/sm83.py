@@ -814,7 +814,21 @@ class SM83(CPU):
         else:
             raise AttributeError(f"{name} is not a valid attribute of CPU.")
 
-    def decode(self, opcode, prefixed: bool):
+    def instruction_cycle(self):
+        # fetch
+        prefixed = False
+        opcode = self.memory.read_at(self.PC)
+
+        if opcode == 0xCB:
+            # the instruction is prefixed
+            self.PC = (self.PC + 1) & 0xFFFF
+            opcode = self.memory.read_at(self.PC)
+            prefixed = True
+
+        self.PC = (self.PC + 1) & 0xFFFF
+        #
+
+        # decode
         # get ins from the tables
         if prefixed:
             ins = GB_PREFIXED_OPCODES_JSON[opcode]
@@ -834,25 +848,6 @@ class SM83(CPU):
 
         # inc PC
         self.PC = (current_pc + op_len) & 0xFFFF
-
-        return ins
-
-    def instruction_cycle(self):
-        # fetch
-        prefixed = False
-        opcode = self.memory.read_at(self.PC)
-
-        if opcode == 0xCB:
-            # the instruction is prefixed
-            self.PC = (self.PC + 1) & 0xFFFF
-            opcode = self.memory.read_at(self.PC)
-            prefixed = True
-
-        self.PC = (self.PC + 1) & 0xFFFF
-        #
-
-        # decode
-        ins = self.decode(opcode, prefixed)
         #
 
         # execute
