@@ -498,10 +498,10 @@ class GbAPU:
 
     def emit_PCM_sample(self, buffer):
         # average channel samples over 95 dots
-        ch1avg = self.ch1.sample_accumulator / self.accm if self.ch1.DAC_on() else 0
-        ch2avg = self.ch2.sample_accumulator / self.accm if self.ch2.DAC_on() else 0
-        ch3avg = self.ch3.sample_accumulator / self.accm if self.ch3.DAC_on() else 0
-        ch4avg = self.ch4.sample_accumulator / self.accm if self.ch4.DAC_on() else 0
+        ch1avg = self.ch1.sample_accumulator / self.accm
+        ch2avg = self.ch2.sample_accumulator / self.accm 
+        ch3avg = self.ch3.sample_accumulator / self.accm 
+        ch4avg = self.ch4.sample_accumulator / self.accm 
         #
         # reset accumulators
         self.ch1.sample_accumulator = 0
@@ -547,19 +547,24 @@ class GbAPU:
         if self.ch1.active:
             # channel 1 is active
             self.ch1.accumulate_for(cycles)
-        else:
+        # channel 1's DAC is off
+        elif self.ch1.reg_vol_env.value & 0xF8 == 0:
+            # accumulate analog silence
             self.ch1.accumulate_silence(cycles)
+
         if self.ch2.active:
             self.ch2.accumulate_for(cycles)
-        else:
+        elif self.ch2.reg_vol_env.value & 0xF8 == 0:
             self.ch2.accumulate_silence(cycles)
+
         if self.ch3.active:
             self.ch3.accumulate_for(cycles)
-        else:
+        elif self.ch3.reg_DAC_en.value >> 7 & 1 == 0:
             self.ch3.accumulate_silence(cycles)
+
         if self.ch4.active:
             self.ch4.accumulate_for(cycles)
-        else:
+        elif self.ch4.reg_vol_env.value & 0xF8 == 0:
             self.ch4.accumulate_silence(cycles)
 
     def triggers_edge(self, dots, period, elapsed):
