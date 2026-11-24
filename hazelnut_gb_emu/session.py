@@ -326,7 +326,7 @@ class SessionController:
     def consume_events(self):
         gb = self.gameboy
         while gb.running:
-            time.sleep(0.0001)
+            time.sleep(0.016)
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     gb.running = False
