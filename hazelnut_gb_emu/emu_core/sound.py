@@ -96,7 +96,7 @@ class GBPulseChannel:
         self.get_period()
         self.get_volume()
         self.get_duty_cycle()
-        self.ltimer = 0x100000  # length timer
+        self.get_len_counter()
         self.env_timer = 0  # envelope timer
         self.sample_accumulator = 0
 
@@ -140,11 +140,15 @@ class GBPulseChannel:
         if not self.DAC_on():
             self.turn_off()
 
+    def get_len_counter(self):
+        self.ltimer = 0x40 - (self.reg_duty_timer.value & 0x3F)
+
     def update(self):
         self.get_period()
         self.get_volume()
         self.get_duty_cycle()
         self.get_trigger()
+        self.get_len_counter()
 
     def trigger(self):
         if not self.DAC_on():
@@ -154,7 +158,7 @@ class GBPulseChannel:
         self.memctl.io_registers[0xFF26].value = BO.set_nth_bit(master, self.num)
         # reset the length timer
         if self.ltimer == 0:
-            self.ltimer = 0x100000
+            self.ltimer = 0x40
         self.env_timer = (self.reg_vol_env.value & 7) or 8
         self.pw.dots = 0
 
@@ -195,13 +199,15 @@ class GBChannel3:
     def __init__(self, memctl):
         self.memctl = memctl
         self.get_registers()
-        self.ltimer = 0x100000
+
         self.dots = 0
         self.phase = 0
         self.phase_rem = 0
         self.sample_accumulator = 0
+
         self.get_period_step()
         self.get_volume()
+        self.get_len_counter()
         self.active = False
 
         # 32 4 bit samples
@@ -239,7 +245,7 @@ class GBChannel3:
             return
 
         if self.phase_rem > 0:
-            # if the phase remainder is non-zero
+            # if the phase remainder is non zero
             self.sample_accumulator += cw[self.phase] * min(self.phase_rem, cycle_shift)
             if cycle_shift >= self.phase_rem:
                 self.phase += 1
@@ -292,10 +298,14 @@ class GBChannel3:
         if not self.DAC_on():
             self.turn_off()
 
+    def get_len_counter(self):
+        self.ltimer = 0x100 - self.reg_timer.value 
+
     def update(self):
         self.get_period_step()
         self.get_volume()
         self.get_trigger()
+        self.get_len_counter()
         self.get_DAC()
 
     def trigger(self):
@@ -305,7 +315,7 @@ class GBChannel3:
         master = self.memctl.io_registers[0xFF26].value
         self.memctl.io_registers[0xFF26].value = BO.set_nth_bit(master, 2)
         if self.ltimer == 0:
-            self.ltimer = 0x100000
+            self.ltimer = 0x100
 
     def DAC_on(self):
         return self.reg_DAC_en.value >> 7 & 1
@@ -322,6 +332,7 @@ class GBNoiseChannel:
         self.memctl = memctl
         self.get_registers()
         self.get_volume()
+        self.get_len_counter()
         self.lfsr = 0
         self.sample_accumulator = 0
 
@@ -391,6 +402,8 @@ class GBNoiseChannel:
         self.lfsr = 0
         self.env_timer = (self.reg_vol_env.value & 7) or 8
         self.active = True
+        if self.ltimer == 0:
+            self.ltimer = 0x40
 
     def DAC_on(self):
         return self.reg_vol_env.value & 0xF8 != 0
@@ -405,10 +418,14 @@ class GBNoiseChannel:
         if not self.DAC_on():
             self.turn_off()
 
+    def get_len_counter(self):
+        self.ltimer = 0x40 - (self.reg_timer.value & 0x3F)
+
     def update(self):
         self.get_volume()
         self.get_shift_freq()
         self.get_DAC()
+        self.get_len_counter()
 
 
 class GbAPU:
@@ -509,6 +526,30 @@ class GbAPU:
         val = self.ch1.reg_hi_ctl.value
         self.ch1.reg_hi_ctl.value = (val & 0xF8) | ((new_pval >> 8) & 0x07)
 
+    def handle_len_counters(self):
+        if self.ch1.reg_hi_ctl.value & 0x40:
+            # channel 1 length counter enabled
+            if self.ch1.ltimer != 0:
+                self.ch1.ltimer -= 1
+                if self.ch1.ltimer == 0:
+                    self.ch1.turn_off()
+        if self.ch2.reg_hi_ctl.value & 0x40:
+            if self.ch2.ltimer != 0:
+                self.ch2.ltimer -= 1
+                if self.ch2.ltimer == 0:
+                    self.ch2.turn_off()
+        if self.ch3.reg_hi_ctl.value & 0x40:
+            if self.ch3.ltimer != 0:
+                self.ch3.ltimer -= 1
+                if self.ch3.ltimer == 0:
+                    self.ch3.turn_off()
+
+        if self.ch4.reg_ctl.value & 0x40:
+            if self.ch4.ltimer != 0:
+                self.ch4.ltimer -= 1
+                if self.ch4.ltimer == 0:
+                    self.ch4.turn_off()
+
     def handle_buffer_boundary(self):
         if self.ring == self.buffer_size:
             # if not self.pgchannel.get_busy():
@@ -552,24 +593,6 @@ class GbAPU:
         remaining_pcm = PCM_SAMPLE_RATE - self.samples_sec
         remaining_cycles = MASTER_CLK - self.dots
         self.accm = remaining_cycles // remaining_pcm
-
-    def handle_len_counters(self):
-        if self.ch1.reg_hi_ctl.value & 0x40:
-            # channel 1 length counter enabled
-            if self.ch1.ltimer != 0:
-                self.ch1.ltimer -= 1
-            else:
-                self.ch1.turn_off()
-        if self.ch2.reg_hi_ctl.value & 0x40:
-            if self.ch2.ltimer != 0:
-                self.ch2.ltimer -= 1
-            else:
-                self.ch2.turn_off()
-        if self.ch3.reg_hi_ctl.value & 0x40:
-            if self.ch3.ltimer != 0:
-                self.ch3.ltimer -= 1
-            else:
-                self.ch3.turn_off()
 
     def accumulate_samples(self, cycles):
         if self.ch1.active:
