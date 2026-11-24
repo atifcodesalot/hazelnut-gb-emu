@@ -292,7 +292,7 @@ class GBChannel3:
         self.volshift = max(self.volume - 1, 0)
 
         # update cached wave
-        if self.volshift == 0:
+        if self.volume == 0:
             self.cached_wave = [0] * 32
             return
 
