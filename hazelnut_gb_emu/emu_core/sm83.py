@@ -842,7 +842,7 @@ class SM83(CPU):
 
         if op_len == 1:
             ins.operands_raw[0] = self.memory.read_at(current_pc)
-        if op_len == 2:
+        elif op_len == 2:
             ins.operands_raw[0] = self.memory.read_at(current_pc)
             ins.operands_raw[1] = self.memory.read_at(current_pc + 1)
 
