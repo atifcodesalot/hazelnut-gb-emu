@@ -344,14 +344,14 @@ class GBNoiseChannel:
         self.volume = min(max(0, new_volume), 0xF)
 
     def shift(self, short_mode):
-        sample = self.lfsr & 1
         # Tap bit 0 and 1
         feedback = ~(self.lfsr ^ (self.lfsr >> 1)) & 1
         # shift
-        self.lfsr = (feedback << 15) | (self.lfsr & 0x7FFF)
+        self.lfsr = (feedback << 14) | (self.lfsr >> 1)
         if short_mode:
             # tap bit 7 as well if short mode
-            self.lfsr = (self.lfsr >> 8 << 8) | (feedback << 7) | self.lfsr & 0x7F
+            self.lfsr = (self.lfsr & ~0x40) | (feedback << 6)
+        sample = self.lfsr & 1
         return sample * self.volume
 
     def get_shift_freq(self):
@@ -366,15 +366,23 @@ class GBNoiseChannel:
         short_mode = self.reg_randomness.value >> 3 & 1
         init_rem = self.timer_period - self.internal_timer
         if init_rem >= cycles:
-            self.sample_accumulator += self.shifted * init_rem
+            self.sample_accumulator += self.shifted * cycles
             self.internal_timer = (self.internal_timer + cycles) % self.timer_period
+            if init_rem == cycles:
+                self.shifted = self.shift(short_mode)
             return
+        else:
+            self.sample_accumulator += self.shifted * init_rem
+            self.shifted = self.shift(short_mode)
+            
         cycles_rem = cycles - init_rem
         shift_periods, final_rem = divmod(cycles_rem, self.timer_period)
-        for _ in shift_periods:
-            self.shifted = self.shift(short_mode)
+        for _ in range(shift_periods):
             self.sample_accumulator += self.shifted * self.timer_period
+            self.shifted = self.shift(short_mode)
+    
         self.sample_accumulator += self.shifted * final_rem
+        self.internal_timer = final_rem
 
     def accumulate_silence(self, cycles):
         self.sample_accumulator += 7.5 * cycles
