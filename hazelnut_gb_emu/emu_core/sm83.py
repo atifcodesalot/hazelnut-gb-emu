@@ -257,7 +257,6 @@ class SM83(CPU):
             self.dec_register("HL")
 
     def exe_INS_LDH(self, ins: GameboyInstruction):
-        o1, o2 = ins.operands
         raw = ins.raw
         if raw == 0xE0:
             self.memory.write_to(0xFF00 + ins.operands_raw[0], self.A.value)
