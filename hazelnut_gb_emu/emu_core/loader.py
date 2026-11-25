@@ -37,7 +37,7 @@ class GameboyInstruction:
     prefixed: bool
     mnemonic: str
     raw: bytes
-    operands_raw: bytearray
+    operands_raw: list
     operand_bytes: int
     operands: tuple[Operand]
     cycles: list
@@ -98,7 +98,7 @@ def init_instructions():
                 prefixed=prefixed,
                 mnemonic=ins_json["mnemonic"],
                 raw=int(opcode, 16),
-                operands_raw=bytearray(op_len),
+                operands_raw=[0]*op_len,
                 operand_bytes=op_len,
                 operands=ins_json["operands"],
                 cycles=ins_json["cycles"],
