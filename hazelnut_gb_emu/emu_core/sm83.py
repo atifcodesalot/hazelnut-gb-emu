@@ -112,14 +112,14 @@ class CPU:
     def call(self, address):
         current_PC = self.PC
         PC_high, PC_low = current_PC >> 8, current_PC & 0xFF
-        self.set_register("SP", self.SP.value - 2)
+        self.SP.value = (self.SP.value - 2) & 0xFFFF
         # little endian
         self.memory.write_to(self.SP.value + 1, PC_high)
         self.memory.write_to(self.SP.value, PC_low)
         self.jump_to(address)
 
     def return__(self):
-        self.set_register("SP", self.SP.value + 2)
+        self.SP.value = (self.SP.value + 2) & 0xFFFF
         stack_top = BO.concat_bytes(
             high=self.memory.read_at(self.SP.value - 1),
             low=self.memory.read_at(self.SP.value - 2),
@@ -263,9 +263,9 @@ class SM83(CPU):
         elif o1.name == "C":
             self.memory.write_to(0xFF00 + self.C.value, self.A.value)
         elif o2.name == "a8":
-            self.set_register("A", self.memory.read_at(0xFF00 + ins.operands_raw[0]))
+            self.A.value = self.memory.read_at(0xFF00 + ins.operands_raw[0])
         elif o2.name == "C":
-            self.set_register("A", self.memory.read_at(0xFF00 + self.C.value))
+            self.A.value = self.memory.read_at(0xFF00 + self.C.value)
 
     # Load, copy related instructions END here
     ###
@@ -294,9 +294,9 @@ class SM83(CPU):
         self.set_flags_fast(H=bch, C=bcf)
 
         if sub:
-            self.set_register("A", current_A - operand)
+            self.A.value = (current_A - operand) & 0xFF
         else:
-            self.set_register("A", current_A + operand)
+            self.A.value = (current_A + operand) & 0xFF
         current_A = self.A.value
         if include_carry:
             self.set_flags_fast(
@@ -321,7 +321,7 @@ class SM83(CPU):
                 H=BO.add_half_carry(self.SP.value, signed),
                 C=BO.add_full_carry(self.SP.value & 0xFF, e8),
             )
-            self.set_register("SP", self.SP.value + signed)
+            self.SP.value = (self.SP.value + signed) & 0xFFFF
         elif o1.name == "A":
             self.accumulate_A(ins)
         # ADD HL,ss is the only instruction that has a 16 bit operand, and the operand is always a register pair,
@@ -428,7 +428,7 @@ class SM83(CPU):
             r = self.get_register(o2.name)
             value = r if o2.immediate else self.memory.read_at(r)
         result = self.A.value & value
-        self.set_register("A", result)
+        self.A.value = result & 0xFF
         self.set_flags_fast(Z=result == 0, N=False, H=True, C=False)
 
     def exe_INS_OR(self, ins: GameboyInstruction):
@@ -440,7 +440,7 @@ class SM83(CPU):
             r = self.get_register(o2.name)
             value = r if o2.immediate else self.memory.read_at(r)
         result = self.A.value | value
-        self.set_register("A", result)
+        self.A.value = result & 0xFF
         self.set_flags_fast(Z=result == 0, N=False, H=False, C=False)
 
     def exe_INS_XOR(self, ins: GameboyInstruction):
@@ -452,12 +452,12 @@ class SM83(CPU):
             r = self.get_register(o2.name)
             value = r if o2.immediate else self.memory.read_at(r)
         result = self.A.value ^ value
-        self.set_register("A", result)
+        self.A.value = result & 0xFF
         self.set_flags_fast(Z=result == 0, N=False, H=False, C=False)
 
     def exe_INS_CPL(self, _: GameboyInstruction):
         result = 0xFF ^ self.A.value
-        self.set_register("A", result)
+        self.A.value = result & 0xFF
         self.set_flags_fast(N=1, H=1)
 
     # Stack related instructions start here
@@ -466,7 +466,7 @@ class SM83(CPU):
 
     def exe_INS_POP(self, ins: GameboyInstruction):
         def pop(highreg, lowreg, flag=False):
-            self.set_register("SP", self.SP.value + 2)
+            self.SP.value = (self.SP.value + 2) & 0xFFFF
             self.set_register(highreg, self.memory.read_at(self.SP.value - 1))
             if not flag:
                 self.set_register(lowreg, self.memory.read_at(self.SP.value - 2))
@@ -490,7 +490,7 @@ class SM83(CPU):
 
     def exe_INS_PUSH(self, ins: GameboyInstruction):
         def push(highreg, lowreg, flag=False):
-            self.set_register("SP", self.SP.value - 2)
+            self.SP.value = (self.SP.value - 2) & 0xFFFF
             self.memory.write_to(
                 self.SP.value + 1, self.get_register(highreg)
             )  # little endian
@@ -648,7 +648,7 @@ class SM83(CPU):
                 adjustment += 0x6
             if C:
                 adjustment += 0x60
-            self.set_register("A", old_A - adjustment)
+            self.A.value = (old_A - adjustment) & 0xFF
             new_Z = old_A - adjustment == 0
 
         else:
@@ -657,7 +657,7 @@ class SM83(CPU):
             if C or old_A > 0x99:
                 adjustment += 0x60
                 self.set_flags_fast(C=True)
-            self.set_register("A", old_A + adjustment)
+            self.A.value = (old_A + adjustment) & 0xFF
             new_Z = (old_A + adjustment) & 0xFF == 0
 
         self.set_flags_fast(H=False, Z=new_Z)
@@ -764,7 +764,7 @@ class SM83(CPU):
     def exe_INS_RLA(self, ins: GameboyInstruction):
         A = self.A.value
         bit, result = BO.rotate_byte_left_through(A, self.flags[3])
-        self.set_register("A", result)
+        self.A.value = result & 0xFF
         self.set_flags_fast(Z=False, N=False, H=False, C=bool(bit))
 
     def exe_INS_RLC(self, ins: GameboyInstruction):
@@ -773,7 +773,7 @@ class SM83(CPU):
     def exe_INS_RLCA(self, ins: GameboyInstruction):
         A = self.A.value
         bit, result = BO.rotate_byte_left(A)
-        self.set_register("A", result)
+        self.A.value = result & 0xFF
         self.set_flags_fast(Z=False, N=False, H=False, C=bool(bit))
 
     def exe_INS_RR(self, ins: GameboyInstruction):
@@ -782,7 +782,7 @@ class SM83(CPU):
     def exe_INS_RRA(self, ins: GameboyInstruction):
         A = self.A.value
         bit, result = BO.rotate_byte_right_through(A, self.flags[3])
-        self.set_register("A", result)
+        self.A.value = result & 0xFF
         self.set_flags_fast(Z=False, N=False, H=False, C=bool(bit))
 
     def exe_INS_RRC(self, ins: GameboyInstruction):
@@ -791,7 +791,7 @@ class SM83(CPU):
     def exe_INS_RRCA(self, ins: GameboyInstruction):
         A = self.A.value
         bit, result = BO.rotate_byte_right(A)
-        self.set_register("A", result)
+        self.A.value = result & 0xFF
         self.set_flags_fast(Z=False, N=False, H=False, C=bit)
 
     def exe_INS_SLA(self, ins: GameboyInstruction):
