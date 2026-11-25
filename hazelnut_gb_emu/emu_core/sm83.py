@@ -105,9 +105,7 @@ class CPU:
         # self.register_guard(register_name)
         r = getattr(self, register_name)
         r.value = (r.value - 1) & r.max_value
-
-    def jump_to(self, address):
-        self.PC = address & 0xFFFF
+        
 
     def call(self, address):
         current_PC = self.PC
@@ -116,7 +114,7 @@ class CPU:
         # little endian
         self.memory.write_to(self.SP.value + 1, PC_high)
         self.memory.write_to(self.SP.value, PC_low)
-        self.jump_to(address)
+        self.PC = address & 0xFFFF
 
     def return__(self):
         self.SP.value = (self.SP.value + 2) & 0xFFFF
@@ -124,7 +122,7 @@ class CPU:
             self.memory.read_at(self.SP.value - 1),
             self.memory.read_at(self.SP.value - 2),
         )
-        self.jump_to(stack_top)
+        self.PC = stack_top & 0xFFFF
 
 
 class SM83(CPU):
