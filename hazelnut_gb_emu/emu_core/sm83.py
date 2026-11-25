@@ -473,10 +473,10 @@ class SM83(CPU):
             else:
                 b = self.memory.read_at(self.SP.value - 2)
                 self.set_flags_fast(
-                    Z=bool(b >> 7 & 1),
-                    N=bool(b >> 6 & 1),
-                    H=bool(b >> 5 & 1),
-                    C=bool(b >> 4 & 1),
+                    Z=b >> 7 & 1,
+                    N=b >> 6 & 1,
+                    H=b >> 5 & 1,
+                    C=b >> 4 & 1,
                 )
 
         if ins.raw == 0xC1:
@@ -710,7 +710,7 @@ class SM83(CPU):
         o1, o2 = ins.operands
         r = self.get_register(o2.name)
         byte = r if o2.immediate else self.memory.read_at(self.get_register(o2.name))
-        bit = bool(BO.get_nth_bit(byte, int(o1.name)))
+        bit = BO.get_nth_bit(byte, int(o1.name))
         self.set_flags_fast(Z=not bit, N=False, H=True)
 
     def exe_INS_RES(self, ins: GameboyInstruction):
@@ -757,7 +757,7 @@ class SM83(CPU):
             self.set_register(op.name, result)
         else:
             self.memory.write_to(self.get_register(op.name), result)
-        self.set_flags_fast(Z=result == 0, N=False, H=False, C=bool(bit))
+        self.set_flags_fast(Z=result == 0, N=False, H=False, C=bit)
 
     def exe_INS_RL(self, ins: GameboyInstruction):
         self.shift_rotate_to_carry(ins, BO.rotate_byte_left_through, rotate=True)
@@ -766,7 +766,7 @@ class SM83(CPU):
         A = self.A.value
         bit, result = BO.rotate_byte_left_through(A, self.flags[3])
         self.A.value = result & 0xFF
-        self.set_flags_fast(Z=False, N=False, H=False, C=bool(bit))
+        self.set_flags_fast(Z=False, N=False, H=False, C=bit)
 
     def exe_INS_RLC(self, ins: GameboyInstruction):
         self.shift_rotate_to_carry(ins, BO.rotate_byte_left, rotate=True)
@@ -775,7 +775,7 @@ class SM83(CPU):
         A = self.A.value
         bit, result = BO.rotate_byte_left(A)
         self.A.value = result & 0xFF
-        self.set_flags_fast(Z=False, N=False, H=False, C=bool(bit))
+        self.set_flags_fast(Z=False, N=False, H=False, C=bit)
 
     def exe_INS_RR(self, ins: GameboyInstruction):
         self.shift_rotate_to_carry(ins, BO.rotate_byte_right_through, rotate=True)
@@ -784,7 +784,7 @@ class SM83(CPU):
         A = self.A.value
         bit, result = BO.rotate_byte_right_through(A, self.flags[3])
         self.A.value = result & 0xFF
-        self.set_flags_fast(Z=False, N=False, H=False, C=bool(bit))
+        self.set_flags_fast(Z=False, N=False, H=False, C=bit)
 
     def exe_INS_RRC(self, ins: GameboyInstruction):
         self.shift_rotate_to_carry(ins, BO.rotate_byte_right, rotate=True)
