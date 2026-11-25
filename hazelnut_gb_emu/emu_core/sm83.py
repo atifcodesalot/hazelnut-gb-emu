@@ -121,8 +121,8 @@ class CPU:
     def return__(self):
         self.SP.value = (self.SP.value + 2) & 0xFFFF
         stack_top = BO.concat_bytes(
-            high=self.memory.read_at(self.SP.value - 1),
-            low=self.memory.read_at(self.SP.value - 2),
+            self.memory.read_at(self.SP.value - 1),
+            self.memory.read_at(self.SP.value - 2),
         )
         self.jump_to(stack_top)
 
@@ -258,13 +258,14 @@ class SM83(CPU):
 
     def exe_INS_LDH(self, ins: GameboyInstruction):
         o1, o2 = ins.operands
-        if o1.name == "a8":
+        raw = ins.raw
+        if raw == 0xE0:
             self.memory.write_to(0xFF00 + ins.operands_raw[0], self.A.value)
-        elif o1.name == "C":
+        elif raw == 0xE2:
             self.memory.write_to(0xFF00 + self.C.value, self.A.value)
-        elif o2.name == "a8":
+        elif raw == 0xF0:
             self.A.value = self.memory.read_at(0xFF00 + ins.operands_raw[0])
-        elif o2.name == "C":
+        elif raw == 0xF2:
             self.A.value = self.memory.read_at(0xFF00 + self.C.value)
 
     # Load, copy related instructions END here
