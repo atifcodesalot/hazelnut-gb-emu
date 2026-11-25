@@ -521,25 +521,31 @@ class SM83(CPU):
         # JP NZ, a16
         if ins.raw == 0xC2:
             if not self.flags[0]:
-                return self.jump_to(address)
+                self.PC = address & 0xFFFF
+                return 
         # JP a16, unconditional jump kappa pride
         if ins.raw == 0xC3:
-            return self.jump_to(address)
+            self.PC = address & 0xFFFF
+            return
         # JP Z, a16
         if ins.raw == 0xCA:
             if self.flags[0]:
-                return self.jump_to(address)
+                self.PC = address & 0xFFFF
+                return 
         # JP NC, a16
         if ins.raw == 0xD2:
             if not self.flags[3]:
-                return self.jump_to(address)
+                self.PC = address & 0xFFFF
+                return
         # JP C, a16
         if ins.raw == 0xDA:
             if self.flags[3]:
-                return self.jump_to(address)
+                self.PC = address & 0xFFFF
+                return
         # JP HL
         if ins.raw == 0xE9:
-            return self.jump_to(self.HL.value)
+            self.PC = self.HL.value & 0xFFFF
+            return
 
         # no jump happened
         ins.cycles = 12
@@ -552,22 +558,27 @@ class SM83(CPU):
         # JR NZ, r8
         if ins.raw == 0x20:
             if not self.flags[0]:
-                return self.jump_to(address)
+                self.PC = address & 0xFFFF
+                return
         # JR r8, unconditional jump kappa pride
         if ins.raw == 0x18:
-            return self.jump_to(address)
+            self.PC = address & 0xFFFF
+            return
         # JR Z, r8
         if ins.raw == 0x28:
             if self.flags[0]:
-                return self.jump_to(address)
+                self.PC = address & 0xFFFF
+                return
         # JR NC, r8
         if ins.raw == 0x30:
             if not self.flags[3]:
-                return self.jump_to(address)
+                self.PC = address & 0xFFFF
+                return
         # JR C, r8
         if ins.raw == 0x38:
             if self.flags[3]:
-                return self.jump_to(address)
+                self.PC = address & 0xFFFF
+                return
         # if no jump happens takes 8 clock cycles
         ins.cycles = 8
 
