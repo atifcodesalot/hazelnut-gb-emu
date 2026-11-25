@@ -2,7 +2,6 @@
 # don't use it for playing
 from .memory import GBMemoryController
 import pygame
-import numpy as np
 from .auxiliary import BO
 
 PCM_SAMPLE_RATE = 44100
@@ -492,15 +491,9 @@ class GbAPU:
 
     def init_buffers(self):
         self.buffer_size = int(PCM_SAMPLE_RATE * BUFFER_UPDATE_TIME)
-        self.snd_portion1 = pygame.mixer.Sound(
-            np.array([1] * self.buffer_size, dtype=np.uint8)
-        )
-        self.snd_portion2 = pygame.mixer.Sound(
-            np.array([1] * self.buffer_size, dtype=np.uint8)
-        )
-        self.rbuffer1 = pygame.sndarray.samples(self.snd_portion1)
-        self.rbuffer2 = pygame.sndarray.samples(self.snd_portion2)
-        self.buffers = [self.rbuffer1, self.rbuffer2]
+        self.rbuffer1 = bytearray(self.buffer_size)
+        self.rbuffer2 = bytearray(self.buffer_size)
+        self.buffers = (self.rbuffer1, self.rbuffer2)
         self.pgchannel = pygame.mixer.Channel(0)
 
     def mix(self, ch1, ch2, ch3, ch4):
@@ -589,14 +582,16 @@ class GbAPU:
             #     print("UNDERRUN!!!")
             # if self.pgchannel.get_queue() is not None:
             #     print("OVERRUN!!!")
-            self.pgchannel.queue(self.snd_portion1)
+            snd_portion = pygame.mixer.Sound(self.buffers[1])
+            self.pgchannel.queue(snd_portion)
 
         elif self.ring == 0:
             # if not self.pgchannel.get_busy():
             #     print("UNDERRUN!!!")
             # if self.pgchannel.get_queue() is not None:
             #     print("OVERRUN!!!")
-            self.pgchannel.queue(self.snd_portion2)
+            snd_portion = pygame.mixer.Sound(self.buffers[0])
+            self.pgchannel.queue(snd_portion)
 
     def emit_PCM_sample(self, buffer):
         # average channel samples over 95 dots
