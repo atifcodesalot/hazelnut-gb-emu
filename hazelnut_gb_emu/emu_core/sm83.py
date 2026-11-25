@@ -593,7 +593,8 @@ class SM83(CPU):
         ins.cycles = 8
 
     def exe_INS_CALL(self, ins: GameboyInstruction):
-        address = BO.concat_bytes(*ins.operands_raw[:2][::-1])  # little endian
+        opraw = ins.operands_raw
+        address =  (opraw[1] << 8) | opraw[0]  # little endian
         ins.cycles = 24
         # unconditional call
         if ins.raw == 0xCD:
