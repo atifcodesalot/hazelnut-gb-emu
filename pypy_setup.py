@@ -1,5 +1,3 @@
-
-
 import pathlib
 import urllib.request
 import urllib.parse
@@ -31,7 +29,6 @@ PYPY_DOWNLOADS = {
             "948b8ea58dea5b9917210fe4afd242c788fbfaba1c3f1a25e696a404f703389a",
         ],
     },
-
     "LINUX": {
         "amd64": [
             "https://downloads.python.org/pypy/pypy3.11-v7.3.23-linux64.tar.bz2",
@@ -70,7 +67,6 @@ PYPY_DOWNLOADS = {
             "c7e2ffb173dcadbe4708a2e606e0b705474c1c33f25a09a4084f265d538172e4",
         ],
     },
-
     "DARWIN": {
         "amd64": [
             "https://downloads.python.org/pypy/pypy3.11-v7.3.23-macos_x86_64.tar.bz2",
@@ -91,18 +87,24 @@ PYPY_DOWNLOADS = {
     },
 }
 
-INPUT = "Would you like to install the PyPy runtime? [y/n]"
+
+INPUT = "[IMPORTANT] Would you like to install the PyPy runtime (~20 MB)? [y/n]"
 
 DOWNLOAD_URL, CHECKSUM = PYPY_DOWNLOADS[PLATFORM][ARCHITECTURE]
 
-ZIP_NAME = pathlib.PurePosixPath(
-    urllib.parse.urlsplit(DOWNLOAD_URL).path
-).name
+ZIP_NAME = pathlib.PurePosixPath(urllib.parse.urlsplit(DOWNLOAD_URL).path).name
 
 
 def checksum_arc(zip_bytes):
     hash = hashlib.sha256(zip_bytes).hexdigest()
     return hash == CHECKSUM
+
+
+def show_progress(block_num, block_size, total_size):
+    cycle = ["|", "\\", "—", "/"]
+    phase = (block_num // 64) % 4
+    perc = ((block_num * block_size) / total_size) * 100
+    print(f"Downloading {ZIP_NAME}... %{perc:.0f} {cycle[phase]} ", end="\r")
 
 
 def install_pypy():
@@ -112,14 +114,16 @@ def install_pypy():
         setup_logger.info(".runtime directory already exists.")
     os.chdir(".runtime")
     setup_logger.info(
-        f"Now installing pypy for {PLATFORM + ' ' + ARCHITECTURE}... This may take a couple of seconds.")
+        f"Now installing pypy for {PLATFORM + ' ' + ARCHITECTURE}... This may take a couple of seconds."
+    )
 
     fn = ZIP_NAME
     if os.path.exists(fn):
         setup_logger.info(f"{fn} already exists!")
     else:
         urllib.request.urlretrieve(
-            url=DOWNLOAD_URL, filename=fn)
+            url=DOWNLOAD_URL, filename=fn, reporthook=show_progress
+        )
         setup_logger.info(f"{fn} installed, now checking file signature...")
     arc = open(fn, "rb")
 
@@ -135,8 +139,7 @@ def install_pypy():
 
 def find_pypy3():
     fex = "pypy3.exe" if PLATFORM == "WINDOWS" else "pypy"
-    extract_dir = pathlib.Path(ZIP_NAME)\
-        .stem.split('.tar')[0]
+    extract_dir = pathlib.Path(ZIP_NAME).stem.split(".tar")[0]
     pypy_dir = os.path.join(".runtime", extract_dir)
     if PLATFORM == "LINUX":
         pypy = os.path.join(pypy_dir, "bin", fex)
@@ -169,9 +172,7 @@ def install_packages(pypy):
 
 
 def rerun(pypy, *flags):
-    subprocess.run([
-        pypy, "-m", "hazelnut_gb_emu", *flags
-    ], check=True)
+    subprocess.run([pypy, "-m", "hazelnut_gb_emu", *flags], check=True)
 
 
 def try_pypy(*flags):
@@ -183,7 +184,7 @@ def try_pypy(*flags):
 
     if not installed:
         logging.info("Using the PYPY runtime is highly recommended.")
-        logging.info(INPUT)
+        print(INPUT, end=" ")
         inp = input()
         acceptable_yes = ["y", "yes", "ya", "yeah", "yy", "yyy", "ja", "yyyy", "ye"]
         if inp.strip().lower() in acceptable_yes:
