@@ -75,7 +75,7 @@ class Gameboy:
         cycles_passed = 0
         # normal cpu burst starts here
         while cycles_passed < clock_cycles:
-            ins, ins_cycles = self.SM83_processor.tick_one_ins(self)
+            ins, ins_cycles = self.SM83_processor.tick_one_ins()
 
             self.tick_timers(ins_cycles)
             # self.handle_serial(ins_cycles)
