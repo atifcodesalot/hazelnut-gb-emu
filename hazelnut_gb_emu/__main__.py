@@ -1,16 +1,17 @@
 
 from .emu_core.cartridge import *
 from .emu_core import logger
-import sys
 from .session import SessionController
 from pypy_setup import *
 from .emu_core import __version__
+
+import sys
 
 RUNTIME = sys.implementation.name
 
 
 COLOR_FLAGS = {"--color", "-c", "--gbc", "--cgb"}
-PROFILE_FLAGS = {"--benchmark", "-b", "--profile", "-p"}
+PROFILE_FLAGS = {"--profile"}
 SCALE_FLAGS = {"--scale", "-s", "--size"}
 
 
@@ -34,24 +35,6 @@ def mainloop(color):
     while True:
         session = SessionController(gbscaler=SCALE, color=color)
         session.start()
-
-
-def mainloop_profile(color):
-    logger.info("Running in benchmark mode... Will run much slower than normal,\
-                        but will generate a profile_stats file.")
-
-    session = SessionController(gbscaler=SCALE, color=color)
-
-    import threading
-    import time
-
-    def emu_target():
-        session = SessionController(gbscaler=SCALE, color=False)
-        return run_profiled(session.emulate, "profile_stats")
-
-    threading.Thread(target=session.display).start()
-    time.sleep(2)
-    threading.Thread(target=emu_target).start()
 
 
 def main():
@@ -92,16 +75,9 @@ def main():
     logger.info(
         f"Scale relative to the original: x{SCALE} {'(DEFAULT)' if SCALE == 2 else ''}"
     )
-    logger.info(
-        "Benchmark mode: Enabled" if profile_flag else "Benchmark mode: Disabled"
-    )
 
     if len(sys.argv) >= 2:
-        if profile_flag:
-            mainloop_profile(color_flag)
-
-        else:
-            mainloop(color_flag)
+        mainloop(color_flag)
 
     else:
         mainloop(color=False)
