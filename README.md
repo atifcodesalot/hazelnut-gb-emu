@@ -92,7 +92,7 @@ or:
 
 The default scaling factor is 2.
 
-#### How to play with sound (not recommended)
+#### How to play with sound
 There is still no sound on the main branch, but the APU is functional enough to be tested.
 To play with sound:
 ```
