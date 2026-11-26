@@ -361,6 +361,8 @@ class MBC5(MBC):
 
     def handle_ram_write(self, address, value):
         offset = address & 0x1FFF
+        if self.cart.ram_banks == 0:
+            return 
         bank_num = (self.cart_regs[0x6000]) % self.cart.ram_banks
         switched_addr = bank_num * 0x2000 + offset
         self.memctl.ext_ram.array[switched_addr] = value
@@ -377,6 +379,9 @@ class MBC5(MBC):
 
     def handle_ram_read(self, address):
         offset = address & 0x1FFF
+        ## WWF Betrayal (CGB) patch
+        if self.cart.ram_banks == 0:
+            return 0xFF
         bank_num = (self.cart_regs[0x6000]) % self.cart.ram_banks
         return self.memctl.ext_ram.array[bank_num * 0x2000 + offset]
 
