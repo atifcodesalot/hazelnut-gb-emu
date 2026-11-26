@@ -279,7 +279,7 @@ class GBMemoryController:
                 return 0xFF
 
             if a == 0xFF02:
-                return 0
+                return 0x7E | (self.io_registers[0xFF02] & 0x81)
 
             return self.io_registers.get(a, 0xFF)
 
@@ -556,7 +556,7 @@ class CgbMemoryController(GBMemoryController):
                 return 0xFF
 
             if a == 0xFF02:
-                return 0
+                return 0x7E | (self.io_registers[0xFF02] & 0x81)
 
             if a == 0xFF6B:
                 # obj palette data read
