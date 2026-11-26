@@ -172,6 +172,14 @@ def install_packages(pypy):
 
 
 def rerun(pypy, *flags):
+    flags = list(flags)
+    if "--profile" in flags:
+        flags.remove("--profile")
+        subprocess.run(
+            [pypy, "-m", "vmprof", "-o", "hazel.prof", "-m", "hazelnut_gb_emu", *flags],
+            check=True,
+        )
+        return
     subprocess.run([pypy, "-m", "hazelnut_gb_emu", *flags], check=True)
 
 
@@ -191,7 +199,7 @@ def try_pypy(*flags):
             if install_pypy():
                 pypy = find_pypy3()
                 install_packages(pypy)
-                rerun(pypy)
+                rerun(pypy, *flags)
                 exit()
         else:
             return

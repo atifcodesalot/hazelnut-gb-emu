@@ -8,8 +8,10 @@ saves/
 # pickle cache files
 *.pkl
 
-hazelnutlog.txt
+hazel.prof.json
 profile_stats
+
+*.prof
 
 test_ROMS/*
 test_ROMS
