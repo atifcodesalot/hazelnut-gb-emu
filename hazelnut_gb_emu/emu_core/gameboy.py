@@ -219,7 +219,8 @@ class Gameboy:
             self.frame_end()
 
     def frame_end(self):
-        # ensure framerate is 60
+        # flip the master display
+        pygame.display.flip()
         self.pyclock.tick(60)
         #
         self.CPU_burst(4 - self.cpu_debt)

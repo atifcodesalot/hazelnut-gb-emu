@@ -295,7 +295,7 @@ class SessionController:
                 self.screen.blit(scaled, self.gboff)
             else:
                 self.screen.blit(self.gameboy.PPU.pgdisplay, self.gboff)
-            pygame.display.flip()
+            time.sleep(0.016)
 
     def handle_gb_input_event(self, event):
         # TODO: refactor this function
