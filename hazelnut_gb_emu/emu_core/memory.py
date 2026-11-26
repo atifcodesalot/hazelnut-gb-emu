@@ -293,9 +293,13 @@ class GBMemoryController:
                 return self.io_registers.get(a, 0xFF).value
             if a == 0xFF00:
                 return self.handle_joypad_read()
-            
-            if 0xFF40 > a >= 0xFF10:
-                return self.io_registers[a].value
+
+            if a == 0xFF01:
+                # stub
+                return 0xFF
+
+            if a == 0xFF02:
+                return 0x7E | (self.io_registers[0xFF02] & 0x81)
 
             return self.io_registers.get(a, 0xFF)
 
@@ -598,7 +602,7 @@ class CgbMemoryController(GBMemoryController):
                 return 0xFF
 
             if a == 0xFF02:
-                return 0
+                return 0x7E | (self.io_registers[0xFF02] & 0x81)
             
             if 0xFF10 < a < 0xFF40:
                 return self.io_registers.get(a, 0xFF).value
