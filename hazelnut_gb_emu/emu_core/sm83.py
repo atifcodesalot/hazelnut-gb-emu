@@ -919,7 +919,7 @@ class SM83(CPU):
     def tick_one_ins(self):
         intcycles = self.handle_interrupts()
         ins = self.instruction_cycle()
-        return ins, ins.cycles + intcycles
+        return ins.cycles + intcycles
 
     def reset(self):
         self.pending_interrupt_enable = False
