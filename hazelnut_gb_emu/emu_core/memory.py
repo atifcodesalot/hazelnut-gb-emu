@@ -311,6 +311,7 @@ class GBMemoryController:
         return self.io_registers[0xFFFF]
     
     def handle_sound_write(self, a, v):
+        self.gameboy.flush_APU()
         if a == 0xFF26:
             # audio master, first 4 bits read only
             master = self.io_registers[0xFF26].value

@@ -1,5 +1,5 @@
-# skeleton of the APU, not even close to being correct
-# don't use it for playing
+
+
 from .memory import GBMemoryController
 import pygame
 from .auxiliary import BO
@@ -21,6 +21,8 @@ pygame.mixer.init(
 #
 
 SILENCE = 0x80
+
+# APU implementation, still has stuff unimplemented
 
 
 class GBPulseWave:
@@ -578,18 +580,10 @@ class GbAPU:
 
     def handle_buffer_boundary(self):
         if self.ring == self.buffer_size:
-            # if not self.pgchannel.get_busy():
-            #     print("UNDERRUN!!!")
-            # if self.pgchannel.get_queue() is not None:
-            #     print("OVERRUN!!!")
             snd_portion = pygame.mixer.Sound(self.buffers[1])
             self.pgchannel.queue(snd_portion)
 
         elif self.ring == 0:
-            # if not self.pgchannel.get_busy():
-            #     print("UNDERRUN!!!")
-            # if self.pgchannel.get_queue() is not None:
-            #     print("OVERRUN!!!")
             snd_portion = pygame.mixer.Sound(self.buffers[0])
             self.pgchannel.queue(snd_portion)
 

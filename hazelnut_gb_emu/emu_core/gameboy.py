@@ -31,6 +31,8 @@ class Gameboy:
         self.cycles = 0
         #
 
+        self.pending_APU_cycles = 0
+
         # OAM DMA flag
         self.OAM_DMA = False
         self.OAM_DMA_timer = 0
@@ -49,6 +51,10 @@ class Gameboy:
     def awake(self):
         self.SM83_processor.HALT = False
 
+    def flush_APU(self):
+        self.APU.tick_cycles(self.pending_APU_cycles)
+        self.pending_APU_cycles = 0
+
     def handle_cpu_halt(self):
         if self.interrupt_pending():
             self.awake()
@@ -60,7 +66,10 @@ class Gameboy:
         if self.OAM_DMA:
             self.handle_OAM_DMA(clock_cycles)
         if self.APU.audio_on():
-            self.APU.tick_cycles(clock_cycles)
+            old = self.pending_APU_cycles
+            self.pending_APU_cycles += clock_cycles
+            if old // 32768 != self.pending_APU_cycles // 32768:
+                self.flush_APU()
         self.cpu_debt = 0
 
     def tick_timers(self, dots):
@@ -68,7 +77,7 @@ class Gameboy:
         TIMA_en = (TAC >> 2) & 1
         if TIMA_en:
             self.handle_TIMA(old_cycles=self.cycles, elapsed=dots)
-        self.cycles = self.cycles + dots
+        self.cycles = (self.cycles + dots) & 0xFFFF
         self.handle_DIV()
 
     def CPU_APU_burst(self, clock_cycles):
@@ -93,7 +102,10 @@ class Gameboy:
                 self.handle_OAM_DMA(ins_cycles)
                 
             if self.APU.audio_on():
-                self.APU.tick_cycles(ins_cycles)
+                old = self.pending_APU_cycles
+                self.pending_APU_cycles += ins_cycles
+                if old // 32768 != self.pending_APU_cycles // 32768:
+                    self.flush_APU()
 
         # get debt
         self.cpu_debt = cycles_passed - clock_cycles
@@ -361,7 +373,7 @@ class GameboyColor(Gameboy):
         if self.OAM_DMA:
             self.handle_OAM_DMA(clock_cycles)
         if self.APU.audio_on():
-            self.APU.tick_cycles(clock_cycles >> self.speed_mode)
+            self.pending_APU_cycles += clock_cycles >> self.speed_mode
         self.cpu_debt = 0
 
     def CPU_APU_burst(self, clock_cycles):
@@ -398,7 +410,11 @@ class GameboyColor(Gameboy):
             if self.OAM_DMA:
                 self.handle_OAM_DMA(ins_cycles)
             if self.APU.audio_on():
-                self.APU.tick_cycles(ins_cycles >> self.speed_mode)
+                old = self.pending_APU_cycles
+                self.pending_APU_cycles += ins_cycles >> self.speed_mode
+                if old // 4096 != self.pending_APU_cycles // 4096:
+                    self.flush_APU()
+
         # get debt
         self.cpu_debt = cycles_passed - clock_cycles
 
