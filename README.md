@@ -93,7 +93,7 @@ or:
 The default scaling factor is 2.
 
 #### How to play with sound
-There is still no sound on the main branch, but the APU is functional enough to be tested.
+There is still no sound on the main branch, but the APU is functional enough to be played with.
 To play with sound:
 ```
 git checkout sound
