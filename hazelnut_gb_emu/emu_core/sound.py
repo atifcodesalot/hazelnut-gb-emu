@@ -1,12 +1,19 @@
-
-
 from .memory import GBMemoryController
 import pygame
 from .auxiliary import BO
 
 PCM_SAMPLE_RATE = 44100
 MASTER_CLK = 0x400000
+
+
+# frame sequencer periods
 FRAME_SEQ = 0x10000
+COUNTER_SEQ = FRAME_SEQ >> 2
+SWEEP_SEQ = FRAME_SEQ >> 1
+# envelope sequencer period
+ENV_SEQ = FRAME_SEQ
+
+
 BUFFER_UPDATE_TIME = 0.1  # in seconds
 BUFFER_SIZE = int(PCM_SAMPLE_RATE * BUFFER_UPDATE_TIME)
 
@@ -104,8 +111,9 @@ class GBPulseChannel:
         self.active = False
 
     def get_period(self):
-        self.period_value = ((self.reg_hi_ctl.value & 0x07) << 8) \
-            | self.reg_period_lo.value
+        self.period_value = (
+            (self.reg_hi_ctl.value & 0x07) << 8
+        ) | self.reg_period_lo.value
         self.pw.set_period((2048 - self.period_value) << 5)
 
     def get_volume(self):
@@ -161,7 +169,7 @@ class GBPulseChannel:
             return
         self.active = True
         self.get_volume()
-        
+
         master = self.memctl.io_registers[0xFF26].value
         self.memctl.io_registers[0xFF26].value = BO.set_nth_bit(master, self.num)
 
@@ -193,7 +201,7 @@ class GBChannel1(GBPulseChannel):
         self.shadow = 0
 
     def get_sweep_timer(self):
-        self.sweep_timer = self.reg_sweep.value >> 4 & 7 
+        self.sweep_timer = self.reg_sweep.value >> 4 & 7
 
     def update(self, regnum):
         super().update(regnum)
@@ -215,7 +223,6 @@ class GBChannel1(GBPulseChannel):
                     # if the sweep would overflow
                     # upon triggering turn off immediately
                     self.turn_off()
-
 
 
 class GBChannel2(GBPulseChannel):
@@ -328,7 +335,7 @@ class GBChannel3:
             self.turn_off()
 
     def get_len_counter(self):
-        self.ltimer = 0x100 - self.reg_timer.value 
+        self.ltimer = 0x100 - self.reg_timer.value
 
     def update(self, regnum):
         if regnum == 0:
@@ -420,16 +427,16 @@ class GBNoiseChannel:
                 self.shifted = self.shift(short_mode)
             return
         else:
-            self.sample_accumulator += self.shifted * init_rem  * self.volume
+            self.sample_accumulator += self.shifted * init_rem * self.volume
             self.shifted = self.shift(short_mode)
-            
+
         cycles_rem = cycles - init_rem
         shift_periods, final_rem = divmod(cycles_rem, self.timer_period)
         for _ in range(shift_periods):
             self.sample_accumulator += self.shifted * self.timer_period * self.volume
             self.shifted = self.shift(short_mode)
-    
-        self.sample_accumulator += self.shifted * final_rem  * self.volume
+
+        self.sample_accumulator += self.shifted * final_rem * self.volume
         self.internal_timer = final_rem
 
     def accumulate_silence(self, cycles):
@@ -612,9 +619,9 @@ class GbAPU:
     def emit_PCM_sample(self, buffer):
         # average channel samples over 95 dots
         ch1avg = self.ch1.sample_accumulator / self.accm
-        ch2avg = self.ch2.sample_accumulator / self.accm 
-        ch3avg = self.ch3.sample_accumulator / self.accm 
-        ch4avg = self.ch4.sample_accumulator / self.accm 
+        ch2avg = self.ch2.sample_accumulator / self.accm
+        ch3avg = self.ch3.sample_accumulator / self.accm
+        ch4avg = self.ch4.sample_accumulator / self.accm
         #
         # reset accumulators
         self.ch1.sample_accumulator = 0
@@ -662,15 +669,19 @@ class GbAPU:
         elif self.ch4.reg_vol_env.value & 0xF8 == 0:
             self.ch4.accumulate_silence(cycles)
 
-    def triggers_edge(self, dots, period, elapsed):
-        return dots // period != (dots + elapsed) // period
-
     def tick_cycles(self, cycles):
-        elapsed = cycles
-        old = self.dots
         while cycles > 0:
             dots_until_sample = self.accm - self.samples
-            chunk = min(cycles, dots_until_sample)
+            dots_until_sweep = SWEEP_SEQ - self.dots % SWEEP_SEQ
+            dots_until_env = ENV_SEQ - self.dots % ENV_SEQ
+            dots_until_counter = COUNTER_SEQ - self.dots % COUNTER_SEQ
+            chunk = min(
+                cycles,
+                dots_until_sample,
+                dots_until_sweep,
+                dots_until_env,
+                dots_until_counter,
+            )
             self.accumulate_samples(chunk)
             self.samples += chunk
             cycles -= chunk
@@ -679,12 +690,14 @@ class GbAPU:
                 buffer = self.ring // self.buffer_size
                 self.emit_PCM_sample(buffer)
                 self.samples = 0
-        counter_trigger = self.triggers_edge(old, FRAME_SEQ >> 2, elapsed)
-        sweep_trigger = self.triggers_edge(old, FRAME_SEQ >> 1, elapsed)
-        envelope_trigger = self.triggers_edge(old, FRAME_SEQ, elapsed)
-        if counter_trigger:
-            self.handle_len_counters()
-        if sweep_trigger:
-            self.handle_sweep()
-        if envelope_trigger:
-            self.handle_envelope()
+            if chunk == dots_until_sweep:
+                self.handle_sweep()
+            if chunk == dots_until_env:
+                self.handle_envelope()
+            if chunk == dots_until_counter:
+                self.handle_len_counters()
+
+
+class GbAudioPlayer:
+    def __init__(self):
+        pass
