@@ -189,6 +189,8 @@ class GBChannel1(GBPulseChannel):
         self.reg_sweep = self.memctl.io_registers[0xFF10]
         self.sweep_timer = 0
         #
+        # shadow register
+        self.shadow = 0
 
     def get_sweep_timer(self):
         self.sweep_timer = self.reg_sweep.value >> 4 & 7 
@@ -197,6 +199,23 @@ class GBChannel1(GBPulseChannel):
         super().update(regnum)
         if regnum == 0:
             self.get_sweep_timer()
+
+    def trigger(self):
+        super().trigger()
+        # reset the sweep timer
+        self.get_sweep_timer()
+        self.shadow = self.period_value
+        sweep_ctl = self.reg_sweep.value
+        step = sweep_ctl & 0x7
+        if step != 0:
+            dfreq = self.shadow >> step
+            sweep_dir = sweep_ctl >> 3 & 1
+            if not sweep_dir:
+                if self.shadow + dfreq > 0x7FF:
+                    # if the sweep would overflow
+                    # upon triggering turn off immediately
+                    self.turn_off()
+
 
 
 class GBChannel2(GBPulseChannel):
@@ -473,11 +492,7 @@ class GbAPU:
         self.reg_master = memctl.io_registers[0xFF26]
         self.reg_panning = memctl.io_registers[0xFF25]
         self.init_buffers()
-        self.ch1 = GBChannel1(self.memctl)
-        self.ch2 = GBChannel2(self.memctl)
-        self.ch3 = GBChannel3(self.memctl)
-        self.ch4 = GBNoiseChannel(self.memctl)
-        self.gb_channels = [self.ch1, self.ch2, self.ch3, self.ch4]
+        self.init_channels()
         self.samples_sec = 0
         self.samples = 0
         self.ring = 0
@@ -497,6 +512,13 @@ class GbAPU:
         self.rbuffer2 = bytearray(self.buffer_size)
         self.buffers = (self.rbuffer1, self.rbuffer2)
         self.pgchannel = pygame.mixer.Channel(0)
+
+    def init_channels(self):
+        self.ch1 = GBChannel1(self.memctl)
+        self.ch2 = GBChannel2(self.memctl)
+        self.ch3 = GBChannel3(self.memctl)
+        self.ch4 = GBNoiseChannel(self.memctl)
+        self.gb_channels = [self.ch1, self.ch2, self.ch3, self.ch4]
 
     def mix(self, ch1, ch2, ch3, ch4):
         mixed = (ch1 + ch2 + ch3 + ch4) / 4
@@ -533,16 +555,16 @@ class GbAPU:
             return
         self.ch1.sweep_timer -= 1
         step = sweep_ctl & 0x7
-        dfreq = self.ch1.period_value >> step
+        dfreq = self.ch1.shadow >> step
         if self.ch1.sweep_timer == 0:
             # reset sweep timer
             self.ch1.sweep_timer = sweep_pace
             #
             if sweep_dir:
-                self.ch1.period_value -= dfreq
+                self.ch1.shadow -= dfreq
             else:
-                self.ch1.period_value += dfreq
-        new_pval = self.ch1.period_value
+                self.ch1.shadow += dfreq
+        new_pval = self.ch1.shadow
         if new_pval > 0x7FF:
             # period overflow
             self.ch1.turn_off()
