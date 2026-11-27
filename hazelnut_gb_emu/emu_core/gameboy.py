@@ -266,11 +266,13 @@ class Gameboy:
         self.SM83_processor.reset()
         self.memctl.reset()
         self.PPU.reset()
+        self.APU.reset()
 
         self.input_state = 255
 
         self.cpu_debt = 0
         self.serial_timer = 0
+        self.pending_APU_cycles = 0
 
         self.cycles = 0
 

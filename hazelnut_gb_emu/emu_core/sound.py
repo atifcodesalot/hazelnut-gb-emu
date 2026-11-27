@@ -504,7 +504,6 @@ class GbAPU:
         self.samples = 0
         self.ring = 0
         self.accm = 95
-        self.queued = False
 
     def audio_on(self):
         return (self.reg_master.value >> 7) & 1
@@ -696,6 +695,14 @@ class GbAPU:
                 self.handle_envelope()
             if chunk == dots_until_counter:
                 self.handle_len_counters()
+
+    def reset(self):
+        self.init_buffers()
+        self.init_channels()
+        self.samples_sec = 0
+        self.samples = 0
+        self.ring = 0
+        self.accm = 95
 
 
 class GbAudioPlayer:
