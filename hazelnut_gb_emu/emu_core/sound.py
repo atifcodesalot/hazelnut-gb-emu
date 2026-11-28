@@ -711,14 +711,14 @@ class GbAudioStreamer:
 
     def handle_buffer_boundary(self):
         if self.APU.ring == self.buffer_size:
-            snd_portion = pygame.mixer.Sound(self.playing_buffer)
+            snd_portion = pygame.mixer.Sound(self.buffers[0])
             self.pgchannel.queue(snd_portion)
 
         elif self.APU.ring == self.double_buffsize:
-            snd_portion = pygame.mixer.Sound(self.playing_buffer)
+            snd_portion = pygame.mixer.Sound(self.buffers[1])
             self.pgchannel.queue(snd_portion)
 
         elif self.APU.ring == 0:
-            snd_portion = pygame.mixer.Sound(self.playing_buffer)
+            snd_portion = pygame.mixer.Sound(self.buffers[2])
             self.pgchannel.queue(snd_portion)
 
