@@ -14,7 +14,7 @@ SWEEP_SEQ = FRAME_SEQ >> 1
 ENV_SEQ = FRAME_SEQ
 
 
-BUFFER_UPDATE_TIME = 0.1  # in seconds
+BUFFER_UPDATE_TIME = 0.2  # in seconds
 BUFFER_SIZE = int(PCM_SAMPLE_RATE * BUFFER_UPDATE_TIME)
 
 # mono sound for now
@@ -692,6 +692,7 @@ class GbAPU:
     def reset(self):
         self.init_buffers()
         self.init_channels()
+        self.streamer = GbAudioStreamer(self, self.buffers)
         self.samples_sec = 0
         self.samples = 0
         self.ring = 0
@@ -710,14 +711,14 @@ class GbAudioStreamer:
 
     def handle_buffer_boundary(self):
         if self.APU.ring == self.buffer_size:
-            snd_portion = pygame.mixer.Sound(self.buffers[0])
+            snd_portion = pygame.mixer.Sound(self.playing_buffer)
             self.pgchannel.queue(snd_portion)
 
         elif self.APU.ring == self.double_buffsize:
-            snd_portion = pygame.mixer.Sound(self.buffers[1])
+            snd_portion = pygame.mixer.Sound(self.playing_buffer)
             self.pgchannel.queue(snd_portion)
 
         elif self.APU.ring == 0:
-            snd_portion = pygame.mixer.Sound(self.buffers[2])
+            snd_portion = pygame.mixer.Sound(self.playing_buffer)
             self.pgchannel.queue(snd_portion)
 
