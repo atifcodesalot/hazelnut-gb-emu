@@ -505,6 +505,8 @@ class GbAPU:
         self.ring = 0
         self.accm = 95
 
+        self.streamer = GbAudioStreamer(self, self.buffers)
+
     def audio_on(self):
         return (self.reg_master.value >> 7) & 1
 
@@ -516,8 +518,9 @@ class GbAPU:
         self.buffer_size = int(PCM_SAMPLE_RATE * BUFFER_UPDATE_TIME)
         self.rbuffer1 = bytearray(self.buffer_size)
         self.rbuffer2 = bytearray(self.buffer_size)
-        self.buffers = (self.rbuffer1, self.rbuffer2)
-        self.pgchannel = pygame.mixer.Channel(0)
+        self.rbuffer3 = bytearray(self.buffer_size)
+        self.buffers = (self.rbuffer1, self.rbuffer2, self.rbuffer3)
+        self.bufftotsize = (self.buffer_size * 3)
 
     def init_channels(self):
         self.ch1 = GBChannel1(self.memctl)
@@ -606,16 +609,7 @@ class GbAPU:
                 if self.ch4.ltimer == 0:
                     self.ch4.turn_off()
 
-    def handle_buffer_boundary(self):
-        if self.ring == self.buffer_size:
-            snd_portion = pygame.mixer.Sound(self.buffers[1])
-            self.pgchannel.queue(snd_portion)
-
-        elif self.ring == 0:
-            snd_portion = pygame.mixer.Sound(self.buffers[0])
-            self.pgchannel.queue(snd_portion)
-
-    def emit_PCM_sample(self, buffer):
+    def emit_PCM_sample(self, buffer_idx):
         # average channel samples over 95 dots
         ch1avg = self.ch1.sample_accumulator / self.accm
         ch2avg = self.ch2.sample_accumulator / self.accm
@@ -629,10 +623,8 @@ class GbAPU:
         self.ch4.sample_accumulator = 0
         #
         mixed = self.mix(ch1avg, ch2avg, ch3avg, ch4avg)
-        self.buffers[buffer][self.ring % self.buffer_size] = mixed
-        self.ring = (self.ring + 1) % (self.buffer_size * 2)
-
-        self.handle_buffer_boundary()
+        self.buffers[buffer_idx][self.ring % self.buffer_size] = mixed
+        self.ring = (self.ring + 1) % self.bufftotsize
 
         self.samples_sec += 1
         if self.samples_sec == PCM_SAMPLE_RATE:
@@ -686,8 +678,9 @@ class GbAPU:
             cycles -= chunk
             self.dots = (self.dots + chunk) % MASTER_CLK
             if self.samples == self.accm:
-                buffer = self.ring // self.buffer_size
-                self.emit_PCM_sample(buffer)
+                buffer_idx = self.ring // self.buffer_size
+                self.emit_PCM_sample(buffer_idx)
+                self.streamer.handle_buffer_boundary()
                 self.samples = 0
             if chunk == dots_until_sweep:
                 self.handle_sweep()
@@ -705,6 +698,26 @@ class GbAPU:
         self.accm = 95
 
 
-class GbAudioPlayer:
-    def __init__(self):
-        pass
+class GbAudioStreamer:
+    def __init__(self, APU: GbAPU, buffers: tuple[bytearray]):
+        self.APU = APU
+        self.buffers = buffers
+        self.buffer_size = self.APU.buffer_size
+        self.double_buffsize = self.buffer_size * 2
+        if len(self.buffers) != 3:
+            raise AttributeError(f"{self} object uses exactly 3 buffers.")
+        self.pgchannel = pygame.mixer.Channel(0)
+
+    def handle_buffer_boundary(self):
+        if self.APU.ring == self.buffer_size:
+            snd_portion = pygame.mixer.Sound(self.buffers[0])
+            self.pgchannel.queue(snd_portion)
+
+        elif self.APU.ring == self.double_buffsize:
+            snd_portion = pygame.mixer.Sound(self.buffers[1])
+            self.pgchannel.queue(snd_portion)
+
+        elif self.APU.ring == 0:
+            snd_portion = pygame.mixer.Sound(self.buffers[2])
+            self.pgchannel.queue(snd_portion)
+
